@@ -137,13 +137,15 @@ decision must bind the same Rule-closure digest, admitted-Fact root, role/scope,
 `WorldRef`, warranty states, and verdict. A stale projection or disagreement produces
 a typed `projection_mismatch`, not a fallback decision.
 
-**Gate-chain coherence** is stronger than pairwise Gate success. For every declared
-path, the chain must be jointly satisfiable: a legal output of one Gate is admissible
-to the next, and this remains explicit through retry, resume, repair, identity or fence
-rotation, fan-out, fan-in, merge order, invalidation, and terminal transitions. A
-later Gate must not require evidence that an earlier legal transition could never
-produce. Whole-chain analysis includes blocked and bypassed paths; a no-PASS bypass
-can reveal later dependent blocks but cannot make the chain coherent or establish C.
+**Gate-chain coherence** is stronger than pairwise Gate success. Every declared
+permit path must be jointly satisfiable: a legal output of one Gate is admissible to
+the next, and this remains explicit through retry, resume, repair, identity or fence
+rotation, fan-out, fan-in, merge order, invalidation, and terminal transitions.
+Intentional denial branches end in a typed block, but incompatible downstream evidence
+demands must not make every Rule-permitted state unable to progress. A later Gate must
+not require evidence that an earlier legal transition could never produce. Whole-chain
+analysis includes blocked and bypassed paths; a no-PASS bypass can reveal later
+dependent blocks but cannot make the chain coherent or establish C.
 
 ### Entrance
 
