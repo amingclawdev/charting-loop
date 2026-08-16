@@ -118,28 +118,39 @@ makes no certificate, warranty, authority, charted-state, or score claim by itse
 
 A `WorldRef` is exact rather than branch-relative. It contains:
 
-- the canonical repository identity as a strict HTTPS URL and full commit; the URL has
+- the project, run, and generation identities;
+- the canonical repository identity as a strict HTTPS URL and full immutable base
+  commit; the URL has
   a valid host and port and no credentials, query, fragment, whitespace/control
   characters, backslash, or dangling port separator;
-- an environment or fixture digest when execution depends on one; and
-- when an append-only evidence stream is material, its ledger identity, prefix
-  watermark or length, prefix digest, and projector identity/version.
+- the environment or fixture digest;
+- the RAW ledger stream identity, contiguous prefix watermark, and prefix digest;
+- the admission receipt and admitted-root digest plus the admission Rule revision and
+  digest;
+- the projector schema version and algorithm identity, version, and digest; and
+- the derived-state digest.
 
 A branch is only a location hint. “Current,” a short commit, or an unpinned tag is not a
-`WorldRef`.
+`WorldRef`. Changing any listed identity or digest creates a different `WorldRef`.
+Timeline presence alone is not an admitted Fact: only the admission receipt/root under
+the pinned admission Rule can move evidence into the Fact plane.
 
 A `WorldSpan` is closed only when it binds exact start and end `WorldRef` values over
-the same repository identity and full base commit. Its end may extend only the declared
-append-only evidence prefix on that same base world, with the same stream and projector
-identity. A base-commit change ends the old span and requires a new Candidate revision,
-WorldRef, and traversal generation; no certificate may bridge the two base worlds. An
-open-ended “until now” span cannot certify a traversal.
+the same project, run, generation, repository identity, full base commit, environment,
+admission Rule, and projector. Its end may extend only the same RAW ledger by a
+contiguous prefix. The admitted Fact subset and derived state may change as newly
+present evidence is admitted, but every such change yields a new endpoint `WorldRef`.
+A base-commit, admission-Rule, or projector change ends the old span and requires a new
+generation and Candidate revision; no certificate may bridge those worlds. An
+open-ended “until now” span cannot certify a traversal, and an admitted-prefix summary
+cannot substitute for the RAW prefix.
 
 ## 4. Construction procedure
 
-1. **Pin the method.** Select one cataloged method version. Draft v2 remains
-   `builder_eligible=false`, so studies may inspect it but must not present it as a
-   validated treatment.
+1. **Pin the method.** Select one cataloged method version. Draft v2 is
+   `study_eligible=true` and may be frozen as a Paper 3 study treatment, while
+   `adoption_eligible=false` (and its legacy projection `builder_eligible=false`) means
+   it is not approved for operational adoption.
 2. **Freeze exogenous inputs.** A runner freezes the task, Direction, fixtures,
    evaluator/scorer, model/runtime constraints, and initial `WorldRef`. Empirical task,
    run, score, and optional-log data remain under `exogenous/`; they are not imported
@@ -173,15 +184,18 @@ open-ended “until now” span cannot certify a traversal.
 9. **Certify the demonstrated path.** An independent PathCertificate may make only its
    certificate-covered path provisionally charted. No other Candidate scope is implied.
 10. **Establish current consumability.** Only scope covered by both the PathCertificate
-    and a live EvidentialWarranty enters current, scope-indexed C. AuthorityAssurance is
-    a separate eligibility input when an applicable Rule requires external authority.
+    and a live EvidentialWarranty enters current, scope-indexed C. Consuming the
+    actor–role Assignment additionally requires its EvidentialWarranty and
+    AuthorityWarranty to be `live`; elsewhere AuthorityWarranty gates only when the
+    applicable Rule or tier requires it.
 11. **Preserve outcomes.** Passed, failed, blocked, protocol-invalid, and infrastructure
     outcomes remain indexable exogenous Facts. A task score cannot rewrite the Candidate
     or method.
 
-## 5. Orthogonal evidence and assurance surfaces
+## 5. Orthogonal evidence and warranty surfaces
 
-The following four surfaces are independent:
+The following four record surfaces are independent. Exactly two are warranty kinds:
+`EvidentialWarranty` and `AuthorityWarranty`.
 
 - **TraversalReceipt** records what happened to one Candidate over one closed
   `WorldSpan`. It is an execution Fact, not a judgment of validity.
@@ -190,20 +204,26 @@ The following four surfaces are independent:
   a passing certificate makes only the witnessed path provisionally charted.
 - **EvidentialWarranty** states that a named claim was independently supported at a
   named `WorldRef` and time, with invalidation predicates. It may be
-  `fresh_at_check`, `stale_at_check`, or `unknown`. Only a live warranty makes its
-  certificate-covered scope currently charted (C).
-- **AuthorityAssurance** states the treatment of an external authorization claim for a
-  declared actor, act, scope, and version. It may be absent or `not_assessed`.
+  `live`, `lapsed`, `unknown`, or `not_assessed`. Only a `live` warranty makes its
+  certificate-covered scope currently charted (C). When Guide consumes an actor–role
+  Assignment, this Warranty must also bind the admitted Assignment Fact and its current
+  lifecycle validity.
+- **AuthorityWarranty** states that an independent issuer supports a declared actor's
+  authority for one role assignment, act, scope, Rule, and `WorldRef`. It has the same
+  four states. Temporal freshness is liveness within a warranty, never a third warranty
+  kind or a P/D/E factor.
 
 A passing score is not a PathCertificate. A PathCertificate is not an Evidential
-Warranty. An EvidentialWarranty is not authority. Authority evidence does not prove
-traversal. Missing authority evidence means `not_assessed`, never approved.
+Warranty. An EvidentialWarranty is not an AuthorityWarranty. Authority evidence does
+not prove traversal. Missing authority evidence means `not_assessed`, never approved.
 
-Raw user–AI or authority logs are optional and live outside the Candidate in exogenous
-run storage. A Candidate may carry only a consent-aware pointer or manifest; raw log
-bytes are excluded from its semantic payload and identity. If a strict study declares
-logs, malformed or incomplete records fail that study profile; the core Candidate does
-not require them. The executor cannot issue an independent warranty for its own claim,
+Raw user–AI or authority logs are optional, format-free reminders that live outside the
+Candidate in exogenous run storage. A Candidate may carry only a consent-aware pointer
+or manifest; raw log bytes are excluded from its semantic payload and identity. Log
+presence, shape, or completeness never gates participation, validation, ordinary
+comparison, or either Warranty. A strict study may assess declared logs under its own
+profile, but absence remains `unknown` or `not_assessed` and cannot be promoted to an
+AuthorityWarranty. The executor cannot issue an independent warranty for its own claim,
 and an AI cannot create real-world authority by citing this method.
 
 Before runtime, or when no live warranty is available, a declared paper-based drift
@@ -235,8 +255,9 @@ is an advisory method procedure, not a Warranty, estimator, or empirical result.
 otherwise cannot support the next claimed transition. Constructing a replacement
 Candidate is not itself U → C. Re-entry follows the complete chain
 `U → new open Candidate → frozen Candidate → fresh traversal → PathCertificate → live
-EvidentialWarranty → scope-indexed C`, with any independently required authority
-eligibility checked under its governing Rule. The new Candidate revision has:
+EvidentialWarranty → scope-indexed C`. Before the Assignment is consumed, its separate
+AuthorityWarranty must also be `live`; other authority gates apply only when their Rule
+or tier requires one. The new Candidate revision has:
 
 - a new candidate or revision identity;
 - an explicit link to the prior Candidate and re-entry reason;
@@ -254,14 +275,15 @@ that mutates history.
 Physical modules and agents may combine responsibilities. For example, one handoff can
 materialize Direction, role-bound Position, and Entrance; the method does not require a
 separate component per P/D/E factor. Composition does not collapse propositions:
-Position, Direction, Entrance, authority eligibility, and warranty freshness must remain
+Position, Direction, Entrance, EvidentialWarranty, and AuthorityWarranty must remain
 separately named and their evidence receipts separately checkable.
 
 The proof-obligation order is: pin method and exact world; admit Rules and Facts; bind
 role definition and assignment; evaluate Guide to one tagged result; freeze the semantic
 closure; traverse one base world; certify the demonstrated path; establish a live
-scope-bound EvidentialWarranty; then, when a Rule requires it, establish independent
-authority eligibility. A later obligation cannot retroactively satisfy an earlier one.
+scope-bound EvidentialWarranty; then establish a live AuthorityWarranty where the
+assignment, Rule, or tier requires it. A later obligation cannot retroactively satisfy
+an earlier one.
 
 ## 8. Authority and conflicts
 
@@ -297,7 +319,7 @@ The repository's
 [`service-plan-corridor-e2e`](../demos/service-plan-corridor-e2e/README.md) engineering
 demo exercises a deliberately small protocol fixture: paper-guided diagnosis before a
 live warranty, a frozen Candidate projection at one exact WorldRef, bounded Guide
-consumption, a same-base ledger-prefix extension, typed stale refusal, a new projection,
+consumption, a same-generation contiguous-RAW-prefix extension, typed stale refusal, a new projection,
 and fresh synthetic path records. These projections and fixture-labeled certificate and
 warranty records do not constitute a second Candidate definition, independent issuance,
 or a method-level claim that C has been established. The default parity record invokes
@@ -328,11 +350,13 @@ A v2 implementation conforms only if it:
 - uses exact `WorldRef` and closed `WorldSpan` identities;
 - keeps Rule and Fact input planes distinct from the Guide control plane and from
   MethodRef/knowledge inputs;
-- keeps the four assurance surfaces separate and authority optional;
+- keeps the four record surfaces separate, recognizes exactly two warranty kinds, and
+  keeps optional authority logs non-gating;
 - represents open and frozen Candidate states, makes semantic edits create new frozen
   revisions, and completes U → C only through fresh traversal, PathCertificate, and a
   live scope-bound EvidentialWarranty; and
-- reports this version as draft and `builder_eligible=false`.
+- reports this version as draft, `study_eligible=true`, and
+  `adoption_eligible=false`/`builder_eligible=false`.
 
 Conformance does not imply that the method works better than a control. That question
 belongs to separately frozen, exogenous studies and repeated independent trials.

@@ -13,14 +13,16 @@ This non-normative datum freezes the source and judgment boundary used to draft
   `e0dd3a466654011ecf0cb6d8f32e9cbbc4c3cc99`. It is retained only as non-primary
   drafting provenance and is not a public theory dependency of this method version.
 - Repository design cutoff: 2026-08-12.
-- Experience boundary: checked-in v1 protocol, the CL-008 architecture decision, and
-  its cataloged claims; no empirical run outcome is imported.
+- Experience boundary: checked-in v1 protocol plus the ratified CL-008 through CL-015
+  architecture decisions and their cataloged claims; no empirical run outcome is
+  imported.
 
 Draft v2 adds repository-specific construction decisions—Rule/Fact input planes, a
 deterministic Guide control plane, separate role definition and assignment, one bounded
-tagged semantic Entrance or typed refusal, open/frozen Candidate states, same-base
-WorldSpan closure, orthogonal assurance surfaces, optional authority, scope-indexed
-U → C re-entry, composite mechanisms, and a conditional probability bridge. The
+tagged semantic Entrance or typed refusal, open/frozen Candidate states, complete
+WorldRef identity and same-generation RAW-prefix WorldSpan closure, exactly two
+warranty kinds with optional non-gating authority logs, scope-indexed U → C re-entry,
+composite mechanisms, and a conditional probability bridge. The
 catalog marks which claims are derived from the theory and which are new method
 decisions. Operational P/D/E construction and failure diagnosis belong to this method;
 estimator definitions, confidence intervals, power, sample size, and experimental
