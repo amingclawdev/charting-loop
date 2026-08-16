@@ -1,9 +1,181 @@
 {
+  "attempt_disposition": {
+    "current_attempt": {
+      "attempt_id": "b4119707-b92b-4834-865d-b055ca38d9ea",
+      "counted": true,
+      "reason": "Completed matched arm with an official evaluator result included in the three descriptive same-task pairs.",
+      "run_id": "cl032-attempt-004",
+      "status": "counted-completed"
+    },
+    "invalid_predecessors": [
+      {
+        "attempt_label": "attempt-003",
+        "counted": false,
+        "public_record_status": "waived-no-posthoc-backfill",
+        "reason": "control_independent_qa_timeout_before_matched_pipeline_completion",
+        "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/STUDY-RESULT.json",
+        "status": "invalid-not-a-study-result",
+        "waiver_reason": "The matched pipeline did not complete and no public arm manifest was frozen; preserve the controlled contemporaneous disposition without reconstructing missing receipts."
+      }
+    ],
+    "schema_version": "charting-loop/public-attempt-disposition-ledger/v1"
+  },
+  "causal_evidence": {
+    "arm": "control",
+    "attempt_id": "b4119707-b92b-4834-865d-b055ca38d9ea",
+    "entries": [
+      {
+        "claim": "frozen design and public task identity",
+        "controlled_source_refs": [],
+        "evidence_id": "E1",
+        "public_refs": [
+          "protocol/TASK-CONDITIONED-CORRIDOR-EXPERIMENT.md",
+          "protocol/TASK-CONDITIONED-CORRIDOR-EXPERIMENT-V2.md",
+          "public/results/cl032/control/MANIFEST.json#/identity"
+        ],
+        "reason": "Public protocol and typed identity expose the frozen design lineage; v1 and v2 remain distinct experiments.",
+        "status": "independently-verifiable"
+      },
+      {
+        "claim": "frozen Corridor service identity",
+        "controlled_source_refs": [],
+        "evidence_id": "E2",
+        "public_refs": [
+          "public/results/cl032/control/MANIFEST.json#/source_custody"
+        ],
+        "reason": "Control records that the service was not available to this arm.",
+        "status": "declared-only"
+      },
+      {
+        "claim": "observable Corridor consumption",
+        "controlled_source_refs": [
+          "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/logs/worker-codex.txt",
+          "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/logs/repair-events.jsonl"
+        ],
+        "evidence_id": "E3",
+        "public_refs": [
+          "public/results/cl032/control/MANIFEST.json#/observable_lineage/events",
+          "public/results/cl032/control/MANIFEST.json#/observable_lineage/worker_log"
+        ],
+        "reason": "Control exposes its local-validation events and records no Corridor access.",
+        "status": "declared-only"
+      },
+      {
+        "claim": "task writeback lineage",
+        "controlled_source_refs": [
+          "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/output/erp_writeback.sql",
+          "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/output/mes_writeback.sql",
+          "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/output/wms_writeback.sql"
+        ],
+        "evidence_id": "E4",
+        "public_refs": [
+          "public/results/cl032/control/MANIFEST.json#/observable_lineage/writebacks"
+        ],
+        "reason": "ERP, MES, and WMS writebacks are bound by system, digest, size, arm, and controlled source ref without publishing SQL bytes.",
+        "status": "digest-only-commitment"
+      },
+      {
+        "claim": "pre-score world identity",
+        "controlled_source_refs": [
+          "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/evidence/PRESCORE-CAPTURE.json"
+        ],
+        "evidence_id": "E5",
+        "public_refs": [
+          "public/results/cl032/control/MANIFEST.json#/observable_lineage/prescore_world"
+        ],
+        "reason": "The immutable pre-score image and capture digest bind the evaluated world.",
+        "status": "digest-only-commitment"
+      },
+      {
+        "claim": "official evaluator receipt",
+        "controlled_source_refs": [
+          "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/evidence/OFFICIAL-SCORE-EVENT.json"
+        ],
+        "evidence_id": "E6",
+        "public_refs": [
+          "public/results/cl032/control/MANIFEST.json#/observable_lineage/official_evaluator",
+          "public/results/cl032/control/MANIFEST.json#/official_evaluation"
+        ],
+        "reason": "The public counts join an immutable official evaluator receipt digest.",
+        "status": "digest-only-commitment"
+      },
+      {
+        "claim": "claim scope and attempt disposition",
+        "controlled_source_refs": [],
+        "evidence_id": "E7",
+        "public_refs": [
+          "docs/EXPERIMENT-RESULTS.md",
+          "docs/PRODUCTION-PLANNING-RESULT.md",
+          "public/results/cl032/control/MANIFEST.json#/interpretation"
+        ],
+        "reason": "Public pages and manifest state one distinct task, repeated attempts, preserved invalid predecessors, and no causal or leaderboard claim.",
+        "status": "independently-verifiable"
+      }
+    ],
+    "schema_version": "charting-loop/public-causal-evidence-matrix/v1"
+  },
   "condition": {
     "corridor_access": false,
     "corridor_observably_used": false,
     "label": "Control",
     "plain_language": "Comparison arm: the same frozen task without Corridor access."
+  },
+  "execution_amendment": {
+    "amendment_reason": "Record the actually executed Worker-QA-repair topology without reinterpreting or overwriting the frozen study datum.",
+    "arm": "control",
+    "attempt_id": "b4119707-b92b-4834-865d-b055ca38d9ea",
+    "frozen_study_overwritten": false,
+    "prescore_world": {
+      "capture_sha256": "sha256:2f4145ea3cfb040928119f8586902ad52ab7de5ca601a1537735407490c5f0ad",
+      "image_sha256": "sha256:9f6aba97dbfde6702ef661d0016ea91515a5366c3469d89e9d99ac9f412ef99e",
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/evidence/PRESCORE-CAPTURE.json"
+    },
+    "qa_repair_order": {
+      "post_repair_qa_performed": false,
+      "qa_outcome": "fail",
+      "repair_attempts_executed": 1,
+      "repair_launch_attempted": true,
+      "repair_status": "completed-persistent-change"
+    },
+    "schema_version": "charting-loop/public-execution-amendment/v1",
+    "seed_retry": {
+      "reason": "No frozen public seed/retry receipt exists. Repair attempts are separately observed and must not be relabeled as runner retries.",
+      "repair_attempts_executed": 1,
+      "retry_count": null,
+      "retry_status": "unavailable",
+      "seed": null,
+      "seed_status": "unavailable"
+    },
+    "service_revision": {
+      "commit": null,
+      "status": "not-available-to-control",
+      "tree": null
+    },
+    "source_refs": [
+      "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/STUDY-RESULT.json"
+    ],
+    "timing": {
+      "finished_at": null,
+      "reason": "No public contemporaneous start/finish receipt is available; values are not reconstructed from narrative.",
+      "started_at": null,
+      "status": "unavailable"
+    },
+    "tools_runtime": {
+      "agent_message_count": 5,
+      "codex_version": "0.147.0-alpha.6.5",
+      "command_count": 50,
+      "model": "openai/gpt-5.6-sol",
+      "network_policy": "unknown",
+      "reasoning_effort": "high",
+      "runtime_identity": "codex-0.147.0-alpha.6.5-terminal-bench-3.0"
+    },
+    "usage": {
+      "cached_input_tokens": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reason": "No public contemporaneous token-usage receipt is available; values are not reconstructed.",
+      "status": "unavailable"
+    }
   },
   "identity": {
     "arm": "control",
@@ -17,7 +189,7 @@
     "launch_id": "cl032-control-launch",
     "method_version_id": "paper2-current-v2",
     "protocol_id": "cl027-tb3-worker-qa",
-    "result_release": "public-v1",
+    "result_release": "public-v2",
     "run_id": "cl032-attempt-004",
     "study_id": "cl027-tb3-production-planning",
     "task_id": "production-planning",
@@ -30,6 +202,105 @@
     "leaderboard_claim": false,
     "mechanism_summary": "Without Corridor's global replay, Control accepted a locally plausible repair, changed persistent state, and the official evaluator found the resulting plan globally inconsistent.",
     "multi_task_evidence": false
+  },
+  "observable_lineage": {
+    "arm": "control",
+    "attempt_id": "b4119707-b92b-4834-865d-b055ca38d9ea",
+    "events": [
+      {
+        "event_id": "worker:item_48",
+        "exit_code": 0,
+        "kind": "local-plan-validation",
+        "output_sha256": "sha256:7bad894c26883ff8814cbf1b05e17d61d832af5ce9d30dc6d596b1865845004d",
+        "public_summary": "Control ran its locally constructed validator before the initial apply.",
+        "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/logs/worker-codex.txt#item_48",
+        "status": "succeeded"
+      },
+      {
+        "event_id": "worker:item_52",
+        "exit_code": 0,
+        "kind": "gateway-writeback-apply",
+        "output_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "public_summary": "Control completed the third initial gateway writeback application.",
+        "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/logs/worker-codex.txt#item_52",
+        "status": "succeeded"
+      },
+      {
+        "event_id": "repair:item_11",
+        "exit_code": 0,
+        "kind": "local-repair-validation",
+        "output_sha256": "sha256:e0853bda60d4e8261459aaa1cf2725d7c4a918e7a5ab841e0e22fe57e0ad4b25",
+        "public_summary": "Control's repair-time local validator accepted the proposed replacement.",
+        "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/logs/repair-events.jsonl#item_11",
+        "status": "succeeded"
+      },
+      {
+        "event_id": "repair:item_15",
+        "exit_code": 0,
+        "kind": "repair-writeback-apply",
+        "output_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "public_summary": "Control completed the third repair writeback application.",
+        "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/logs/repair-events.jsonl#item_15",
+        "status": "succeeded"
+      }
+    ],
+    "official_evaluator": {
+      "checks_passed": 15,
+      "checks_total": 20,
+      "receipt_sha256": "sha256:b8ec80c566ede2122845f71c09812c7dfd4f060dfd22f2e6a80a9327190e1465",
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/evidence/OFFICIAL-SCORE-EVENT.json"
+    },
+    "prescore_world": {
+      "capture_sha256": "sha256:2f4145ea3cfb040928119f8586902ad52ab7de5ca601a1537735407490c5f0ad",
+      "image_sha256": "sha256:9f6aba97dbfde6702ef661d0016ea91515a5366c3469d89e9d99ac9f412ef99e",
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/evidence/PRESCORE-CAPTURE.json"
+    },
+    "redaction": {
+      "excluded": [
+        "subscription-authentication",
+        "credential-values",
+        "host-private-paths",
+        "hidden-reasoning",
+        "hidden-tests"
+      ],
+      "full_log_public": false,
+      "policy": "Publish content-addressed observable command receipts and safe summaries; keep raw credential-bearing log bytes in controlled custody."
+    },
+    "schema_version": "charting-loop/observable-lineage-receipt/v1",
+    "service_revision": {
+      "commit": null,
+      "status": "not-available-to-control",
+      "tree": null
+    },
+    "worker_log": {
+      "agent_message_count": 5,
+      "command_count": 50,
+      "hidden_reasoning_event_count": 0,
+      "reasoning_effort": "high",
+      "sha256": "sha256:66ba02cd0abc2960e15f229a20c80626327b43da39642905acd2b61b29cedb4e",
+      "size_bytes": 320923,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/logs/worker-codex.txt"
+    },
+    "writebacks": [
+      {
+        "sha256": "sha256:3d3a6f735ec16c519400d8dae5797c63038e1b50c173e15839151426ae862498",
+        "size_bytes": 2387,
+        "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/output/erp_writeback.sql",
+        "system": "erp"
+      },
+      {
+        "sha256": "sha256:716a6067f5bcdf848d32baa89c2fe1bc9c58e24a2e31789c736a8950f3b2f521",
+        "size_bytes": 1717,
+        "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/output/mes_writeback.sql",
+        "system": "mes"
+      },
+      {
+        "sha256": "sha256:bdc953cbef9df64a82f6bba44565c63c77061078054ff3ed31d4b08e8d6dd58e",
+        "size_bytes": 2412,
+        "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/output/wms_writeback.sql",
+        "system": "wms"
+      }
+    ]
   },
   "official_evaluation": {
     "checks_passed": 15,
@@ -51,8 +322,8 @@
     "sha256": "sha256:c97e72644aed207428cccc44a31148725eddb3ff7de544cb55fe8ff284e1b3ff",
     "size_bytes": 1581
   },
-  "release_id": "cl032-control-public-v1",
-  "schema_version": "charting-loop/public-result-summary/v1",
+  "release_id": "cl032-control-public-v2",
+  "schema_version": "charting-loop/public-result-evidence/v2",
   "sealed_artifacts": [
     {
       "artifact_id": "pair-result",
@@ -108,6 +379,72 @@
       "sha256": "sha256:b8ec80c566ede2122845f71c09812c7dfd4f060dfd22f2e6a80a9327190e1465",
       "size_bytes": 780,
       "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/evidence/OFFICIAL-SCORE-EVENT.json"
+    },
+    {
+      "artifact_id": "worker-observable-log",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/x-ndjson",
+      "provenance": "observable Codex command and message event stream",
+      "release_trigger": "publish only a separately scanned redacted derivative",
+      "sha256": "sha256:66ba02cd0abc2960e15f229a20c80626327b43da39642905acd2b61b29cedb4e",
+      "size_bytes": 320923,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/logs/worker-codex.txt"
+    },
+    {
+      "artifact_id": "erp-writeback",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/sql",
+      "provenance": "ERP writeback emitted by this arm",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+      "sha256": "sha256:3d3a6f735ec16c519400d8dae5797c63038e1b50c173e15839151426ae862498",
+      "size_bytes": 2387,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/output/erp_writeback.sql"
+    },
+    {
+      "artifact_id": "mes-writeback",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/sql",
+      "provenance": "MES writeback emitted by this arm",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+      "sha256": "sha256:716a6067f5bcdf848d32baa89c2fe1bc9c58e24a2e31789c736a8950f3b2f521",
+      "size_bytes": 1717,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/output/mes_writeback.sql"
+    },
+    {
+      "artifact_id": "wms-writeback",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/sql",
+      "provenance": "WMS writeback emitted by this arm",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+      "sha256": "sha256:bdc953cbef9df64a82f6bba44565c63c77061078054ff3ed31d4b08e8d6dd58e",
+      "size_bytes": 2412,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/output/wms_writeback.sql"
+    },
+    {
+      "artifact_id": "prescore-capture",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "pre-score container and image identity capture",
+      "release_trigger": "publish only a separately scanned redacted derivative",
+      "sha256": "sha256:2f4145ea3cfb040928119f8586902ad52ab7de5ca601a1537735407490c5f0ad",
+      "size_bytes": 1707,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/evidence/PRESCORE-CAPTURE.json"
+    },
+    {
+      "artifact_id": "repair-observable-log",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/x-ndjson",
+      "provenance": "observable bounded repair event stream",
+      "release_trigger": "publish only a separately scanned redacted derivative",
+      "sha256": "sha256:4a36fb317b01afff231c2d845e3d2d31208ab49d33ac039183c8ebd5b00a91a8",
+      "size_bytes": 45752,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/logs/repair-events.jsonl"
     }
   ],
   "source_custody": {
