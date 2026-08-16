@@ -1,0 +1,124 @@
+{
+  "condition": {
+    "corridor_access": true,
+    "corridor_observably_used": true,
+    "label": "Treatment",
+    "plain_language": "Experimental arm: the same frozen task plus access to the frozen builder-authored Corridor service."
+  },
+  "identity": {
+    "arm": "treatment",
+    "attempt_id": "e0685590-fe72-49c0-a456-1abf69ff65fe",
+    "benchmark_dataset": "terminal-bench",
+    "benchmark_release": "3.0",
+    "build_id": "builder-service-build-001",
+    "candidate_id": "production-planning-corridor",
+    "candidate_revision": "a5c3d4663857cf64d8ac8690096ae7f0e5ce9ae3",
+    "construction_id": "cl030-builder-service",
+    "launch_id": "cl032-treatment-launch",
+    "method_version_id": "paper2-current-v2",
+    "protocol_id": "cl027-tb3-worker-qa",
+    "result_release": "public-v1",
+    "run_id": "cl032-attempt-004",
+    "study_id": "cl027-tb3-production-planning",
+    "task_id": "production-planning",
+    "taskset_id": "tb30-cl027-production-planning"
+  },
+  "interpretation": {
+    "causal_claim": false,
+    "distinct_benchmark_tasks": 1,
+    "evidence_class": "descriptive-single-task-mechanism-arm",
+    "leaderboard_claim": false,
+    "mechanism_summary": "The Worker used Corridor counterfactual replay to test and reject a locally plausible QA suggestion under joined global constraints; no persistent database change followed.",
+    "multi_task_evidence": false
+  },
+  "official_evaluation": {
+    "checks_passed": 20,
+    "checks_total": 20,
+    "outcome": "pass",
+    "reward": 1.0
+  },
+  "process": {
+    "database_changed_after_qa": false,
+    "evaluation_mode": "direct-official-evaluation-after-matched-rework",
+    "post_repair_qa_performed": false,
+    "qa_outcome": "fail",
+    "repair_attempts_executed": 1,
+    "repair_launch_attempted": true,
+    "repair_status": "completed-finding-rebutted"
+  },
+  "public_summary": {
+    "path": "public/results/cl032/treatment/SUMMARY.md",
+    "sha256": "sha256:7b0b25a5dbe9a10bf726d4071a9f2d2b653b7c634db8b4036ace582693be8d86",
+    "size_bytes": 1687
+  },
+  "release_id": "cl032-treatment-public-v1",
+  "schema_version": "charting-loop/public-result-summary/v1",
+  "sealed_artifacts": [
+    {
+      "artifact_id": "pair-result",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "matched-pair study result",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:7946522c292205ca557ec97edd40d0812d2931c049be7ff9134b905e739dd543",
+      "size_bytes": 4669,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/STUDY-RESULT.json"
+    },
+    {
+      "artifact_id": "controlled-content-manifest",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "content index for sealed result artifacts",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:1a0b50a14e990d22004df9767013613d5e93cc7f6cae66a5d580bce4e55ac365",
+      "size_bytes": 13385,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/MANIFEST.json"
+    },
+    {
+      "artifact_id": "database-audit",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "post-repair database audit",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:9f92c4a8170ebb363c33881a2aaa80383c79b17ee6cc149b0e876483af9788c2",
+      "size_bytes": 10795,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/DB-AUDIT.json"
+    },
+    {
+      "artifact_id": "repair-delta-audit",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "pre/post repair database delta audit",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:9c90b072364f472e6ef43d7e3243e86ed8bca7f1f92cc150736909cbeec23ee9",
+      "size_bytes": 12202,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/REPAIR-DELTA-AUDIT.json"
+    },
+    {
+      "artifact_id": "official-score-event",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "original official evaluator score event",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:ef055102b4fc7099c75acce92fd0ff6b5b714c1845a1821e99c10354845e585c",
+      "size_bytes": 784,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/treatment/evidence/OFFICIAL-SCORE-EVENT.json"
+    }
+  ],
+  "source_custody": {
+    "builder_service_commit": "a5c3d4663857cf64d8ac8690096ae7f0e5ce9ae3",
+    "builder_service_tree": "8a79394a426c87f69a1aa8044b9cd7071d5ad",
+    "controlled_result_commit": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+    "controlled_result_path": "exogenous/results/cl032-tb3-production-planning-worker-qa-003/STUDY-RESULT.json",
+    "controlled_result_tree": "a90e915cd6501a8a62c1502a229c94dd0508c0f7",
+    "method_source_commit": "f58e065ad5d035b55fc8668b094e42327382345a",
+    "official_task_committed_at": "2026-07-23T06:49:14Z",
+    "official_task_source_commit": "2b0442c3c583b710ca8da14c8e601b99f2f1f244",
+    "official_task_url": "https://github.com/harbor-framework/terminal-bench/commit/2b0442c3c583b710ca8da14c8e601b99f2f1f244"
+  }
+}

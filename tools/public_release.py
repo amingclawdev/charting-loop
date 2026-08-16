@@ -15,6 +15,7 @@ from typing import Any, Iterable
 
 
 REGISTRY_SCHEMA = "charting-loop/public-release-registry/v1"
+PUBLIC_RESULT_SCHEMA = "charting-loop/public-result-summary/v1"
 SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 RELEASE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9.-]{2,127}$")
@@ -605,9 +606,31 @@ def _validate_release_authority(
         report.error("RELEASE_AUTHORITY_TREE", location, "tree_sha does not equal commit^{tree}")
     branch_ref = entry.get("branch_ref")
     if isinstance(branch_ref, str):
-        ref = _git(repo, ["rev-parse", "--verify", f"{branch_ref}^{{commit}}"])
-        if ref.returncode != 0 or ref.stdout.decode().strip() != commit:
-            report.error("RELEASE_AUTHORITY_REF", location, "branch locator does not currently resolve to commit_sha")
+        candidate_refs = [branch_ref]
+        if branch_ref.startswith("refs/heads/"):
+            candidate_refs.append(
+                "refs/remotes/origin/" + branch_ref.removeprefix("refs/heads/")
+            )
+        resolved_refs: dict[str, str] = {}
+        for candidate_ref in candidate_refs:
+            ref = _git(
+                repo,
+                ["rev-parse", "--verify", f"{candidate_ref}^{{commit}}"],
+            )
+            if ref.returncode == 0:
+                resolved_refs[candidate_ref] = ref.stdout.decode().strip()
+        if len(set(resolved_refs.values())) > 1:
+            report.error(
+                "RELEASE_AUTHORITY_REF_DIVERGED",
+                location,
+                "local and origin-tracking branch locators resolve to different commits",
+            )
+        elif commit not in resolved_refs.values():
+            report.error(
+                "RELEASE_AUTHORITY_REF",
+                location,
+                "neither the local nor origin-tracking branch locator resolves to commit_sha",
+            )
     manifest_path = entry.get("artifact_manifest_path")
     if isinstance(manifest_path, str) and manifest_path:
         manifest = _git(repo, ["show", f"{commit}:{manifest_path}"])
@@ -617,10 +640,165 @@ def _validate_release_authority(
             actual_digest = "sha256:" + hashlib.sha256(manifest.stdout).hexdigest()
             if entry.get("artifact_manifest_sha256") != actual_digest:
                 report.error("RELEASE_AUTHORITY_MANIFEST", location, "manifest digest does not match committed bytes")
+            if manifest_path.startswith("public/results/"):
+                _validate_public_result_manifest(
+                    entry,
+                    manifest.stdout,
+                    manifest_path=manifest_path,
+                    commit=commit,
+                    repo=repo,
+                    location=location,
+                    report=report,
+                )
     if base_commit is not None:
         ancestry = _git(repo, ["merge-base", "--is-ancestor", base_commit, commit])
         if ancestry.returncode != 0:
             report.error("RELEASE_AUTHORITY_ANCESTRY", location, "release commit is not descended from base_ref")
+
+
+def _validate_public_result_manifest(
+    entry: dict[str, Any],
+    manifest_bytes: bytes,
+    *,
+    manifest_path: str,
+    commit: str,
+    repo: Path,
+    location: str,
+    report: Report,
+) -> None:
+    manifest_location = f"{location}.artifact_manifest"
+    try:
+        manifest = json.loads(
+            manifest_bytes,
+            object_pairs_hook=_strict_object,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        report.error(
+            "PUBLIC_RESULT_MANIFEST",
+            manifest_location,
+            "manifest must be strict JSON",
+        )
+        return
+    if not isinstance(manifest, dict):
+        report.error(
+            "PUBLIC_RESULT_MANIFEST",
+            manifest_location,
+            "manifest top level must be an object",
+        )
+        return
+    canonical = (
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    if manifest_bytes != canonical:
+        report.error(
+            "PUBLIC_RESULT_MANIFEST",
+            manifest_location,
+            "manifest must use canonical sorted, indented JSON",
+        )
+    if manifest.get("schema_version") != PUBLIC_RESULT_SCHEMA:
+        report.error(
+            "PUBLIC_RESULT_MANIFEST",
+            manifest_location,
+            f"schema_version must equal {PUBLIC_RESULT_SCHEMA}",
+        )
+    for key in ("release_id", "identity", "sealed_artifacts"):
+        if manifest.get(key) != entry.get(key):
+            report.error(
+                "PUBLIC_RESULT_MANIFEST_BINDING",
+                manifest_location,
+                f"{key} does not match the registry row",
+            )
+
+    identity = manifest.get("identity")
+    arm = identity.get("arm") if isinstance(identity, dict) else None
+    condition = manifest.get("condition")
+    expected_condition = {
+        "control": ("Control", False),
+        "treatment": ("Treatment", True),
+    }.get(arm)
+    if not isinstance(condition, dict) or expected_condition is None:
+        report.error(
+            "PUBLIC_RESULT_CONDITION",
+            manifest_location,
+            "condition and typed arm must describe treatment or control",
+        )
+    else:
+        expected_label, expected_access = expected_condition
+        if (
+            condition.get("label") != expected_label
+            or condition.get("corridor_access") is not expected_access
+        ):
+            report.error(
+                "PUBLIC_RESULT_CONDITION",
+                manifest_location,
+                "condition label and Corridor access do not match the typed arm",
+            )
+
+    interpretation = manifest.get("interpretation")
+    if not isinstance(interpretation, dict) or any(
+        interpretation.get(key) is not False
+        for key in ("causal_claim", "leaderboard_claim", "multi_task_evidence")
+    ) or interpretation.get("distinct_benchmark_tasks") != 1:
+        report.error(
+            "PUBLIC_RESULT_CLAIM_BOUNDARY",
+            manifest_location,
+            "manifest must preserve the one-task descriptive claim boundary",
+        )
+
+    official = manifest.get("official_evaluation")
+    outcomes = entry.get("outcomes")
+    if not isinstance(official, dict) or not isinstance(outcomes, dict):
+        report.error(
+            "PUBLIC_RESULT_OUTCOME",
+            manifest_location,
+            "official evaluation and registry outcomes must be objects",
+        )
+    else:
+        outcome = official.get("outcome")
+        counted = {
+            key: outcomes.get(key)
+            for key in OUTCOME_KEYS
+            if key != "total"
+        }
+        if (
+            outcome not in counted
+            or outcomes.get("total") != 1
+            or counted.get(outcome) != 1
+            or sum(value for value in counted.values() if isinstance(value, int)) != 1
+        ):
+            report.error(
+                "PUBLIC_RESULT_OUTCOME",
+                manifest_location,
+                "official outcome does not match the single-arm registry count",
+            )
+
+    public_summary = manifest.get("public_summary")
+    expected_summary_path = str(PurePosixPath(manifest_path).with_name("SUMMARY.md"))
+    if not isinstance(public_summary, dict) or public_summary.get("path") != expected_summary_path:
+        report.error(
+            "PUBLIC_RESULT_SUMMARY",
+            manifest_location,
+            "public_summary.path must name the sibling SUMMARY.md",
+        )
+        return
+    summary = _git(repo, ["show", f"{commit}:{expected_summary_path}"])
+    if summary.returncode != 0:
+        report.error(
+            "PUBLIC_RESULT_SUMMARY",
+            manifest_location,
+            "public summary is absent from the recorded commit",
+        )
+        return
+    actual_summary_digest = "sha256:" + hashlib.sha256(summary.stdout).hexdigest()
+    if (
+        public_summary.get("sha256") != actual_summary_digest
+        or public_summary.get("size_bytes") != len(summary.stdout)
+    ):
+        report.error(
+            "PUBLIC_RESULT_SUMMARY",
+            manifest_location,
+            "public summary digest or byte size does not match committed bytes",
+        )
 
 
 def validate_registry(

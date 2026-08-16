@@ -13,6 +13,7 @@ from tools import public_release
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+PUBLIC_BASE_COMMIT = "4e97d0ae66dc7cf7211eb57c4d7badebb13ce095"
 
 
 def git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -81,6 +82,12 @@ def checked_registry() -> dict:
             encoding="utf-8"
         )
     )
+
+
+def empty_registry() -> dict:
+    value = checked_registry()
+    value["releases"] = []
+    return value
 
 
 def write_registry(root: Path, value: dict) -> Path:
@@ -276,9 +283,9 @@ class PublicReleaseTests(unittest.TestCase):
 
         readme_words = " ".join(readme.split())
         for marker in (
-            "**public-release candidate and replication-invitation ready**",
-            "The next milestone is the first authorized public release",
-            "no public remote release is registered yet",
+            "**public release live and replication-invitation ready**",
+            "Six sanitized arm summaries",
+            "https://github.com/amingclawdev/charting-loop",
         ):
             self.assertIn(marker, readme_words)
         self.assertNotIn("local research-preview", readme_words)
@@ -296,10 +303,11 @@ class PublicReleaseTests(unittest.TestCase):
             "constructs a task-conditioned Corridor",
             "one arm works with Corridor access and the other works without Corridor access",
             "task-specific executable guidance",
-            "The next project milestone is the first authorized public release",
-            "The project has not yet made that release",
-            "being prepared as a public-release candidate",
-            "current observations remain descriptive research records",
+            "The first authorized public release is now live",
+            "six sanitized arm summaries",
+            "underlying databases, SQL, detailed logs, raw sessions",
+            "descriptive research records on one benchmark task",
+            "not a published benchmark submission or leaderboard result",
         ):
             self.assertIn(marker, invitation_words)
         for stale_marker in (
@@ -328,15 +336,15 @@ class PublicReleaseTests(unittest.TestCase):
 
         publication_markers = (
             "## Publication and participation status",
-            "**Current status: public-release candidate; first authorized public release is the next milestone.**",
-            "| Public release registry | Empty |",
-            "currently records zero releases",
-            "A controlled result branch or summary locator is not a registry entry",
-            "| Public remote and submission channel | Not yet registered |",
+            "**Current status: the first authorized public release is live.**",
+            "| Current result artifacts | Six sanitized arm releases live |",
+            "| Public release registry | Six validated rows |",
+            "binds each branch to its commit, tree, manifest digest",
+            "| Public remote and submission channel | Repository live; intake not opened |",
             "| Official benchmark leaderboard | Not attempted |",
-            "reader and runner package is prepared",
-            "describe these materials as a pre-public release candidate",
-            "not as published results or an open submission programme",
+            "reader, runner, and sanitized result package is public",
+            "one-task descriptive release",
+            "not an open submission programme or an official leaderboard entry",
             "### Join the next multi-task study",
             "Select an unseen, distinct multi-step task",
             "Repeating `production-planning` adds an attempt to its task page",
@@ -349,7 +357,7 @@ class PublicReleaseTests(unittest.TestCase):
             "it does **not** edit this Markdown page",
             "Add exactly one row for a newly represented distinct benchmark task",
             "Do not add a row merely because a controlled result branch exists",
-            "allowlisted, no-parent curated public root",
+            "sanitized public result commit from allowlisted bytes",
             "An official benchmark upload or leaderboard row is a separate process",
         )
         for marker in publication_markers:
@@ -460,14 +468,25 @@ class PublicReleaseTests(unittest.TestCase):
                 "exogenous/results/cl032-tb3-production-planning-worker-qa-003/README.md",
             ),
         )
-        for commit, path in summary_locators:
-            self.assertIn(f"`{commit}`", task_result)
-            self.assertIn(f"`{commit}:{path}`", task_result)
+        for _commit, path in summary_locators:
             self.assertFalse((REPOSITORY_ROOT / path).exists())
-        self.assertIn(
-            "The branch or full commit tree is **not** a public-release candidate",
-            task_words,
+        public_summaries = (
+            ("e5785e1c3b4b0ab2570d7558d17ca6f97d650d89", "public/results/cl030/treatment/SUMMARY.md"),
+            ("4c2526a177f19497bae21aa6bb34b0fb20a216c7", "public/results/cl030/control/SUMMARY.md"),
+            ("892d31e4e971040323c8cb7a8bd18cd3de701034", "public/results/cl031/treatment/SUMMARY.md"),
+            ("d0732f4dfab592fafe80535670ee4e4b9051bb16", "public/results/cl031/control/SUMMARY.md"),
+            ("e7d5401bbb71b4bdf7d7ee7caca99d822c943a93", "public/results/cl032/treatment/SUMMARY.md"),
+            ("368a725bfc1bfe12f1431ff6698b884e12985fa5", "public/results/cl032/control/SUMMARY.md"),
         )
+        for commit, path in public_summaries:
+            self.assertIn(f"/blob/{commit}/{path}", task_result)
+            self.assertTrue((REPOSITORY_ROOT / path).is_file())
+        for marker in (
+            "Main contains all six public packages for discovery",
+            "branch-to-commit-to-tree join",
+            "represented only by SHA-256 digests",
+        ):
+            self.assertIn(marker, task_words)
 
         # Human-facing pages contain explanation and navigation, not AI procedures or
         # copy blocks. Post-hoc analysis and prospective experiment execution also stay
@@ -592,22 +611,72 @@ class PublicReleaseTests(unittest.TestCase):
         )
         self.assertEqual(unsafe_paths, [])
 
-    def test_checked_in_registry_is_canonical_and_unpublished(self) -> None:
+    def test_checked_in_registry_and_six_public_arm_packages_are_bound(self) -> None:
         path = REPOSITORY_ROOT / "exogenous" / "registry" / "PUBLIC-RELEASES.json"
-        report = public_release.validate_registry(path)
+        report = public_release.validate_registry(
+            path,
+            repo=REPOSITORY_ROOT,
+            base_ref=PUBLIC_BASE_COMMIT,
+        )
         self.assertTrue(report.ok, report.errors)
-        self.assertEqual(report.facts["release_count"], 0)
-        self.assertEqual(checked_registry()["releases"], [])
+        self.assertEqual(report.facts["release_count"], 6)
+        releases = checked_registry()["releases"]
+        self.assertEqual(
+            [(row["identity"]["run_id"], row["identity"]["arm"]) for row in releases],
+            [
+                ("cl030-attempt-001", "treatment"),
+                ("cl030-attempt-001", "control"),
+                ("cl031-attempt-002", "treatment"),
+                ("cl031-attempt-002", "control"),
+                ("cl032-attempt-004", "treatment"),
+                ("cl032-attempt-004", "control"),
+            ],
+        )
+        for row in releases:
+            manifest_path = REPOSITORY_ROOT / row["artifact_manifest_path"]
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["schema_version"], "charting-loop/public-result-summary/v1")
+            self.assertEqual(manifest["release_id"], row["release_id"])
+            self.assertEqual(manifest["identity"], row["identity"])
+            self.assertEqual(manifest["sealed_artifacts"], row["sealed_artifacts"])
+            summary = manifest["public_summary"]
+            summary_bytes = (REPOSITORY_ROOT / summary["path"]).read_bytes()
+            self.assertEqual(summary["size_bytes"], len(summary_bytes))
+            self.assertEqual(
+                summary["sha256"],
+                "sha256:" + hashlib.sha256(summary_bytes).hexdigest(),
+            )
+            changed = git(
+                REPOSITORY_ROOT,
+                "diff",
+                "--name-only",
+                PUBLIC_BASE_COMMIT,
+                row["commit_sha"],
+            )
+            self.assertEqual(changed.returncode, 0, changed.stderr)
+            self.assertEqual(
+                set(changed.stdout.splitlines()),
+                {row["artifact_manifest_path"], summary["path"]},
+            )
         first = public_release.render_registry_summary(checked_registry())
         second = public_release.render_registry_summary(checked_registry())
         self.assertEqual(first, second)
-        self.assertIn("_(none published)_", first)
+        self.assertNotIn("_(none published)_", first)
+        for release_id in (
+            "cl030-treatment-public-v1",
+            "cl030-control-public-v1",
+            "cl031-treatment-public-v1",
+            "cl031-control-public-v1",
+            "cl032-treatment-public-v1",
+            "cl032-control-public-v1",
+        ):
+            self.assertEqual(first.count(release_id), 1)
 
     def test_registry_allows_append_but_rejects_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             initialize_repository(root)
-            base = checked_registry()
+            base = empty_registry()
             path = write_registry(root, base)
             base_commit = commit_all(root, "base registry")
 
@@ -631,10 +700,63 @@ class PublicReleaseTests(unittest.TestCase):
                 report.errors,
             )
 
+    def test_registry_accepts_origin_tracking_result_ref_in_fresh_clone(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            initialize_repository(root)
+            value = empty_registry()
+            path = write_registry(root, value)
+            base_commit = commit_all(root, "base registry")
+            entry = materialize_release(root, release_entry())
+            value["releases"] = [entry]
+            write_registry(root, value)
+            local_ref = entry["branch_ref"]
+            remote_ref = local_ref.replace("refs/heads/", "refs/remotes/origin/", 1)
+            created = git(root, "update-ref", remote_ref, entry["commit_sha"])
+            self.assertEqual(created.returncode, 0, created.stderr)
+            deleted = git(root, "branch", "-D", local_ref.removeprefix("refs/heads/"))
+            self.assertEqual(deleted.returncode, 0, deleted.stderr)
+
+            report = public_release.validate_registry(
+                path,
+                repo=root,
+                base_ref=base_commit,
+            )
+            self.assertTrue(report.ok, report.errors)
+
+    def test_registry_rejects_divergent_local_and_origin_tracking_refs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            initialize_repository(root)
+            value = empty_registry()
+            path = write_registry(root, value)
+            base_commit = commit_all(root, "base registry")
+            entry = materialize_release(root, release_entry())
+            value["releases"] = [entry]
+            write_registry(root, value)
+            remote_ref = entry["branch_ref"].replace(
+                "refs/heads/",
+                "refs/remotes/origin/",
+                1,
+            )
+            created = git(root, "update-ref", remote_ref, base_commit)
+            self.assertEqual(created.returncode, 0, created.stderr)
+
+            report = public_release.validate_registry(
+                path,
+                repo=root,
+                base_ref=base_commit,
+            )
+            self.assertFalse(report.ok)
+            self.assertTrue(
+                any("RELEASE_AUTHORITY_REF_DIVERGED" in error for error in report.errors),
+                report.errors,
+            )
+
     def test_registry_rejects_noncanonical_and_namespace_escape(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            value = checked_registry()
+            value = empty_registry()
             value["releases"] = [release_entry()]
             value["releases"][0]["branch_ref"] = "refs/heads/experiment/everything"
             path = write_registry(root, value)
@@ -779,7 +901,7 @@ class PublicReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             initialize_repository(root)
-            value = checked_registry()
+            value = empty_registry()
             path = write_registry(root, value)
             base_commit = commit_all(root, "base registry")
             entry = release_entry()
@@ -808,7 +930,7 @@ class PublicReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             initialize_repository(root)
-            value = checked_registry()
+            value = empty_registry()
             path = write_registry(root, value)
             base_commit = commit_all(root, "base registry")
             entry = materialize_release(root, release_entry())
@@ -830,7 +952,7 @@ class PublicReleaseTests(unittest.TestCase):
             initialize_repository(root)
             (root / "README.md").write_text("base without registry\n", encoding="utf-8")
             base_commit = commit_all(root, "base")
-            value = checked_registry()
+            value = empty_registry()
             path = write_registry(root, value)
             report = public_release.validate_registry(path, repo=root, base_ref=base_commit)
             self.assertFalse(report.ok)
@@ -850,7 +972,7 @@ class PublicReleaseTests(unittest.TestCase):
             initialize_repository(root)
             path = write_registry(root, {"schema_version": "forged"})
             selected_ref = commit_all(root, "invalid selected registry")
-            write_registry(root, checked_registry())
+            write_registry(root, empty_registry())
             commit_all(root, "valid ambient registry")
             checked = subprocess.run(
                 [
@@ -879,7 +1001,7 @@ class PublicReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             initialize_repository(root)
-            path = write_registry(root, checked_registry())
+            path = write_registry(root, empty_registry())
             root_commit = commit_all(root, "curated public root")
             report = public_release.validate_registry(
                 path,

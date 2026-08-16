@@ -99,5 +99,7 @@ frozen design and evidence beyond a release checklist.
 6. Append one immutable row to `exogenous/registry/PUBLIC-RELEASES.json`; never update an
    old row in place.
 
-No current row exists in the public-release registry. This repository can be locally
-invitation-ready without claiming that a remote publication has occurred.
+The current registry contains six public-summary rows: Treatment and Control for each
+of CL-030, CL-031, and CL-032. They are six arm releases from three repetitions of one
+benchmark task, not six distinct-task results. Every row points to a sanitized result
+branch; the controlled source bytes remain sealed behind recorded digests.

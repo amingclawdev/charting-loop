@@ -1,0 +1,124 @@
+{
+  "condition": {
+    "corridor_access": false,
+    "corridor_observably_used": false,
+    "label": "Control",
+    "plain_language": "Comparison arm: the same frozen task without Corridor access."
+  },
+  "identity": {
+    "arm": "control",
+    "attempt_id": "b4119707-b92b-4834-865d-b055ca38d9ea",
+    "benchmark_dataset": "terminal-bench",
+    "benchmark_release": "3.0",
+    "build_id": null,
+    "candidate_id": null,
+    "candidate_revision": null,
+    "construction_id": null,
+    "launch_id": "cl032-control-launch",
+    "method_version_id": "paper2-current-v2",
+    "protocol_id": "cl027-tb3-worker-qa",
+    "result_release": "public-v1",
+    "run_id": "cl032-attempt-004",
+    "study_id": "cl027-tb3-production-planning",
+    "task_id": "production-planning",
+    "taskset_id": "tb30-cl027-production-planning"
+  },
+  "interpretation": {
+    "causal_claim": false,
+    "distinct_benchmark_tasks": 1,
+    "evidence_class": "descriptive-single-task-mechanism-arm",
+    "leaderboard_claim": false,
+    "mechanism_summary": "Without Corridor's global replay, Control accepted a locally plausible repair, changed persistent state, and the official evaluator found the resulting plan globally inconsistent.",
+    "multi_task_evidence": false
+  },
+  "official_evaluation": {
+    "checks_passed": 15,
+    "checks_total": 20,
+    "outcome": "fail",
+    "reward": 0.0
+  },
+  "process": {
+    "database_changed_after_qa": true,
+    "evaluation_mode": "direct-official-evaluation-after-matched-rework",
+    "post_repair_qa_performed": false,
+    "qa_outcome": "fail",
+    "repair_attempts_executed": 1,
+    "repair_launch_attempted": true,
+    "repair_status": "completed-persistent-change"
+  },
+  "public_summary": {
+    "path": "public/results/cl032/control/SUMMARY.md",
+    "sha256": "sha256:c97e72644aed207428cccc44a31148725eddb3ff7de544cb55fe8ff284e1b3ff",
+    "size_bytes": 1581
+  },
+  "release_id": "cl032-control-public-v1",
+  "schema_version": "charting-loop/public-result-summary/v1",
+  "sealed_artifacts": [
+    {
+      "artifact_id": "pair-result",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "matched-pair study result",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:7946522c292205ca557ec97edd40d0812d2931c049be7ff9134b905e739dd543",
+      "size_bytes": 4669,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/STUDY-RESULT.json"
+    },
+    {
+      "artifact_id": "controlled-content-manifest",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "content index for sealed result artifacts",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:1a0b50a14e990d22004df9767013613d5e93cc7f6cae66a5d580bce4e55ac365",
+      "size_bytes": 13385,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/MANIFEST.json"
+    },
+    {
+      "artifact_id": "database-audit",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "post-repair database audit",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:9f92c4a8170ebb363c33881a2aaa80383c79b17ee6cc149b0e876483af9788c2",
+      "size_bytes": 10795,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/DB-AUDIT.json"
+    },
+    {
+      "artifact_id": "repair-delta-audit",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "pre/post repair database delta audit",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:9c90b072364f472e6ef43d7e3243e86ed8bca7f1f92cc150736909cbeec23ee9",
+      "size_bytes": 12202,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/REPAIR-DELTA-AUDIT.json"
+    },
+    {
+      "artifact_id": "official-score-event",
+      "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "original official evaluator score event",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:b8ec80c566ede2122845f71c09812c7dfd4f060dfd22f2e6a80a9327190e1465",
+      "size_bytes": 780,
+      "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/evidence/OFFICIAL-SCORE-EVENT.json"
+    }
+  ],
+  "source_custody": {
+    "builder_service_commit": null,
+    "builder_service_tree": null,
+    "controlled_result_commit": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+    "controlled_result_path": "exogenous/results/cl032-tb3-production-planning-worker-qa-003/STUDY-RESULT.json",
+    "controlled_result_tree": "a90e915cd6501a8a62c1502a229c94dd0508c0f7",
+    "method_source_commit": "f58e065ad5d035b55fc8668b094e42327382345a",
+    "official_task_committed_at": "2026-07-23T06:49:14Z",
+    "official_task_source_commit": "2b0442c3c583b710ca8da14c8e601b99f2f1f244",
+    "official_task_url": "https://github.com/harbor-framework/terminal-bench/commit/2b0442c3c583b710ca8da14c8e601b99f2f1f244"
+  }
+}

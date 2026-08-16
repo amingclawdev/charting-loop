@@ -9,6 +9,7 @@ abstract: >-
   evaluating auditable task-conditioned Corridors in long-horizon agent work.
 license: Apache-2.0
 version: 0.1.0-research-preview
+repository-code: "https://github.com/amingclawdev/charting-loop"
 keywords:
   - agent evaluation
   - long-horizon tasks

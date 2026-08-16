@@ -865,10 +865,12 @@ class ExogenousRegistryTests(unittest.TestCase):
             REPOSITORY_ROOT
             / "exogenous"
             / "registry"
-            / "PUBLIC-RELEASES.json"
+            / "PUBLIC-RELEASES.json",
+            repo=REPOSITORY_ROOT,
+            base_ref="4e97d0ae66dc7cf7211eb57c4d7badebb13ce095",
         )
         self.assertTrue(release_report.ok, release_report.errors)
-        self.assertEqual(release_report.facts["release_count"], 0)
+        self.assertEqual(release_report.facts["release_count"], 6)
         release_protocol = (
             REPOSITORY_ROOT / "protocol" / "PUBLIC-RELEASE-BRANCHES.md"
         ).read_text(encoding="utf-8")
@@ -877,8 +879,8 @@ class ExogenousRegistryTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("Method-transfer replication", release_protocol)
         invitation_words = " ".join(invitation.split())
-        self.assertIn("has not yet made that release", invitation_words)
-        self.assertIn("being prepared as a public-release candidate", invitation_words)
+        self.assertIn("first authorized public release is now live", invitation_words)
+        self.assertIn("six sanitized arm summaries", invitation_words)
         method_report, versions = registry.load_method_catalog(
             REPOSITORY_ROOT / "method-paper" / "VERSIONS.json"
         )

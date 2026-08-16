@@ -17,26 +17,25 @@ a causal estimate, benchmark-wide efficacy evidence, or a production-readiness c
 
 ## Publication and participation status
 
-**Current status: public-release candidate; first authorized public release is the next
-milestone.** A reader can understand the design, inspect the human summaries, use the
-bounded AI review prompts, and follow the prospective replication protocol. That does
-not mean that a public artifact release, benchmark submission, or external intake
-channel already exists.
+**Current status: the first authorized public release is live.** A reader can inspect
+six sanitized arm summaries, validate their exact Git and digest identities, use the
+bounded AI review prompts, and follow the prospective replication protocol. Publication
+does not mean that a benchmark submission, leaderboard run, or external intake channel
+already exists.
 
 | Surface | Status | What that means |
 | --- | --- | --- |
 | Human explanation and result navigation | Ready | This index and the task page explain the design, attempts, scores, mechanism evidence, and limitations. |
 | Post-hoc AI review | Ready | Complete evidence-bound prompts are available for the whole task and CL-030/031/032. They are not experiment input. |
 | Prospective replication instructions | Ready for a frozen pilot | The human invitation, operator runbook, and authoritative protocol define how to add distinct tasks without treating repetitions as new tasks. |
-| Current result artifacts | Controlled, not publicly released | The immutable locators identify three allowlisted summary blobs. Their branches and full commit trees also contain restricted material and must not be published. |
-| Public release registry | Empty | `exogenous/registry/PUBLIC-RELEASES.json` currently records zero releases. A controlled result branch or summary locator is not a registry entry. |
-| Public remote and submission channel | Not yet registered | Repository-owner authorization of an exact remote and exact curated refs is still required before inviting external submissions through that remote. |
+| Current result artifacts | Six sanitized arm releases live | Treatment and Control for CL-030/031/032 each have an immutable public result branch containing only a summary, manifest, and the safe public-root ancestry. |
+| Public release registry | Six validated rows | `exogenous/registry/PUBLIC-RELEASES.json` binds each branch to its commit, tree, manifest digest, typed identity, outcome, and sealed-source digests. |
+| Public remote and submission channel | Repository live; intake not opened | The repository is public at [`amingclawdev/charting-loop`](https://github.com/amingclawdev/charting-loop), but no project submission endpoint is advertised yet. |
 | Official benchmark leaderboard | Not attempted | The three same-task matched pairs are not a complete eligible leaderboard run and no rank is claimed. |
 
-In short, the **reader and runner package is prepared**, but publication remains a
-separate owner-controlled act. Until an exact curated public root is authorized,
-describe these materials as a pre-public release candidate, not as published results
-or an open submission programme.
+In short, the **reader, runner, and sanitized result package is public**. It remains a
+one-task descriptive release, not an open submission programme or an official
+leaderboard entry.
 
 ### Join the next multi-task study
 
@@ -79,12 +78,12 @@ The machine release registry and this human task index have different jobs:
   represented distinct benchmark task, and keep its repeated attempts on the linked
   task page.
 
-Do not add a row merely because a controlled result branch exists. First create an
-allowlisted, no-parent curated public root; run the exact-ref history scanner and full
-tests; obtain independent human review and repository-owner authorization; then append
-and validate its machine release entry. Only after those steps should this human index
-describe the artifact as published. An official benchmark upload or leaderboard row
-is a separate process and must not be inferred from this registry.
+Do not add a row merely because a controlled result branch exists. Create a sanitized
+public result commit from allowlisted bytes on the curated public history, run the
+exact-ref history scanner and full tests, obtain independent review and repository-owner
+authorization, then append and validate its machine release entry. An official
+benchmark upload or leaderboard row is a separate process and must not be inferred
+from this registry.
 
 ## The causal story, in plain language
 

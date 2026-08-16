@@ -1,0 +1,113 @@
+{
+  "condition": {
+    "corridor_access": true,
+    "corridor_observably_used": null,
+    "label": "Treatment",
+    "plain_language": "Experimental arm: the same frozen task plus access to the frozen builder-authored Corridor service."
+  },
+  "identity": {
+    "arm": "treatment",
+    "attempt_id": "f3f949eb-d3c2-430e-bab9-2bfa1f47dbd4",
+    "benchmark_dataset": "terminal-bench",
+    "benchmark_release": "3.0",
+    "build_id": "builder-service-build-001",
+    "candidate_id": "production-planning-corridor",
+    "candidate_revision": "a5c3d4663857cf64d8ac8690096ae7f0e5ce9ae3",
+    "construction_id": "cl030-builder-service",
+    "launch_id": "cl031-treatment-launch",
+    "method_version_id": "paper2-current-v2",
+    "protocol_id": "cl027-tb3-worker-qa",
+    "result_release": "public-v1",
+    "run_id": "cl031-attempt-002",
+    "study_id": "cl027-tb3-production-planning",
+    "task_id": "production-planning",
+    "taskset_id": "tb30-cl027-production-planning"
+  },
+  "interpretation": {
+    "causal_claim": false,
+    "distinct_benchmark_tasks": 1,
+    "evidence_class": "descriptive-single-task-arm",
+    "leaderboard_claim": false,
+    "mechanism_summary": "Treatment had Corridor access and required no repair after QA passed; the unchanged pre-score image was scored by a post-hoc no-op verifier replay.",
+    "multi_task_evidence": false
+  },
+  "official_evaluation": {
+    "checks_passed": 20,
+    "checks_total": 20,
+    "outcome": "pass",
+    "reward": 1.0
+  },
+  "process": {
+    "database_changed_after_qa": false,
+    "evaluation_mode": "posthoc-verifier-replay-of-unchanged-image",
+    "post_repair_qa_performed": false,
+    "qa_outcome": "pass",
+    "repair_attempts_executed": 0,
+    "repair_launch_attempted": false,
+    "repair_status": "not-required-qa-pass"
+  },
+  "public_summary": {
+    "path": "public/results/cl031/treatment/SUMMARY.md",
+    "sha256": "sha256:51ff60e29c7a7e472c73a20afd63c1dacd1e903bd2a7bc5879d4653c39978eba",
+    "size_bytes": 1324
+  },
+  "release_id": "cl031-treatment-public-v1",
+  "schema_version": "charting-loop/public-result-summary/v1",
+  "sealed_artifacts": [
+    {
+      "artifact_id": "pair-result",
+      "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "matched-pair study result",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:996e01eb667c3fe7d0ff2d4ea4cb625c79130d052c7dea9d2843547ca5b2628f",
+      "size_bytes": 3952,
+      "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/STUDY-RESULT.json"
+    },
+    {
+      "artifact_id": "controlled-content-manifest",
+      "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "content index for sealed result artifacts",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:ce2e7742a30c258b3efaec3154c9c2eed3a223f93dad6fc4abda3b2e3e77ba95",
+      "size_bytes": 9614,
+      "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/MANIFEST.json"
+    },
+    {
+      "artifact_id": "database-audit",
+      "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "post-score database audit",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:02de3fa0671930134e7e7e6f7e6248a38608b65be43214fcda5e95d16eb8163b",
+      "size_bytes": 9226,
+      "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/DB-AUDIT.json"
+    },
+    {
+      "artifact_id": "official-result-record",
+      "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "original benchmark result record used by replay",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:3a2b3d4805ad1f9bf17a461af6460799f1251a5fe5a06685d3e98a82a3ada75f",
+      "size_bytes": 13196,
+      "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/treatment/evidence/ORIGINAL-HARBOR-RESULT.json"
+    }
+  ],
+  "source_custody": {
+    "builder_service_commit": "a5c3d4663857cf64d8ac8690096ae7f0e5ce9ae3",
+    "builder_service_tree": "8a79394a426c87f69a1aa8044b9cd7071d5ad",
+    "controlled_result_commit": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+    "controlled_result_path": "exogenous/results/cl031-tb3-production-planning-worker-qa-002/STUDY-RESULT.json",
+    "controlled_result_tree": "b30ad584efb7abf42855b44e0cdaebf5f0ea7376",
+    "method_source_commit": "f58e065ad5d035b55fc8668b094e42327382345a",
+    "official_task_committed_at": "2026-07-23T06:49:14Z",
+    "official_task_source_commit": "2b0442c3c583b710ca8da14c8e601b99f2f1f244",
+    "official_task_url": "https://github.com/harbor-framework/terminal-bench/commit/2b0442c3c583b710ca8da14c8e601b99f2f1f244"
+  }
+}

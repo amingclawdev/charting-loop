@@ -1,12 +1,11 @@
 # Charting Loop corridor method and experiment substrate
 
 This repository separates a draft corridor method from the empirical data used to test
-it. Current status: **public-release candidate and replication-invitation ready**. The
-repository has publication policy, licensing, deterministic indexes, and a Git-history
-release checker. The next milestone is the first authorized public release; no public
-remote release is registered yet. Structural validation works, but no aggregate,
-causal, benchmark-wide, production, semantic-correctness, or real-world-authority result
-has been established by this custody branch.
+it. Current status: **public release live and replication-invitation ready**. Six
+sanitized arm summaries from three matched attempts on one benchmark task are published
+through immutable result branches and the machine release registry. Structural
+validation works, but no aggregate, causal, multi-task, benchmark-wide, production,
+semantic-correctness, leaderboard, or real-world-authority result has been established.
 
 ## Read the theory
 
@@ -54,6 +53,9 @@ Public releases contain summaries and digests by default; solution code, writeba
 SQL, databases, detailed logs, raw sessions, trajectories, hidden evaluator material,
 and internal Git history remain embargoed or restricted under
 [`protocol/PUBLIC-RELEASE-BRANCHES.md`](protocol/PUBLIC-RELEASE-BRANCHES.md).
+
+The public repository is
+[amingclawdev/charting-loop](https://github.com/amingclawdev/charting-loop).
 
 ## Authority map
 

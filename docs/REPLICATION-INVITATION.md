@@ -18,11 +18,12 @@ access and the other works without Corridor access. The comparison tests whether
 converting the diagnostic theory into task-specific executable guidance changes
 observable task performance or recovery.
 
-The next project milestone is the first authorized public release. The project has not
-yet made that release. The repository is being prepared as a public-release candidate;
-until an exact curated ref is published and entered in the public release registry, the
-current observations remain descriptive research records, not a published benchmark
-submission.
+The first authorized public release is now live. It publishes six sanitized arm
+summaries—Treatment and Control for each of CL-030, CL-031, and CL-032—plus their
+machine-readable manifests and registry records. The underlying databases, SQL,
+detailed logs, raw sessions, trajectories, solution-bearing service, credentials, and
+internal Git history remain sealed. These are descriptive research records on one
+benchmark task, not a published benchmark submission or leaderboard result.
 
 We invite independent teams to test the idea on a fresh multi-step task. The useful
 question is not whether a team can reproduce one of this repository's solutions. It is
