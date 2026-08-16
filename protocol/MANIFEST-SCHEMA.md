@@ -127,7 +127,7 @@ including any nested prefix, admission, or projector component, creates a differ
 
 `method-paper/VERSIONS.json` records `paper2-current-v2` as the unique current study
 package under `charting-loop/method-index/v2`. It is frozen at
-`c500c07a2138212e7ddc9ea77ff2a20c379c6492`, with METHOD digest
+`f58e065ad5d035b55fc8668b094e42327382345a`, with METHOD digest
 `sha256:ce9c94c12660c57a8dc34c98afd46c644b07214a2f9e7a9a494078fbe7be0905`
 and SCOPE-DATUM digest
 `sha256:c0764df57d20b5d66500ec75c8f8fcd5e0dd5c5029bd35783caca6a68133e307`.

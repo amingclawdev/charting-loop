@@ -17,11 +17,11 @@
       },
       "constraint_datum": {
         "path": "tasks/production-planning/TASK-CONSTRAINTS.json",
-        "sha256": "sha256:2d5e34e9cc0c083ecd367000bb6e1e2d50c897fc3d703218b927ffeb6d9cb1a7"
+        "sha256": "sha256:acce0ec944aca6215a503803af069dc1dfe5892c10b9e7f988757c0ec3025bc9"
       }
     }
   ],
-  "task_list_sha256": "sha256:74afdd165ffdec16215ad2a3276c099371c1ad01262d549a9cba42b1f25758ab",
+  "task_list_sha256": "sha256:1438a543e7e351cf986b64fd05b9cbd5c20250133c2b5a1e38c6266f6d9843d1",
   "environment": {
     "environment_id": "terminal-bench/3.0/production-planning/source-environment",
     "source_path": "tasks/production-planning/environment",

@@ -1,0 +1,40 @@
+{
+  "schema_version": "charting-loop/exogenous-append-only-waivers/v1",
+  "waivers": [
+    {
+      "affected_files": [
+        {
+          "after_sha256": "sha256:be03ca0f68eb714ab498fe44ea8d9c26de24f3bc47716dcef1e319b7fb963501",
+          "before_sha256": "sha256:e92cea0a11b786f3ec99ffb1e42c0a22cad09cbf6cf7ccfe5f9c745116820192",
+          "path": "exogenous/benchmarks/terminal-bench/3.0/TASKSET.json"
+        },
+        {
+          "after_sha256": "sha256:acce0ec944aca6215a503803af069dc1dfe5892c10b9e7f988757c0ec3025bc9",
+          "before_sha256": "sha256:2d5e34e9cc0c083ecd367000bb6e1e2d50c897fc3d703218b927ffeb6d9cb1a7",
+          "path": "exogenous/benchmarks/terminal-bench/3.0/tasks/production-planning/TASK-CONSTRAINTS.json"
+        },
+        {
+          "after_sha256": "sha256:1c448c8ec9ce045d62d4fa09cfccc1af10217919fbcbfadeee427201bae36967",
+          "before_sha256": "sha256:1891eccb745762fa74bf40f109f1cda2722ad94a0f5297a1da8267735507e5b4",
+          "path": "exogenous/studies/cl021-paper2-transfer/STUDY.json"
+        },
+        {
+          "after_sha256": "sha256:3e976455bb7696198a2e8c67e1eba90615d694cc0b7b2f39ec5dd5428416fb61",
+          "before_sha256": "sha256:60cc4bfc486074e131d2756ead41c481476bebea6f81056cf01e3a380b574cc4",
+          "path": "exogenous/studies/cl027-tb3-production-planning/STUDY.json"
+        }
+      ],
+      "base_commit": "f93e197de63bcb9fb1e5c8043a53bd04f86606ad",
+      "change_class": "public-provenance-repin-only",
+      "invariants": {
+        "method_content_sha256": "sha256:ce9c94c12660c57a8dc34c98afd46c644b07214a2f9e7a9a494078fbe7be0905",
+        "outcome_data_changed": false,
+        "scope_datum_sha256": "sha256:c0764df57d20b5d66500ec75c8f8fcd5e0dd5c5029bd35783caca6a68133e307",
+        "solution_bearing_content_added": false
+      },
+      "reason": "The public genesis accidentally retained source_commit values that resolve only in private custody history. Publishing those commits would disclose restricted internal ancestry. This waiver permits only the exact digest-bound repin to public method-byte anchors and its deterministic taskset/study digest propagation; METHOD and SCOPE bytes, experimental conditions, outcomes, and solution-bearing content remain unchanged.",
+      "status": "waived",
+      "waiver_id": "public-method-provenance-closure-2026-08-16"
+    }
+  ]
+}

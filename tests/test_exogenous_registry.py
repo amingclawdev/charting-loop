@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -256,6 +257,85 @@ def downgrade_fixture_to_v1(root: Path, *, run_id: str = "run-001") -> None:
 
 
 class ExogenousRegistryTests(unittest.TestCase):
+    def test_append_only_waiver_is_exact_base_path_and_digest_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "Waiver Test"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "waiver@example.invalid"],
+                cwd=root,
+                check=True,
+            )
+            method_digest = DIGESTS[0]
+            scope_digest = DIGESTS[1]
+            method_catalog = {
+                "versions": [
+                    {
+                        "study_eligible": True,
+                        "content_sha256": method_digest,
+                        "scope_datum_sha256": scope_digest,
+                    }
+                ]
+            }
+            write_json(root / "method-paper" / "VERSIONS.json", method_catalog)
+            exogenous = root / "exogenous"
+            core_path = exogenous / "benchmarks" / "bench" / "v1" / "TASKSET.json"
+            core_path.parent.mkdir(parents=True)
+            core_path.write_text('{"version":1}\n', encoding="utf-8")
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-q", "-m", "public base"], cwd=root, check=True)
+            base_commit = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=True,
+            ).stdout.strip()
+            before_digest = "sha256:" + hashlib.sha256(core_path.read_bytes()).hexdigest()
+            core_path.write_text('{"version":2}\n', encoding="utf-8")
+            after_digest = "sha256:" + hashlib.sha256(core_path.read_bytes()).hexdigest()
+            write_json(
+                exogenous / "APPEND-ONLY-WAIVERS.json",
+                {
+                    "schema_version": registry.APPEND_ONLY_WAIVER_SCHEMA,
+                    "waivers": [
+                        {
+                            "affected_files": [
+                                {
+                                    "after_sha256": after_digest,
+                                    "before_sha256": before_digest,
+                                    "path": "exogenous/benchmarks/bench/v1/TASKSET.json",
+                                }
+                            ],
+                            "base_commit": base_commit,
+                            "change_class": "public-provenance-repin-only",
+                            "invariants": {
+                                "method_content_sha256": method_digest,
+                                "outcome_data_changed": False,
+                                "scope_datum_sha256": scope_digest,
+                                "solution_bearing_content_added": False,
+                            },
+                            "reason": "The private provenance commit cannot be published; repin identical bytes.",
+                            "status": "waived",
+                            "waiver_id": "test-public-provenance-repin",
+                        }
+                    ],
+                },
+            )
+
+            report = registry.Report(subject="waived")
+            registry.check_append_only(exogenous, base_commit, report)
+            self.assertTrue(report.ok, report.errors)
+            self.assertTrue(any("APPEND_ONLY_WAIVED" in warning for warning in report.warnings))
+
+            core_path.write_text('{"version":3}\n', encoding="utf-8")
+            tampered = registry.Report(subject="tampered")
+            registry.check_append_only(exogenous, base_commit, tampered)
+            self.assertFalse(tampered.ok)
+            self.assertTrue(any("APPEND_ONLY_WAIVER_DIGEST" in error for error in tampered.errors))
+            self.assertTrue(any("APPEND_ONLY" in error for error in tampered.errors))
+
     def test_replication_docs_separate_human_and_operator_context(self) -> None:
         invitation = (REPOSITORY_ROOT / "docs" / "REPLICATION-INVITATION.md").read_text(
             encoding="utf-8"
@@ -815,7 +895,7 @@ class ExogenousRegistryTests(unittest.TestCase):
         )
         self.assertEqual(
             current["source_commit"],
-            "c500c07a2138212e7ddc9ea77ff2a20c379c6492",
+            "f58e065ad5d035b55fc8668b094e42327382345a",
         )
         self.assertEqual(
             current["content_sha256"],
@@ -2073,7 +2153,7 @@ class ExogenousRegistryTests(unittest.TestCase):
         )
         self.assertEqual(
             frozen["source_commit"],
-            "c500c07a2138212e7ddc9ea77ff2a20c379c6492",
+            "f58e065ad5d035b55fc8668b094e42327382345a",
         )
         self.assertEqual(
             frozen["content_sha256"],

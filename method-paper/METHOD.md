@@ -1,9 +1,12 @@
-# Charting Loop corridor method — draft v2
+# Charting Loop corridor method — prospective draft v3
 
-Status: **draft**. This file is the sole normative method source in this repository.
-The method version is not builder-eligible: `builder_eligible = false`. Other Markdown,
-templates, schemas, and checklists are explanatory or executable projections and must
-not silently add requirements.
+Status: **prospective, un-cataloged working draft**. This file is the sole normative
+method source in this repository, but these worktree bytes are not a cataloged study
+input and are not builder-eligible. The frozen `paper2-current-v2` package remains
+unchanged at its cataloged source commit; a study that names it receives those exact
+v2 bytes, not this prospective amendment. Other Markdown, templates, schemas, and
+checklists are explanatory or executable projections and must not silently add
+requirements.
 
 ## 1. Claim boundary
 
@@ -145,12 +148,46 @@ generation and Candidate revision; no certificate may bridge those worlds. An
 open-ended “until now” span cannot certify a traversal, and an admitted-prefix summary
 cannot substitute for the RAW prefix.
 
+### Append-only Position ledger
+
+A prospective execution maintains a runner-held, append-only **Position ledger** over
+the observable work. Each entry has a monotonically increasing sequence, the preceding
+entry digest, its own canonical digest, observation time, actor and session, role,
+Position and Direction identities, the exact before/after `WorldRef` or closed
+`WorldSpan`, and content-addressed action, result, and artifact references. Corrections
+append a new entry; they never rewrite an earlier observation. Logs, database snapshots,
+tool calls, service receipts, and evaluator outputs may be referenced when observable,
+but credentials, hidden reasoning, and hidden benchmark material are excluded.
+
+The Position ledger is RAW observation, not an admitted Fact. Only the pinned admission
+Rule and receipt/root can move selected evidence into the Fact plane. Ledger presence,
+continuity, or a matching hash cannot by itself produce PASS, a PathCertificate, either
+Warranty, authority, or current C. A missing, discontinuous, or unavailable ledger is
+reported as evidence loss; it does not erase the run or suppress an official score.
+
+### Independent QA
+
+For a prospective current-C or consumability claim, an **Independent QA** actor and
+session are distinct from the Candidate Builder and the Executor. QA binds the exact
+frozen subject revision, Direction, Position, `WorldRef` or closed `WorldSpan`, and the
+Position-ledger prefix it actually reviewed. It emits one append-only assessment Fact:
+`pass`, `fail`, `blocked`, or `not_assessed`. Builder self-tests and executor success
+claims remain ordinary Facts and are never the sole independent support for QA pass.
+
+QA cannot edit the Candidate. A repair creates a new revision with a new assessment;
+the failed or blocked assessment remains. QA pass is additional evidence and never
+substitutes for, issues, or implies a TraversalReceipt, PathCertificate,
+EvidentialWarranty, AuthorityWarranty, authority, benchmark PASS, or current C. In an
+experiment, QA timing and visibility are frozen study variables. QA failure does not
+authorize deletion, repair beyond the frozen budget, or suppression of scoring.
+
 ## 4. Construction procedure
 
-1. **Pin the method.** Select one cataloged method version. Draft v2 is
-   `study_eligible=true` and may be frozen as a Paper 3 study treatment, while
-   `adoption_eligible=false` (and its legacy projection `builder_eligible=false`) means
-   it is not approved for operational adoption.
+1. **Pin the method.** Select one cataloged method version. The cataloged
+   `paper2-current-v2` package is `study_eligible=true` and may be frozen as a research
+   input, while `adoption_eligible=false` (and its legacy projection
+   `builder_eligible=false`) means it is not approved for operational adoption. This
+   prospective draft v3 is not cataloged or study-eligible.
 2. **Freeze exogenous inputs.** A runner freezes the task, Direction, fixtures,
    evaluator/scorer, model/runtime constraints, and initial `WorldRef`. Empirical task,
    run, score, and optional-log data remain under `exogenous/`; they are not imported
@@ -178,24 +215,33 @@ cannot substitute for the RAW prefix.
 7. **Freeze the Candidate.** Seal the implementation tree and all declared inputs by
    digest into one semantic closure. From this point, repair creates a new revision;
    freezing alone does not place any scope in C.
-8. **Traverse independently.** A runner or evaluator executes the exact Candidate once
+8. **Record the Position ledger.** Start the runner-held, hash-linked append-only stream
+   before execution and bind every observable transition to the frozen Position,
+   Direction, actor/session, and exact world identities. Do not expose the audit stream
+   to an agent unless a frozen study declares that visibility as an intervention.
+9. **Assess independently.** A distinct Independent QA session reviews the exact frozen
+   revision and the ledger prefix available to it, then appends `pass`, `fail`,
+   `blocked`, or `not_assessed`. QA cannot edit. Any permitted repair produces a new
+   revision and is bounded by a previously frozen budget.
+10. **Traverse independently.** A runner or evaluator executes the exact Candidate once
    over a closed `WorldSpan`, records the actual path, freshness checks, bypass status,
    and outcome, and signs or otherwise identifies the receipt issuer.
-9. **Certify the demonstrated path.** An independent PathCertificate may make only its
+11. **Certify the demonstrated path.** An independent PathCertificate may make only its
    certificate-covered path provisionally charted. No other Candidate scope is implied.
-10. **Establish current consumability.** Only scope covered by both the PathCertificate
-    and a live EvidentialWarranty enters current, scope-indexed C. Consuming the
+12. **Establish current consumability.** Under this prospective draft, only scope with
+    a QA `pass`, PathCertificate, and live EvidentialWarranty enters current,
+    scope-indexed C. QA pass is not a substitute for either record. Consuming the
     actor–role Assignment additionally requires its EvidentialWarranty and
     AuthorityWarranty to be `live`; elsewhere AuthorityWarranty gates only when the
     applicable Rule or tier requires it.
-11. **Preserve outcomes.** Passed, failed, blocked, protocol-invalid, and infrastructure
+13. **Preserve outcomes.** Passed, failed, blocked, protocol-invalid, and infrastructure
     outcomes remain indexable exogenous Facts. A task score cannot rewrite the Candidate
     or method.
 
 ## 5. Orthogonal evidence and warranty surfaces
 
-The following four record surfaces are independent. Exactly two are warranty kinds:
-`EvidentialWarranty` and `AuthorityWarranty`.
+The following four certification and warranty record surfaces are independent. Exactly
+two are warranty kinds: `EvidentialWarranty` and `AuthorityWarranty`.
 
 - **TraversalReceipt** records what happened to one Candidate over one closed
   `WorldSpan`. It is an execution Fact, not a judgment of validity.
@@ -216,6 +262,12 @@ The following four record surfaces are independent. Exactly two are warranty kin
 A passing score is not a PathCertificate. A PathCertificate is not an Evidential
 Warranty. An EvidentialWarranty is not an AuthorityWarranty. Authority evidence does
 not prove traversal. Missing authority evidence means `not_assessed`, never approved.
+
+The append-only Position ledger and `IndependentQAAssessment` are additional evidence
+surfaces, not a fifth warranty or a replacement for any record above. QA may cite an
+exact ledger prefix, but timeline presence alone never admits a Fact. For a prospective
+current-C claim, QA pass joins the same frozen subject, Direction, Position, and world;
+the certificate and live warranties must still be established by their own issuers.
 
 Raw user–AI or authority logs are optional, format-free reminders that live outside the
 Candidate in exogenous run storage. A Candidate may carry only a consent-aware pointer
@@ -254,9 +306,10 @@ is an advisory method procedure, not a Warranty, estimator, or empirical result.
 `U` is an unresolved state: the Candidate is blocked, failed, stale, superseded, or
 otherwise cannot support the next claimed transition. Constructing a replacement
 Candidate is not itself U → C. Re-entry follows the complete chain
-`U → new open Candidate → frozen Candidate → fresh traversal → PathCertificate → live
-EvidentialWarranty → scope-indexed C`. Before the Assignment is consumed, its separate
-AuthorityWarranty must also be `live`; other authority gates apply only when their Rule
+`U → new open Candidate → frozen Candidate → IndependentQAAssessment(pass) → fresh
+traversal → PathCertificate → live EvidentialWarranty → scope-indexed C`. QA pass never
+replaces the traversal, certificate, or Warranty. Before the Assignment is consumed,
+its separate AuthorityWarranty must also be `live`; other authority gates apply only when their Rule
 or tier requires one. The new Candidate revision has:
 
 - a new candidate or revision identity;

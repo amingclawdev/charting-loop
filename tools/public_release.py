@@ -853,6 +853,118 @@ def _path_policy(path: str, report: Report, location: str) -> str | None:
     return "text"
 
 
+def _validate_method_provenance(
+    repo: Path,
+    *,
+    resolved_commit: str,
+    report: Report,
+) -> None:
+    """Require cataloged method bytes to live in the selected public history."""
+    catalog_path = "method-paper/VERSIONS.json"
+    shown = _git(repo, ["show", f"{resolved_commit}:{catalog_path}"])
+    if shown.returncode != 0:
+        report.facts["method_provenance_version_count"] = 0
+        report.facts["method_provenance_commits"] = []
+        return
+    try:
+        catalog = json.loads(shown.stdout, object_pairs_hook=_strict_object)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        report.error(
+            "METHOD_PROVENANCE_CATALOG",
+            catalog_path,
+            f"cannot load strict JSON ({type(exc).__name__})",
+        )
+        return
+    if not isinstance(catalog, dict) or catalog.get("schema_version") != "charting-loop/method-index/v2":
+        report.error(
+            "METHOD_PROVENANCE_CATALOG",
+            catalog_path,
+            "must be a charting-loop/method-index/v2 object",
+        )
+        return
+    versions = catalog.get("versions")
+    if not isinstance(versions, list):
+        report.error("METHOD_PROVENANCE_CATALOG", f"{catalog_path}.versions", "must be an array")
+        return
+
+    source_commits: set[str] = set()
+    for index, version in enumerate(versions):
+        location = f"{catalog_path}.versions[{index}]"
+        if not isinstance(version, dict):
+            report.error("METHOD_PROVENANCE_CATALOG", location, "must be an object")
+            continue
+        version_id = version.get("version_id")
+        source_commit = version.get("source_commit")
+        if not isinstance(source_commit, str) or COMMIT_RE.fullmatch(source_commit) is None:
+            report.error(
+                "METHOD_PROVENANCE_COMMIT",
+                f"{location}.source_commit",
+                f"{version_id or 'unnamed version'} must name a full lowercase commit id",
+            )
+            continue
+        resolved_source = _git(repo, ["rev-parse", "--verify", f"{source_commit}^{{commit}}"])
+        if resolved_source.returncode != 0 or resolved_source.stdout.decode().strip() != source_commit:
+            report.error(
+                "METHOD_PROVENANCE_REACHABILITY",
+                f"{location}.source_commit",
+                f"{source_commit} is not an available commit",
+            )
+            continue
+        ancestor = _git(repo, ["merge-base", "--is-ancestor", source_commit, resolved_commit])
+        if ancestor.returncode != 0:
+            report.error(
+                "METHOD_PROVENANCE_REACHABILITY",
+                f"{location}.source_commit",
+                f"{source_commit} is not an ancestor of selected ref {resolved_commit}",
+            )
+            continue
+        source_commits.add(source_commit)
+        for path_key, digest_key in (
+            ("path", "content_sha256"),
+            ("scope_datum_path", "scope_datum_sha256"),
+        ):
+            source_path = version.get(path_key)
+            expected_digest = version.get(digest_key)
+            pure = PurePosixPath(source_path) if isinstance(source_path, str) else None
+            if (
+                pure is None
+                or not source_path
+                or pure.is_absolute()
+                or ".." in pure.parts
+                or "\\" in source_path
+            ):
+                report.error(
+                    "METHOD_PROVENANCE_PATH",
+                    f"{location}.{path_key}",
+                    "must be a normalized repository-relative POSIX path",
+                )
+                continue
+            if not isinstance(expected_digest, str) or SHA256_RE.fullmatch(expected_digest) is None:
+                report.error(
+                    "METHOD_PROVENANCE_DIGEST",
+                    f"{location}.{digest_key}",
+                    "must be a sha256-prefixed lowercase digest",
+                )
+                continue
+            source_blob = _git(repo, ["show", f"{source_commit}:{source_path}"])
+            if source_blob.returncode != 0:
+                report.error(
+                    "METHOD_PROVENANCE_BLOB",
+                    f"{location}.{path_key}",
+                    f"cannot read {source_path} from {source_commit}",
+                )
+                continue
+            actual_digest = "sha256:" + hashlib.sha256(source_blob.stdout).hexdigest()
+            if actual_digest != expected_digest:
+                report.error(
+                    "METHOD_PROVENANCE_DIGEST",
+                    f"{location}.{digest_key}",
+                    f"declared {expected_digest}, source bytes hash to {actual_digest}",
+                )
+    report.facts["method_provenance_version_count"] = len(versions)
+    report.facts["method_provenance_commits"] = sorted(source_commits)
+
+
 def _placeholder_secret(value: bytes) -> bool:
     normalized = value.strip().lower()
     return (
@@ -1034,6 +1146,7 @@ def scan_release(
         report.error("GIT_REF", ref, "cannot resolve ref to a commit")
         return report
     resolved_commit = resolved.stdout.decode().strip()
+    _validate_method_provenance(repo, resolved_commit=resolved_commit, report=report)
     ref_tree_result = _git(repo, ["rev-parse", f"{resolved_commit}^{{tree}}"])
     ref_tree_id = ref_tree_result.stdout.decode().strip() if ref_tree_result.returncode == 0 else ""
     status = _git(repo, ["status", "--porcelain=v1", "--untracked-files=all"])

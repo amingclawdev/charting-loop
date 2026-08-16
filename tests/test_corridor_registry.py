@@ -1091,7 +1091,7 @@ class MethodIndexValidationTests(unittest.TestCase):
         self.assertFalse(current["builder_eligible"])
         self.assertEqual(
             current["source_commit"],
-            "c500c07a2138212e7ddc9ea77ff2a20c379c6492",
+            "f58e065ad5d035b55fc8668b094e42327382345a",
         )
         self.assertEqual(
             current["content_sha256"],
@@ -1106,7 +1106,7 @@ class MethodIndexValidationTests(unittest.TestCase):
         self.assertFalse(historical["builder_eligible"])
         self.assertEqual(
             historical["source_commit"],
-            "aea535453ebd75ee19bc09190a8e284925be0ae3",
+            "8b36a35b368c787d07bd3d1b81ee6aae46a21e5c",
         )
         self.assertEqual(
             historical["content_sha256"],

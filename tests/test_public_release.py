@@ -46,6 +46,35 @@ def commit_all(root: Path, message: str) -> str:
     return resolved.stdout.strip()
 
 
+def write_method_catalog(
+    root: Path,
+    *,
+    source_commit: str,
+    method_bytes: bytes,
+    scope_bytes: bytes,
+) -> None:
+    path = root / "method-paper" / "VERSIONS.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    value = {
+        "schema_version": "charting-loop/method-index/v2",
+        "normative_source": "method-paper/METHOD.md",
+        "versions": [
+            {
+                "version_id": "test-method-v1",
+                "source_commit": source_commit,
+                "path": "method-paper/METHOD.md",
+                "content_sha256": "sha256:" + hashlib.sha256(method_bytes).hexdigest(),
+                "scope_datum_path": "method-paper/SCOPE-DATUM.md",
+                "scope_datum_sha256": "sha256:" + hashlib.sha256(scope_bytes).hexdigest(),
+            }
+        ],
+    }
+    path.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
 def checked_registry() -> dict:
     return json.loads(
         (REPOSITORY_ROOT / "exogenous" / "registry" / "PUBLIC-RELEASES.json").read_text(
@@ -685,6 +714,60 @@ class PublicReleaseTests(unittest.TestCase):
             report = public_release.scan_release(root, ref="HEAD", allowed_refs=["HEAD"])
             self.assertTrue(report.ok, report.errors)
             self.assertTrue(report.facts["worktree_clean"])
+
+    def test_method_provenance_accepts_exact_bytes_from_public_ancestor(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            initialize_repository(root)
+            method_bytes = b"# Test method\n"
+            scope_bytes = b"# Test scope datum\n"
+            method_root = root / "method-paper"
+            method_root.mkdir()
+            (method_root / "METHOD.md").write_bytes(method_bytes)
+            (method_root / "SCOPE-DATUM.md").write_bytes(scope_bytes)
+            source_commit = commit_all(root, "public method source")
+            write_method_catalog(
+                root,
+                source_commit=source_commit,
+                method_bytes=method_bytes,
+                scope_bytes=scope_bytes,
+            )
+            commit_all(root, "public catalog")
+
+            report = public_release.scan_release(root, ref="HEAD", allowed_refs=["HEAD"])
+
+            self.assertTrue(report.ok, report.errors)
+            self.assertEqual(report.facts["method_provenance_version_count"], 1)
+            self.assertEqual(report.facts["method_provenance_commits"], [source_commit])
+
+    def test_method_provenance_rejects_ambient_non_ancestor_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            initialize_repository(root)
+            method_bytes = b"# Test method\n"
+            scope_bytes = b"# Test scope datum\n"
+            method_root = root / "method-paper"
+            method_root.mkdir()
+            (method_root / "METHOD.md").write_bytes(method_bytes)
+            (method_root / "SCOPE-DATUM.md").write_bytes(scope_bytes)
+            internal_commit = commit_all(root, "internal-only method source")
+            switched = git(root, "checkout", "--orphan", "public")
+            self.assertEqual(switched.returncode, 0, switched.stderr)
+            write_method_catalog(
+                root,
+                source_commit=internal_commit,
+                method_bytes=method_bytes,
+                scope_bytes=scope_bytes,
+            )
+            commit_all(root, "public root with ambient provenance")
+
+            report = public_release.scan_release(root, ref="HEAD", allowed_refs=["HEAD"])
+
+            self.assertFalse(report.ok)
+            self.assertTrue(
+                any("METHOD_PROVENANCE_REACHABILITY" in error for error in report.errors),
+                report.errors,
+            )
 
     def test_os_metadata_has_no_history_exception(self) -> None:
         report = public_release.Report(subject="legacy")

@@ -8,7 +8,7 @@
   "semantic_closure_sha256": null,
   "method_ref": {
     "version_id": "paper2-current-v2",
-    "source_commit": "c500c07a2138212e7ddc9ea77ff2a20c379c6492",
+    "source_commit": "f58e065ad5d035b55fc8668b094e42327382345a",
     "path": "method-paper/METHOD.md",
     "content_sha256": "sha256:ce9c94c12660c57a8dc34c98afd46c644b07214a2f9e7a9a494078fbe7be0905",
     "builder_eligible": false

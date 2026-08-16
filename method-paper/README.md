@@ -15,7 +15,7 @@ plane that returns one Entrance or typed refusal. Papers and packages are Method
 knowledge inputs; they are not Guide merely because they advise a builder.
 
 The current study MethodRef is `paper2-current-v2`, frozen at
-`c500c07a2138212e7ddc9ea77ff2a20c379c6492`. At that exact commit,
+`f58e065ad5d035b55fc8668b094e42327382345a`. At that exact public-history commit,
 `METHOD.md` is
 `sha256:ce9c94c12660c57a8dc34c98afd46c644b07214a2f9e7a9a494078fbe7be0905`
 and `SCOPE-DATUM.md` is

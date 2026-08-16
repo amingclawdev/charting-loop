@@ -42,6 +42,23 @@ METHOD_EVIDENCE_INDEX_SCHEMA = "charting-loop/method-evidence-index/v1"
 MEASUREMENT_PLAN_SCHEMA = "charting-loop/measurement-plan/v1"
 USAGE_RECEIPT_SCHEMA = "charting-loop/usage-receipt/v1"
 PACKAGE_COST_SCHEMA = "charting-loop/package-cost/v1"
+APPEND_ONLY_WAIVER_SCHEMA = "charting-loop/exogenous-append-only-waivers/v1"
+APPEND_ONLY_WAIVER_KEYS = {
+    "affected_files",
+    "base_commit",
+    "change_class",
+    "invariants",
+    "reason",
+    "status",
+    "waiver_id",
+}
+APPEND_ONLY_WAIVER_FILE_KEYS = {"after_sha256", "before_sha256", "path"}
+APPEND_ONLY_WAIVER_INVARIANT_KEYS = {
+    "method_content_sha256",
+    "outcome_data_changed",
+    "scope_datum_sha256",
+    "solution_bearing_content_added",
+}
 REQUIRED_USAGE_STAGES = (
     "construction",
     "guided_execution",
@@ -3052,6 +3069,184 @@ def build_index_documents(summaries: list[dict[str, Any]]) -> tuple[str, str]:
     return json_text, "\n".join(lines) + "\n"
 
 
+def _git_blob(repo: Path, commit: str, path: str) -> bytes | None:
+    shown = subprocess.run(
+        ["git", "show", f"{commit}:{path}"],
+        cwd=repo,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    return shown.stdout if shown.returncode == 0 else None
+
+
+def _study_method_digests(catalog: dict[str, Any] | None) -> tuple[Any, Any]:
+    versions = catalog.get("versions") if isinstance(catalog, dict) else None
+    if not isinstance(versions, list):
+        return None, None
+    eligible = [
+        version
+        for version in versions
+        if isinstance(version, dict) and version.get("study_eligible") is True
+    ]
+    if len(eligible) != 1:
+        return None, None
+    return eligible[0].get("content_sha256"), eligible[0].get("scope_datum_sha256")
+
+
+def _validate_append_only_waiver(
+    root: Path,
+    *,
+    resolved_base: str,
+    changed_paths: set[str],
+    report: Report,
+) -> set[str]:
+    waiver_path = root / "APPEND-ONLY-WAIVERS.json"
+    if not waiver_path.is_file():
+        return set()
+    document = load_json(waiver_path, report, "APPEND-ONLY-WAIVERS.json")
+    if document is None:
+        return set()
+    _require_fields(
+        document,
+        {"schema_version", "waivers"},
+        report,
+        "APPEND-ONLY-WAIVERS.json",
+    )
+    if document.get("schema_version") != APPEND_ONLY_WAIVER_SCHEMA:
+        report.error(
+            "APPEND_ONLY_WAIVER_SCHEMA",
+            "APPEND-ONLY-WAIVERS.json.schema_version",
+            f"must equal {APPEND_ONLY_WAIVER_SCHEMA}",
+        )
+    waivers = document.get("waivers")
+    if not isinstance(waivers, list):
+        report.error("APPEND_ONLY_WAIVER_SHAPE", "APPEND-ONLY-WAIVERS.json.waivers", "must be an array")
+        return set()
+
+    repo = root.parent
+    waiver_error_start = len(report.errors)
+    matching: list[tuple[int, dict[str, Any]]] = []
+    waiver_ids: set[str] = set()
+    for index, waiver in enumerate(waivers):
+        location = f"APPEND-ONLY-WAIVERS.json.waivers[{index}]"
+        value = _require_fields(waiver, APPEND_ONLY_WAIVER_KEYS, report, location)
+        if value is None:
+            continue
+        waiver_id = _string(value.get("waiver_id"), report, f"{location}.waiver_id")
+        if waiver_id in waiver_ids:
+            report.error("APPEND_ONLY_WAIVER_ID", f"{location}.waiver_id", "must be unique")
+        elif waiver_id is not None:
+            waiver_ids.add(waiver_id)
+        _commit(value.get("base_commit"), report, f"{location}.base_commit")
+        if value.get("status") != "waived":
+            report.error("APPEND_ONLY_WAIVER_STATUS", f"{location}.status", "must equal waived")
+        if value.get("change_class") != "public-provenance-repin-only":
+            report.error(
+                "APPEND_ONLY_WAIVER_CLASS",
+                f"{location}.change_class",
+                "must equal public-provenance-repin-only",
+            )
+        _string(value.get("reason"), report, f"{location}.reason")
+        if value.get("base_commit") == resolved_base:
+            matching.append((index, value))
+
+    if len(matching) != 1:
+        return set()
+    index, waiver = matching[0]
+    location = f"APPEND-ONLY-WAIVERS.json.waivers[{index}]"
+    invariant = _require_fields(
+        waiver.get("invariants"),
+        APPEND_ONLY_WAIVER_INVARIANT_KEYS,
+        report,
+        f"{location}.invariants",
+    )
+    if invariant is not None:
+        for key in ("method_content_sha256", "scope_datum_sha256"):
+            _digest(invariant.get(key), report, f"{location}.invariants.{key}")
+        for key in ("outcome_data_changed", "solution_bearing_content_added"):
+            if invariant.get(key) is not False:
+                report.error(
+                    "APPEND_ONLY_WAIVER_INVARIANT",
+                    f"{location}.invariants.{key}",
+                    "must be false",
+                )
+
+        current_catalog = load_json(
+            repo / "method-paper" / "VERSIONS.json",
+            report,
+            "method-paper/VERSIONS.json",
+        )
+        base_catalog_bytes = _git_blob(repo, resolved_base, "method-paper/VERSIONS.json")
+        try:
+            base_catalog = (
+                json.loads(base_catalog_bytes, object_pairs_hook=_strict_object)
+                if base_catalog_bytes is not None
+                else None
+            )
+        except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+            base_catalog = None
+        expected = (
+            invariant.get("method_content_sha256"),
+            invariant.get("scope_datum_sha256"),
+        )
+        if _study_method_digests(current_catalog) != expected or _study_method_digests(base_catalog) != expected:
+            report.error(
+                "APPEND_ONLY_WAIVER_INVARIANT",
+                f"{location}.invariants",
+                "METHOD and SCOPE digests must match the unique study-eligible method at both base and candidate",
+            )
+
+    affected = waiver.get("affected_files")
+    if not isinstance(affected, list) or not affected:
+        report.error("APPEND_ONLY_WAIVER_SHAPE", f"{location}.affected_files", "must be a non-empty array")
+        return set()
+    allowed_paths: set[str] = set()
+    for file_index, item in enumerate(affected):
+        item_location = f"{location}.affected_files[{file_index}]"
+        value = _require_fields(item, APPEND_ONLY_WAIVER_FILE_KEYS, report, item_location)
+        if value is None:
+            continue
+        path = _relative_path(value.get("path"), report, f"{item_location}.path")
+        before_digest = value.get("before_sha256")
+        after_digest = value.get("after_sha256")
+        _digest(before_digest, report, f"{item_location}.before_sha256")
+        _digest(after_digest, report, f"{item_location}.after_sha256")
+        if not isinstance(path, str) or not path.startswith("exogenous/"):
+            report.error("APPEND_ONLY_WAIVER_PATH", f"{item_location}.path", "must stay under exogenous/")
+            continue
+        if path in allowed_paths:
+            report.error("APPEND_ONLY_WAIVER_PATH", f"{item_location}.path", "must be unique")
+            continue
+        allowed_paths.add(path)
+        base_blob = _git_blob(repo, resolved_base, path)
+        actual_before = "sha256:" + hashlib.sha256(base_blob).hexdigest() if base_blob is not None else None
+        actual_after = file_sha256(repo / path, report, path)
+        if actual_before != before_digest:
+            report.error("APPEND_ONLY_WAIVER_DIGEST", f"{item_location}.before_sha256", "does not match base bytes")
+        if actual_after != after_digest:
+            report.error("APPEND_ONLY_WAIVER_DIGEST", f"{item_location}.after_sha256", "does not match candidate bytes")
+
+    declared_change_set = allowed_paths
+    actual_change_set = changed_paths - {"exogenous/APPEND-ONLY-WAIVERS.json"}
+    if declared_change_set != actual_change_set:
+        report.error(
+            "APPEND_ONLY_WAIVER_SCOPE",
+            f"{location}.affected_files",
+            f"declared paths {sorted(declared_change_set)} do not equal changed paths {sorted(actual_change_set)}",
+        )
+    if len(report.errors) != waiver_error_start:
+        return set()
+    waiver_id = waiver.get("waiver_id")
+    report.warn(
+        "APPEND_ONLY_WAIVED",
+        "exogenous",
+        f"{waiver_id}: exact public-provenance repin accepted without rewriting method bytes or outcomes",
+    )
+    report.facts["append_only_waiver_ids"] = [waiver_id]
+    return allowed_paths
+
+
 def check_append_only(root: Path, base_ref: str, report: Report) -> None:
     paths = subprocess.run(
         ["git", "diff", "--name-status", "--find-renames", base_ref, "--", "exogenous"],
@@ -3063,6 +3258,26 @@ def check_append_only(root: Path, base_ref: str, report: Report) -> None:
     if paths.returncode != 0:
         report.error("BASE_REF", "exogenous", "cannot resolve base ref")
         return
+    resolved = subprocess.run(
+        ["git", "rev-parse", "--verify", f"{base_ref}^{{commit}}"],
+        cwd=root.parent,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if resolved.returncode != 0:
+        report.error("BASE_REF", "exogenous", "cannot resolve base ref")
+        return
+    changed_paths: set[str] = set()
+    for line in paths.stdout.splitlines():
+        fields = line.split("\t")
+        changed_paths.update(fields[1:])
+    waived_paths = _validate_append_only_waiver(
+        root,
+        resolved_base=resolved.stdout.strip(),
+        changed_paths=changed_paths,
+        report=report,
+    )
     core = re.compile(
         r"^exogenous/(?:benchmarks/.+/TASKSET\.json|studies/.+/STUDY\.json|runs/.+/(?:RUN|SCORE)\.json)$"
     )
@@ -3070,11 +3285,12 @@ def check_append_only(root: Path, base_ref: str, report: Report) -> None:
         fields = line.split("\t")
         status = fields[0]
         affected = fields[1:]
-        if status.startswith(("M", "D", "R")) and any(core.fullmatch(path) for path in affected):
+        forbidden = [path for path in affected if core.fullmatch(path) and path not in waived_paths]
+        if status.startswith(("M", "D", "R")) and forbidden:
             report.error(
                 "APPEND_ONLY",
-                "exogenous",
-                "published core records may only be added",
+                forbidden[0],
+                "published core records may only be added unless an exact base-bound waiver is valid",
             )
 
 
