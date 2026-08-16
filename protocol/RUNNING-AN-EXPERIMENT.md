@@ -66,11 +66,21 @@ claim; they do not authorize repair beyond the prospectively matched bounded QA 
 or deletion of inconvenient outcomes.
 
 `frozen` in method-index v2 means only that exact method bytes are pinned as a research
-input. The current study package is `paper2-current-v2` at
+input. Multiple historical packages may remain study-eligible so that existing studies
+continue to resolve without rewriting their inputs. Every new study must select one
+exact version ID, source commit, path, METHOD digest, and SCOPE-DATUM digest; “current”
+and “latest” are invalid selectors.
+
+The historical matched study uses `paper2-current-v2` at
 `f58e065ad5d035b55fc8668b094e42327382345a`, with METHOD digest
 `sha256:ce9c94c12660c57a8dc34c98afd46c644b07214a2f9e7a9a494078fbe7be0905`
 and SCOPE-DATUM digest
 `sha256:c0764df57d20b5d66500ec75c8f8fcd5e0dd5c5029bd35783caca6a68133e307`.
-It is `study_eligible=true`, `adoption_eligible=false`, and
+The Terminal-Bench v3 protocol uses `charting-loop-method-v4` at
+`0d3ed5c357c906edcc697a83b3ce681c68cd353a`, with METHOD digest
+`sha256:d3a9da497c31f3bde46a31f37990236af51b9f677ae807d023582b27254c4ab0`
+and SCOPE-DATUM digest
+`sha256:65c6a91120c15bec30278288a26ecc98bdf96cfb07fd490dc915408a78844327`.
+Both are `study_eligible=true`, `adoption_eligible=false`, and
 `builder_eligible=false`. Freezing is not adoption, operational authority, publication
 maturity, a warranty, or production approval.

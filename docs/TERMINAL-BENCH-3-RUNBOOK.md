@@ -12,6 +12,14 @@ local checks, an authenticated Modal workspace, and a Codex login on the launch
 host. Never paste subscription, Harbor, Modal, or Codex tokens into a command,
 configuration committed to Git, task prompt, or result artifact.
 
+This run is bound to `charting-loop-method-v4` at
+`0d3ed5c357c906edcc697a83b3ce681c68cd353a`, METHOD digest
+`sha256:d3a9da497c31f3bde46a31f37990236af51b9f677ae807d023582b27254c4ab0`,
+and SCOPE-DATUM digest
+`sha256:65c6a91120c15bec30278288a26ecc98bdf96cfb07fd490dc915408a78844327`.
+Agent v0.3.0 resolves this identity and rejects changed catalog or method bytes before
+any paid model call.
+
 ```bash
 uv tool install --upgrade 'harbor[modal]'
 harbor --version
@@ -50,6 +58,9 @@ export CODEX_FORCE_AUTH_JSON=1
 
 python3 -m unittest tests.test_full_method_agent -v
 python3 -m unittest discover -s tests -v
+
+python3 tools/corridor_registry.py validate-method \
+  --method-index method-paper/VERSIONS.json
 
 HARBOR_PY="$HOME/.local/share/uv/tools/harbor/bin/python"
 "$HARBOR_PY" -c \

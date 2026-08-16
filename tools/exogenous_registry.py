@@ -1826,13 +1826,7 @@ def load_method_catalog(path: Path) -> tuple[Report, list[dict[str, Any]]]:
                 catalog_paths[key] = member
         if (
             version_id is not None
-            and (
-                not method_v2
-                or (
-                    len(declared_study_versions) == 1
-                    and version_obj is declared_study_versions[0]
-                )
-            )
+            and (not method_v2 or version_obj.get("study_eligible") is True)
             and set(catalog_paths)
             == {"claim_catalog", "source_catalog", "evidence_index"}
         ):
@@ -1857,17 +1851,17 @@ def load_method_catalog(path: Path) -> tuple[Report, list[dict[str, Any]]]:
         valid_study_versions = [
             version for version in valid if version.get("study_eligible") is True
         ]
-        if len(declared_study_versions) != 1:
+        if not declared_study_versions:
             report.error(
                 "METHOD_STUDY_VERSION_COUNT",
                 "method catalog.versions",
-                "must contain exactly one study-eligible method version",
+                "must contain at least one study-eligible method version",
             )
-        elif len(valid_study_versions) != 1:
+        elif len(valid_study_versions) != len(declared_study_versions):
             report.error(
                 "METHOD_STUDY_VERSION_INVALID",
                 "method catalog.versions",
-                "the unique study-eligible method version must validate completely",
+                "every study-eligible method version must validate completely",
             )
 
     report.facts["method_version_count"] = len(valid)
@@ -1883,8 +1877,8 @@ def load_method_catalog(path: Path) -> tuple[Report, list[dict[str, Any]]]:
         version.get("builder_eligible") is True for version in valid
     )
     if method_v2 and (
-        len(declared_study_versions) != 1
-        or len(valid_study_versions) != 1
+        not declared_study_versions
+        or len(valid_study_versions) != len(declared_study_versions)
         or report.errors
     ):
         return report, []
@@ -3188,18 +3182,15 @@ def _git_blob(repo: Path, commit: str, path: str) -> bytes | None:
     return shown.stdout if shown.returncode == 0 else None
 
 
-def _study_method_digests(catalog: dict[str, Any] | None) -> tuple[Any, Any]:
+def _study_method_digests(catalog: dict[str, Any] | None) -> set[tuple[Any, Any]]:
     versions = catalog.get("versions") if isinstance(catalog, dict) else None
     if not isinstance(versions, list):
-        return None, None
-    eligible = [
-        version
+        return set()
+    return {
+        (version.get("content_sha256"), version.get("scope_datum_sha256"))
         for version in versions
         if isinstance(version, dict) and version.get("study_eligible") is True
-    ]
-    if len(eligible) != 1:
-        return None, None
-    return eligible[0].get("content_sha256"), eligible[0].get("scope_datum_sha256")
+    }
 
 
 def _validate_append_only_waiver(
@@ -3298,11 +3289,11 @@ def _validate_append_only_waiver(
             invariant.get("method_content_sha256"),
             invariant.get("scope_datum_sha256"),
         )
-        if _study_method_digests(current_catalog) != expected or _study_method_digests(base_catalog) != expected:
+        if expected not in _study_method_digests(current_catalog) or expected not in _study_method_digests(base_catalog):
             report.error(
                 "APPEND_ONLY_WAIVER_INVARIANT",
                 f"{location}.invariants",
-                "METHOD and SCOPE digests must match the unique study-eligible method at both base and candidate",
+                "METHOD and SCOPE digests must match a study-eligible method at both base and candidate",
             )
 
     affected = waiver.get("affected_files")

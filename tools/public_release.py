@@ -171,7 +171,12 @@ ALLOWED_ORACLE_VISIBILITY = {"not-public", "public-after-run", "public-before-ru
 ALLOWED_LOCAL_VISIBILITY = {"controlled", "private", "public"}
 ALLOWED_NETWORK_POLICY = {"allowlisted", "none", "open", "unknown"}
 ALLOWED_COUNTING = {"counted", "excluded-prospectively", "incomplete", "invalid-infrastructure", "unscored"}
-ALLOWED_METHOD_ATTRIBUTION = {"no-method", "other-declared-method", "paper2-current-v2"}
+ALLOWED_METHOD_ATTRIBUTION = {
+    "no-method",
+    "other-declared-method",
+    "paper2-current-v2",
+    "charting-loop-method-v4",
+}
 ALLOWED_LICENSE_STATUS = {"cleared", "not-assessed", "restricted", "upstream-reference-only"}
 
 PUBLIC_RESULT_V1_KEYS = {

@@ -214,6 +214,7 @@ def make_fixture(root: Path, *, run_id: str = "run-001", scored: bool = False) -
 def copy_method_project(root: Path) -> None:
     for directory in ("method-paper", "catalog", "theory"):
         (root / directory).mkdir(parents=True, exist_ok=True)
+    (root / "catalog" / "v4").mkdir()
     for name in ("METHOD.md", "SCOPE-DATUM.md", "VERSIONS.json"):
         shutil.copy2(
             REPOSITORY_ROOT / "method-paper" / name,
@@ -223,6 +224,10 @@ def copy_method_project(root: Path) -> None:
         shutil.copy2(
             REPOSITORY_ROOT / "catalog" / name,
             root / "catalog" / name,
+        )
+        shutil.copy2(
+            REPOSITORY_ROOT / "catalog" / "v4" / name,
+            root / "catalog" / "v4" / name,
         )
     shutil.copy2(
         REPOSITORY_ROOT / "theory" / "VERSIONS.json",
@@ -910,10 +915,13 @@ class ExogenousRegistryTests(unittest.TestCase):
         self.assertTrue(method_report.ok, method_report.errors)
         self.assertEqual(
             [version["version_id"] for version in versions],
-            ["paper2-current-v2", "draft-v2"],
+            ["paper2-current-v2", "draft-v2", "charting-loop-method-v4"],
         )
         current = next(
-            version for version in versions if version["study_eligible"] is True
+            version for version in versions if version["version_id"] == "paper2-current-v2"
+        )
+        v4 = next(
+            version for version in versions if version["version_id"] == "charting-loop-method-v4"
         )
         historical = next(
             version for version in versions if version["version_id"] == "draft-v2"
@@ -938,7 +946,21 @@ class ExogenousRegistryTests(unittest.TestCase):
         self.assertEqual(
             method_report.facts["schema_version"], registry.METHOD_INDEX_SCHEMA
         )
-        self.assertEqual(method_report.facts["study_eligible_method_version_count"], 1)
+        self.assertEqual(
+            v4["source_commit"],
+            "0d3ed5c357c906edcc697a83b3ce681c68cd353a",
+        )
+        self.assertEqual(
+            v4["content_sha256"],
+            "sha256:d3a9da497c31f3bde46a31f37990236af51b9f677ae807d023582b27254c4ab0",
+        )
+        self.assertEqual(
+            v4["scope_datum_sha256"],
+            "sha256:65c6a91120c15bec30278288a26ecc98bdf96cfb07fd490dc915408a78844327",
+        )
+        self.assertTrue(v4["study_eligible"])
+        self.assertFalse(v4["adoption_eligible"])
+        self.assertEqual(method_report.facts["study_eligible_method_version_count"], 2)
         self.assertEqual(method_report.facts["adoption_eligible_method_version_count"], 0)
         self.assertEqual(method_report.facts["eligible_method_version_count"], 0)
 
@@ -994,30 +1016,58 @@ class ExogenousRegistryTests(unittest.TestCase):
                 report.errors,
             )
 
-    def test_method_loader_requires_one_study_eligible_version(self) -> None:
-        for eligible_ids in (set(), {"paper2-current-v2", "draft-v2"}):
-            with self.subTest(eligible_ids=eligible_ids):
-                with tempfile.TemporaryDirectory(dir=REPOSITORY_ROOT) as temporary:
-                    root = Path(temporary)
-                    copy_method_project(root)
-                    index_path = root / "method-paper" / "VERSIONS.json"
-                    index = json.loads(index_path.read_text(encoding="utf-8"))
-                    for version in index["versions"]:
-                        version["study_eligible"] = (
-                            version["version_id"] in eligible_ids
-                        )
-                    write_json(index_path, index)
+    def test_method_loader_supports_multiple_study_versions_but_requires_one(self) -> None:
+        with tempfile.TemporaryDirectory(dir=REPOSITORY_ROOT) as temporary:
+            root = Path(temporary)
+            copy_method_project(root)
+            index_path = root / "method-paper" / "VERSIONS.json"
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+            for version in index["versions"]:
+                version["study_eligible"] = False
+            write_json(index_path, index)
 
-                    report, versions = registry.load_method_catalog(index_path)
-                    self.assertFalse(report.ok)
-                    self.assertEqual(versions, [])
-                    self.assertTrue(
-                        any(
-                            "METHOD_STUDY_VERSION_COUNT" in error
-                            for error in report.errors
-                        ),
-                        report.errors,
-                    )
+            report, versions = registry.load_method_catalog(index_path)
+            self.assertFalse(report.ok)
+            self.assertEqual(versions, [])
+            self.assertTrue(
+                any("METHOD_STUDY_VERSION_COUNT" in error for error in report.errors),
+                report.errors,
+            )
+
+        report, versions = registry.load_method_catalog(
+            REPOSITORY_ROOT / "method-paper" / "VERSIONS.json"
+        )
+        self.assertTrue(report.ok, report.errors)
+        self.assertEqual(
+            [
+                version["version_id"]
+                for version in versions
+                if version["study_eligible"] is True
+            ],
+            ["paper2-current-v2", "charting-loop-method-v4"],
+        )
+
+    def test_method_loader_rejects_any_invalid_study_eligible_version(self) -> None:
+        with tempfile.TemporaryDirectory(dir=REPOSITORY_ROOT) as temporary:
+            root = Path(temporary)
+            copy_method_project(root)
+            index_path = root / "method-paper" / "VERSIONS.json"
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+            draft = next(
+                version
+                for version in index["versions"]
+                if version["version_id"] == "draft-v2"
+            )
+            draft["study_eligible"] = True
+            write_json(index_path, index)
+
+            report, versions = registry.load_method_catalog(index_path)
+            self.assertFalse(report.ok)
+            self.assertEqual(versions, [])
+            self.assertTrue(
+                any("METHOD_STUDY_VERSION_INVALID" in error for error in report.errors),
+                report.errors,
+            )
 
     def test_valid_unscored_run_remains_indexed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -2138,8 +2188,12 @@ class ExogenousRegistryTests(unittest.TestCase):
         protocol_v2 = documents["TASK-CONDITIONED-CORRIDOR-EXPERIMENT-V2.md"]
         running = documents["RUNNING-AN-EXPERIMENT.md"]
 
-        self.assertIn("prospective draft v4", method)
-        self.assertIn("un-cataloged working draft", method)
+        self.assertIn("Charting Loop corridor method — v4", method)
+        self.assertIn("Status: **normative source**", method)
+        self.assertIn("Architecture and projection boundary", method)
+        self.assertIn("none is a reference\narchitecture", method)
+        self.assertIn("construction-experiment profile", method)
+        self.assertIn("long-lived governed-system profile", method)
         self.assertIn("append-only **Position ledger**", method)
         self.assertIn("IndependentQAAssessment", method)
         self.assertIn("task acceptance ledger", method)

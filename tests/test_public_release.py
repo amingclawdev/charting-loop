@@ -1214,6 +1214,17 @@ class PublicReleaseTests(unittest.TestCase):
             self.assertTrue(any("REGISTRY_GENESIS" in error for error in report.errors))
 
     def test_contamination_metadata_is_closed_and_truthful(self) -> None:
+        v4_entry = release_entry()
+        v4_entry["contamination_facts"]["method_attribution"] = (
+            "charting-loop-method-v4"
+        )
+        v4_entry["identity"]["method_version_id"] = "charting-loop-method-v4"
+        v4_report = public_release.Report(subject="v4-contamination")
+        public_release._validate_release_entry(
+            v4_entry, 0, set(), set(), set(), v4_report
+        )
+        self.assertTrue(v4_report.ok, v4_report.errors)
+
         entry = release_entry()
         entry["contamination_facts"]["training_ingestion"] = "assumed-ingested"
         entry["contamination_facts"]["upstream_oracle_published_at"] = None

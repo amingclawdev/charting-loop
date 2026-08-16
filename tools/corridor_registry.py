@@ -1910,13 +1910,7 @@ def validate_method_index(
                     f"{location}.derived_from",
                 )
         if (
-            (
-                not method_v2
-                or (
-                    len(declared_study_versions) == 1
-                    and version is declared_study_versions[0]
-                )
-            )
+            (not method_v2 or version.get("study_eligible") is True)
             and set(catalog_paths)
             == {"claim_catalog", "source_catalog", "evidence_index"}
         ):
@@ -1936,17 +1930,17 @@ def validate_method_index(
         valid_study_versions = [
             version for version in valid if version.get("study_eligible") is True
         ]
-        if len(declared_study_versions) != 1:
+        if not declared_study_versions:
             report.error(
                 "METHOD_STUDY_VERSION_COUNT",
                 f"{path.name}.versions",
-                "must contain exactly one study-eligible method version",
+                "must contain at least one study-eligible method version",
             )
-        elif len(valid_study_versions) != 1:
+        elif len(valid_study_versions) != len(declared_study_versions):
             report.error(
                 "METHOD_STUDY_VERSION_INVALID",
                 f"{path.name}.versions",
-                "the unique study-eligible method version must validate completely",
+                "every study-eligible method version must validate completely",
             )
 
     report.facts.update(
@@ -1971,8 +1965,8 @@ def validate_method_index(
             }
         )
     if method_v2 and (
-        len(declared_study_versions) != 1
-        or len(valid_study_versions) != 1
+        not declared_study_versions
+        or len(valid_study_versions) != len(declared_study_versions)
         or report.errors
     ):
         return report, []

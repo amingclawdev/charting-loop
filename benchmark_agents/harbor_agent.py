@@ -11,6 +11,7 @@ record.  All model calls occur inside the scored trial.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shlex
 from pathlib import Path, PurePosixPath
@@ -42,8 +43,62 @@ from benchmark_agents.contract import (
 )
 
 
-AGENT_VERSION = "0.2.0"
+AGENT_VERSION = "0.3.0"
+METHOD_VERSION_ID = "charting-loop-method-v4"
+METHOD_SOURCE_COMMIT = "0d3ed5c357c906edcc697a83b3ce681c68cd353a"
+METHOD_CONTENT_SHA256 = (
+    "sha256:d3a9da497c31f3bde46a31f37990236af51b9f677ae807d023582b27254c4ab0"
+)
+METHOD_SCOPE_SHA256 = (
+    "sha256:65c6a91120c15bec30278288a26ecc98bdf96cfb07fd490dc915408a78844327"
+)
 ROLE_ORDER = ("builder", "worker", "qa")
+
+
+def _sha256(path: Path) -> str:
+    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _resolve_frozen_method(repository_root: Path) -> Path:
+    """Resolve the exact v4 bytes or fail before a paid model call."""
+
+    index_path = repository_root / "method-paper" / "VERSIONS.json"
+    document = json.loads(index_path.read_text(encoding="utf-8"))
+    versions = document.get("versions")
+    matches = (
+        [item for item in versions if item.get("version_id") == METHOD_VERSION_ID]
+        if isinstance(versions, list)
+        and all(isinstance(item, dict) for item in versions)
+        else []
+    )
+    if len(matches) != 1:
+        raise RuntimeError(f"Frozen method identity must resolve once: {METHOD_VERSION_ID}")
+    version = matches[0]
+    expected = {
+        "status": "frozen",
+        "study_eligible": True,
+        "adoption_eligible": False,
+        "builder_eligible": False,
+        "source_commit": METHOD_SOURCE_COMMIT,
+        "path": "method-paper/METHOD.md",
+        "content_sha256": METHOD_CONTENT_SHA256,
+        "scope_datum_path": "method-paper/SCOPE-DATUM.md",
+        "scope_datum_sha256": METHOD_SCOPE_SHA256,
+    }
+    mismatches = [key for key, value in expected.items() if version.get(key) != value]
+    if mismatches:
+        raise RuntimeError(
+            "Frozen method catalog binding changed: " + ", ".join(mismatches)
+        )
+    method_path = repository_root / expected["path"]
+    scope_path = repository_root / expected["scope_datum_path"]
+    if not method_path.is_file() or not scope_path.is_file():
+        raise FileNotFoundError("Frozen method or scope datum is missing")
+    if _sha256(method_path) != METHOD_CONTENT_SHA256:
+        raise RuntimeError("Mutable METHOD.md bytes do not match the frozen v4 digest")
+    if _sha256(scope_path) != METHOD_SCOPE_SHA256:
+        raise RuntimeError("Mutable SCOPE-DATUM.md bytes do not match the frozen v4 digest")
+    return method_path
 
 
 class ChartingLoopFullMethodAgent(Codex):
@@ -60,7 +115,7 @@ class ChartingLoopFullMethodAgent(Codex):
 
     @property
     def _method_source(self) -> Path:
-        return Path(__file__).resolve().parents[1] / "method-paper" / "METHOD.md"
+        return _resolve_frozen_method(Path(__file__).resolve().parents[1])
 
     def _child_agent(self, role: str) -> Codex:
         child = Codex(
@@ -330,6 +385,10 @@ class ChartingLoopFullMethodAgent(Codex):
         metadata: dict[str, Any] = {
             "schema_version": "charting-loop/full-method-run/v2",
             "method": "task-conditioned-corridor",
+            "method_version_id": METHOD_VERSION_ID,
+            "method_source_commit": METHOD_SOURCE_COMMIT,
+            "method_content_sha256": METHOD_CONTENT_SHA256,
+            "method_scope_sha256": METHOD_SCOPE_SHA256,
             "roles": ["builder", "worker", "qa"],
             "phase_events": [],
             "qa_is_advisory": True,

@@ -1075,13 +1075,16 @@ class MethodIndexValidationTests(unittest.TestCase):
         self.assertTrue(report.ok, report.errors)
         self.assertEqual(
             [version["version_id"] for version in versions],
-            ["paper2-current-v2", "draft-v2"],
+            ["paper2-current-v2", "draft-v2", "charting-loop-method-v4"],
         )
         self.assertEqual(
             report.facts["schema_version"], registry.METHOD_INDEX_SCHEMA
         )
         current = next(
-            version for version in versions if version["study_eligible"] is True
+            version for version in versions if version["version_id"] == "paper2-current-v2"
+        )
+        v4 = next(
+            version for version in versions if version["version_id"] == "charting-loop-method-v4"
         )
         historical = next(
             version for version in versions if version["version_id"] == "draft-v2"
@@ -1116,7 +1119,23 @@ class MethodIndexValidationTests(unittest.TestCase):
             historical["scope_datum_sha256"],
             "sha256:973d0993193ec2598cacfeb3e708161f8fddade02448ea1ad5bc105a293cf91c",
         )
-        self.assertEqual(report.facts["study_eligible_version_count"], 1)
+        self.assertEqual(v4["status"], "frozen")
+        self.assertTrue(v4["study_eligible"])
+        self.assertFalse(v4["adoption_eligible"])
+        self.assertFalse(v4["builder_eligible"])
+        self.assertEqual(
+            v4["source_commit"],
+            "0d3ed5c357c906edcc697a83b3ce681c68cd353a",
+        )
+        self.assertEqual(
+            v4["content_sha256"],
+            "sha256:d3a9da497c31f3bde46a31f37990236af51b9f677ae807d023582b27254c4ab0",
+        )
+        self.assertEqual(
+            v4["scope_datum_sha256"],
+            "sha256:65c6a91120c15bec30278288a26ecc98bdf96cfb07fd490dc915408a78844327",
+        )
+        self.assertEqual(report.facts["study_eligible_version_count"], 2)
         self.assertEqual(report.facts["adoption_eligible_version_count"], 0)
         self.assertEqual(report.facts["builder_eligible_version_count"], 0)
         self.assertEqual(
@@ -1135,9 +1154,9 @@ class MethodIndexValidationTests(unittest.TestCase):
         )
         self.assertEqual(report.facts["method_primary_theory_version_id"], "zenodo-v1")
         self.assertEqual(report.facts["method_drafting_provenance_count"], 1)
-        self.assertEqual(report.facts["method_claim_count"], 11)
-        self.assertEqual(report.facts["method_binding_count"], 11)
-        self.assertEqual(report.facts["method_source_count"], 3)
+        self.assertEqual(report.facts["method_claim_count"], 12)
+        self.assertEqual(report.facts["method_binding_count"], 12)
+        self.assertEqual(report.facts["method_source_count"], 4)
         self.assertEqual(
             report.facts["method_source_bytes_resolution_status"], "not-resolved"
         )
@@ -1257,49 +1276,48 @@ class MethodIndexValidationTests(unittest.TestCase):
                 report.errors,
             )
 
-    def test_v2_method_catalog_requires_one_study_eligible_version(self) -> None:
-        for eligible_ids in (set(), {"paper2-current-v2", "draft-v2"}):
-            with self.subTest(eligible_ids=eligible_ids):
-                with tempfile.TemporaryDirectory(dir=REPOSITORY_ROOT) as temporary:
-                    temporary_root = Path(temporary)
-                    method_root = temporary_root / "method-paper"
-                    catalog_root = temporary_root / "catalog"
-                    method_root.mkdir()
-                    catalog_root.mkdir()
-                    for name in ("METHOD.md", "SCOPE-DATUM.md", "VERSIONS.json"):
-                        shutil.copy2(
-                            REPOSITORY_ROOT / "method-paper" / name,
-                            method_root / name,
-                        )
-                    for name in (
-                        "CLAIMS.json",
-                        "SOURCES.json",
-                        "EVIDENCE-INDEX.json",
-                    ):
-                        shutil.copy2(
-                            REPOSITORY_ROOT / "catalog" / name,
-                            catalog_root / name,
-                        )
-                    versions_path = method_root / "VERSIONS.json"
-                    document = json.loads(
-                        versions_path.read_text(encoding="utf-8")
-                    )
-                    for version in document["versions"]:
-                        version["study_eligible"] = (
-                            version["version_id"] in eligible_ids
-                        )
-                    write_json(versions_path, document)
+    def test_v2_method_catalog_supports_multiple_study_versions_but_requires_one(self) -> None:
+        with tempfile.TemporaryDirectory(dir=REPOSITORY_ROOT) as temporary:
+            temporary_root = Path(temporary)
+            method_root = temporary_root / "method-paper"
+            catalog_root = temporary_root / "catalog"
+            method_root.mkdir()
+            catalog_root.mkdir()
+            (catalog_root / "v4").mkdir()
+            for name in ("METHOD.md", "SCOPE-DATUM.md", "VERSIONS.json"):
+                shutil.copy2(REPOSITORY_ROOT / "method-paper" / name, method_root / name)
+            for name in ("CLAIMS.json", "SOURCES.json", "EVIDENCE-INDEX.json"):
+                shutil.copy2(REPOSITORY_ROOT / "catalog" / name, catalog_root / name)
+                shutil.copy2(
+                    REPOSITORY_ROOT / "catalog" / "v4" / name,
+                    catalog_root / "v4" / name,
+                )
+            versions_path = method_root / "VERSIONS.json"
+            document = json.loads(versions_path.read_text(encoding="utf-8"))
+            for version in document["versions"]:
+                version["study_eligible"] = False
+            write_json(versions_path, document)
 
-                    report, versions = registry.validate_method_index(versions_path)
-                    self.assertFalse(report.ok)
-                    self.assertEqual(versions, [])
-                    self.assertTrue(
-                        any(
-                            "METHOD_STUDY_VERSION_COUNT" in error
-                            for error in report.errors
-                        ),
-                        report.errors,
-                    )
+            report, versions = registry.validate_method_index(versions_path)
+            self.assertFalse(report.ok)
+            self.assertEqual(versions, [])
+            self.assertTrue(
+                any("METHOD_STUDY_VERSION_COUNT" in error for error in report.errors),
+                report.errors,
+            )
+
+        report, versions = registry.validate_method_index(
+            REPOSITORY_ROOT / "method-paper" / "VERSIONS.json"
+        )
+        self.assertTrue(report.ok, report.errors)
+        self.assertEqual(
+            [
+                version["version_id"]
+                for version in versions
+                if version["study_eligible"] is True
+            ],
+            ["paper2-current-v2", "charting-loop-method-v4"],
+        )
 
     def test_primary_theory_and_theory_derived_bindings_are_enforced(self) -> None:
         theory_report, theories = registry.validate_theory_index(

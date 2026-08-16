@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
@@ -77,6 +78,9 @@ class FullMethodContractTests(unittest.TestCase):
             "leaderboard score is an end-to-end performance result",
             "ACCEPTANCE.json",
             "Closing one repair witness never implies whole-task closure",
+            "charting-loop-method-v4",
+            "0d3ed5c357c906edcc697a83b3ce681c68cd353a",
+            "Any mutable-byte mismatch",
         ):
             self.assertIn(marker, protocol)
         for marker in (
@@ -89,6 +93,47 @@ class FullMethodContractTests(unittest.TestCase):
         ):
             self.assertIn(marker, runbook)
         self.assertNotIn("--ae CODEX_FORCE_AUTH_JSON=1", runbook)
+
+    def test_agent_is_bound_to_the_exact_frozen_v4_method(self) -> None:
+        index = json.loads(
+            (REPOSITORY_ROOT / "method-paper" / "VERSIONS.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        versions = [
+            version
+            for version in index["versions"]
+            if version["version_id"] == "charting-loop-method-v4"
+        ]
+        self.assertEqual(1, len(versions))
+        version = versions[0]
+        self.assertEqual("frozen", version["status"])
+        self.assertTrue(version["study_eligible"])
+        self.assertFalse(version["adoption_eligible"])
+        self.assertEqual(
+            "0d3ed5c357c906edcc697a83b3ce681c68cd353a",
+            version["source_commit"],
+        )
+        for path_key, digest_key in (
+            ("path", "content_sha256"),
+            ("scope_datum_path", "scope_datum_sha256"),
+        ):
+            path = REPOSITORY_ROOT / version[path_key]
+            actual = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+            self.assertEqual(version[digest_key], actual)
+
+        source = (REPOSITORY_ROOT / "benchmark_agents" / "harbor_agent.py").read_text(
+            encoding="utf-8"
+        )
+        for value in (
+            "charting-loop-method-v4",
+            version["source_commit"],
+            version["content_sha256"],
+            version["scope_datum_sha256"],
+            "_resolve_frozen_method",
+            "before a paid model call",
+        ):
+            self.assertIn(value, source)
 
     def test_worker_and_qa_receive_same_corridor_identity(self) -> None:
         digest = "sha256:" + "a" * 64

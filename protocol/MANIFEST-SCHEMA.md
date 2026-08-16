@@ -195,18 +195,24 @@ Every component in those closed field sets is identity-bearing. Changing any com
 including any nested prefix, admission, or projector component, creates a different
 `WorldRef`; runners must not normalize distinct components into the same identity.
 
-## Current method eligibility projection
+## Method eligibility projection
 
-`method-paper/VERSIONS.json` records `paper2-current-v2` as the unique current study
-package under `charting-loop/method-index/v2`. It is frozen at
+`method-paper/VERSIONS.json` may retain multiple independently frozen study packages
+under `charting-loop/method-index/v2`. A Study resolves exactly one complete MethodRef;
+it never infers “current” from ordering or recency. `paper2-current-v2` remains frozen at
 `f58e065ad5d035b55fc8668b094e42327382345a`, with METHOD digest
 `sha256:ce9c94c12660c57a8dc34c98afd46c644b07214a2f9e7a9a494078fbe7be0905`
 and SCOPE-DATUM digest
 `sha256:c0764df57d20b5d66500ec75c8f8fcd5e0dd5c5029bd35783caca6a68133e307`.
-Its eligibility snapshot is `status=frozen`, `study_eligible=true`,
+The v4 package `charting-loop-method-v4` is separately frozen at
+`0d3ed5c357c906edcc697a83b3ce681c68cd353a`, with METHOD digest
+`sha256:d3a9da497c31f3bde46a31f37990236af51b9f677ae807d023582b27254c4ab0`
+and SCOPE-DATUM digest
+`sha256:65c6a91120c15bec30278288a26ecc98bdf96cfb07fd490dc915408a78844327`.
+Each eligibility snapshot is `status=frozen`, `study_eligible=true`,
 `adoption_eligible=false`, and `builder_eligible=false`: it may be frozen into a study
-but is not approved for adoption or builder execution. The retained `draft-v2` row is
-historical and `study_eligible=false`. The v1 method-index contract remains a distinct
+but is not approved for operational adoption. The retained `draft-v2` row is historical
+and `study_eligible=false`. The v1 method-index contract remains a distinct
 legacy dispatch and does not acquire these v2 fields by inference. A frozen research
 package does not imply publication maturity, a warranty, or operational adoption.
 

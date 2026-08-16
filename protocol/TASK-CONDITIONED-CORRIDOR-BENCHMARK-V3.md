@@ -11,9 +11,10 @@ apart. The method proposes compiling those task-specific relationships into a
 Corridor that later agents can inspect and replay.
 
 Version 3 asks a performance question: how well does the complete method-instantiated
-agent perform on Terminal-Bench 3.0? Its next run uses the prospective v4 method and
-agent v0.2.0. It includes construction, execution, and an independent
-Corridor-visible QA/rework loop in one scored Harbor trial. This prospective change
+agent perform on Terminal-Bench 3.0? Its next run uses the frozen
+`charting-loop-method-v4` package and agent v0.3.0. It includes construction, execution,
+and an independent Corridor-visible QA/rework loop in one scored Harbor trial. This
+prospective protocol change
 does not relabel an earlier smoke run that used the v3 method and agent v0.1.0.
 
 A leaderboard score is an end-to-end performance result. It is not, by itself,
@@ -30,6 +31,12 @@ Corridor-access observations because their QA sessions did not read the Corridor
 - Resource boundary: 4 tasks require a GPU; use a GPU-capable Harbor environment
   such as Modal for a complete run.
 - Agent: `benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent`
+- Method: `charting-loop-method-v4` at
+  `0d3ed5c357c906edcc697a83b3ce681c68cd353a`
+- Method digest:
+  `sha256:d3a9da497c31f3bde46a31f37990236af51b9f677ae807d023582b27254c4ab0`
+- Scope-datum digest:
+  `sha256:65c6a91120c15bec30278288a26ecc98bdf96cfb07fd490dc915408a78844327`
 
 Do not replace `@3.0.0` with `@latest` in a reportable run. Terminal-Bench 3.0 is a
 continuous benchmark; a mutable tag can change the task population.
@@ -71,7 +78,10 @@ observed assessment. Closing one repair witness never implies whole-task closure
 ## Per-trial sequence
 
 1. Start a fresh official task environment.
-2. Upload the repository's current `method-paper/METHOD.md` as a read-only method.
+2. Resolve `charting-loop-method-v4` exactly once in `method-paper/VERSIONS.json`,
+   verify its frozen commit and METHOD/SCOPE digests, and only then upload those exact
+   `method-paper/METHOD.md` bytes as a read-only method. Any mutable-byte mismatch
+   aborts before Builder or other paid model execution.
 3. Start a fresh Builder session with the method, exact task instruction, and public
    environment. It constructs a new Corridor inside this trial.
 4. Close the Corridor byte set: reject symlinks/special files, record every relative
