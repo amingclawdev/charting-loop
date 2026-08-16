@@ -875,7 +875,7 @@ class ExogenousRegistryTests(unittest.TestCase):
             / "PUBLIC-RELEASES.json",
             repo=REPOSITORY_ROOT,
             base_ref="4e97d0ae66dc7cf7211eb57c4d7badebb13ce095",
-            history_base_ref="af6ded35225c30e3684032ecf716ceca4a3c83ca",
+            history_base_ref="0029d1f2412ee41c040b9a2364c2e78e69c0e81d",
         )
         self.assertTrue(release_report.ok, release_report.errors)
         self.assertEqual(release_report.facts["release_count"], 12)

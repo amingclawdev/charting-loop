@@ -14,7 +14,7 @@ from tools import public_release
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_BASE_COMMIT = "4e97d0ae66dc7cf7211eb57c4d7badebb13ce095"
-PUBLIC_V1_MAIN_COMMIT = "af6ded35225c30e3684032ecf716ceca4a3c83ca"
+PUBLIC_V1_MAIN_COMMIT = "0029d1f2412ee41c040b9a2364c2e78e69c0e81d"
 
 
 def git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
