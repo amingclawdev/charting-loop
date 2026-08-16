@@ -57,3 +57,11 @@ jobs:
           fi
           python3 tools/exogenous_registry.py validate-registry "${base_args[@]}"
           python3 tools/exogenous_registry.py build-index --check "${base_args[@]}"
+      - name: Validate append-only public releases and causal-evidence manifests
+        shell: bash
+        run: |
+          public_args=(--base-ref 4e97d0ae66dc7cf7211eb57c4d7badebb13ce095)
+          if [[ "${{ steps.history-base.outputs.available }}" == "true" ]]; then
+            public_args+=(--history-base-ref "${{ steps.history-base.outputs.sha }}")
+          fi
+          python3 tools/public_release.py validate-registry "${public_args[@]}"

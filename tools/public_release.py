@@ -16,6 +16,11 @@ from typing import Any, Iterable
 
 REGISTRY_SCHEMA = "charting-loop/public-release-registry/v1"
 PUBLIC_RESULT_SCHEMA = "charting-loop/public-result-summary/v1"
+PUBLIC_RESULT_EVIDENCE_SCHEMA = "charting-loop/public-result-evidence/v2"
+CAUSAL_EVIDENCE_SCHEMA = "charting-loop/public-causal-evidence-matrix/v1"
+OBSERVABLE_LINEAGE_SCHEMA = "charting-loop/observable-lineage-receipt/v1"
+EXECUTION_AMENDMENT_SCHEMA = "charting-loop/public-execution-amendment/v1"
+ATTEMPT_DISPOSITION_SCHEMA = "charting-loop/public-attempt-disposition-ledger/v1"
 SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 RELEASE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9.-]{2,127}$")
@@ -168,6 +173,176 @@ ALLOWED_NETWORK_POLICY = {"allowlisted", "none", "open", "unknown"}
 ALLOWED_COUNTING = {"counted", "excluded-prospectively", "incomplete", "invalid-infrastructure", "unscored"}
 ALLOWED_METHOD_ATTRIBUTION = {"no-method", "other-declared-method", "paper2-current-v2"}
 ALLOWED_LICENSE_STATUS = {"cleared", "not-assessed", "restricted", "upstream-reference-only"}
+
+PUBLIC_RESULT_V1_KEYS = {
+    "condition",
+    "identity",
+    "interpretation",
+    "official_evaluation",
+    "process",
+    "public_summary",
+    "release_id",
+    "schema_version",
+    "sealed_artifacts",
+    "source_custody",
+}
+PUBLIC_RESULT_V2_KEYS = PUBLIC_RESULT_V1_KEYS | {
+    "attempt_disposition",
+    "causal_evidence",
+    "execution_amendment",
+    "observable_lineage",
+}
+PUBLIC_RESULT_CONDITION_KEYS = {
+    "corridor_access",
+    "corridor_observably_used",
+    "label",
+    "plain_language",
+}
+PUBLIC_RESULT_INTERPRETATION_KEYS = {
+    "causal_claim",
+    "distinct_benchmark_tasks",
+    "evidence_class",
+    "leaderboard_claim",
+    "mechanism_summary",
+    "multi_task_evidence",
+}
+PUBLIC_RESULT_OFFICIAL_KEYS = {"checks_passed", "checks_total", "outcome", "reward"}
+PUBLIC_RESULT_PROCESS_KEYS = {
+    "database_changed_after_qa",
+    "evaluation_mode",
+    "post_repair_qa_performed",
+    "qa_outcome",
+    "repair_attempts_executed",
+    "repair_launch_attempted",
+    "repair_status",
+}
+PUBLIC_RESULT_SUMMARY_KEYS = {"path", "sha256", "size_bytes"}
+PUBLIC_RESULT_SOURCE_CUSTODY_KEYS = {
+    "builder_service_commit",
+    "builder_service_tree",
+    "controlled_result_commit",
+    "controlled_result_path",
+    "controlled_result_tree",
+    "method_source_commit",
+    "official_task_committed_at",
+    "official_task_source_commit",
+    "official_task_url",
+}
+CAUSAL_EVIDENCE_KEYS = {"arm", "attempt_id", "entries", "schema_version"}
+CAUSAL_EVIDENCE_ENTRY_KEYS = {
+    "claim",
+    "controlled_source_refs",
+    "evidence_id",
+    "public_refs",
+    "reason",
+    "status",
+}
+CAUSAL_EVIDENCE_IDS = [f"E{index}" for index in range(1, 8)]
+CAUSAL_EVIDENCE_STATUSES = {
+    "declared-only",
+    "digest-only-commitment",
+    "independently-verifiable",
+    "public-event-receipt",
+    "unavailable",
+    "unsupported-inference",
+}
+OBSERVABLE_LINEAGE_KEYS = {
+    "arm",
+    "attempt_id",
+    "events",
+    "official_evaluator",
+    "prescore_world",
+    "redaction",
+    "schema_version",
+    "service_revision",
+    "worker_log",
+    "writebacks",
+}
+LINEAGE_SERVICE_KEYS = {"commit", "status", "tree"}
+LINEAGE_WORKER_LOG_KEYS = {
+    "agent_message_count",
+    "command_count",
+    "hidden_reasoning_event_count",
+    "reasoning_effort",
+    "sha256",
+    "size_bytes",
+    "source_ref",
+}
+LINEAGE_EVENT_KEYS = {
+    "event_id",
+    "exit_code",
+    "kind",
+    "output_sha256",
+    "public_summary",
+    "source_ref",
+    "status",
+}
+LINEAGE_WRITEBACK_KEYS = {"sha256", "size_bytes", "source_ref", "system"}
+LINEAGE_PRESCORE_KEYS = {"capture_sha256", "image_sha256", "source_ref"}
+LINEAGE_EVALUATOR_KEYS = {"checks_passed", "checks_total", "receipt_sha256", "source_ref"}
+LINEAGE_REDACTION_KEYS = {"excluded", "full_log_public", "policy"}
+EXECUTION_AMENDMENT_KEYS = {
+    "amendment_reason",
+    "arm",
+    "attempt_id",
+    "frozen_study_overwritten",
+    "qa_repair_order",
+    "schema_version",
+    "seed_retry",
+    "service_revision",
+    "source_refs",
+    "timing",
+    "tools_runtime",
+    "usage",
+    "prescore_world",
+}
+EXECUTION_TOOLS_RUNTIME_KEYS = {
+    "agent_message_count",
+    "codex_version",
+    "command_count",
+    "model",
+    "network_policy",
+    "reasoning_effort",
+    "runtime_identity",
+}
+EXECUTION_TIMING_KEYS = {"finished_at", "reason", "started_at", "status"}
+EXECUTION_USAGE_KEYS = {
+    "cached_input_tokens",
+    "input_tokens",
+    "output_tokens",
+    "reason",
+    "status",
+}
+EXECUTION_SEED_RETRY_KEYS = {
+    "reason",
+    "repair_attempts_executed",
+    "retry_count",
+    "retry_status",
+    "seed",
+    "seed_status",
+}
+EXECUTION_QA_REPAIR_KEYS = {
+    "post_repair_qa_performed",
+    "qa_outcome",
+    "repair_attempts_executed",
+    "repair_launch_attempted",
+    "repair_status",
+}
+ATTEMPT_DISPOSITION_KEYS = {
+    "current_attempt",
+    "invalid_predecessors",
+    "schema_version",
+}
+ATTEMPT_CURRENT_KEYS = {"attempt_id", "counted", "reason", "run_id", "status"}
+ATTEMPT_INVALID_KEYS = {
+    "attempt_label",
+    "counted",
+    "public_record_status",
+    "reason",
+    "source_ref",
+    "status",
+    "waiver_reason",
+}
 
 ALLOWED_TEXT_SUFFIXES = {
     ".bib",
@@ -656,6 +831,341 @@ def _validate_release_authority(
             report.error("RELEASE_AUTHORITY_ANCESTRY", location, "release commit is not descended from base_ref")
 
 
+def _non_empty_string(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _non_negative_integer(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _validate_causal_evidence(
+    value: Any,
+    *,
+    identity: Any,
+    location: str,
+    report: Report,
+) -> None:
+    if not _closed_keys(value, CAUSAL_EVIDENCE_KEYS, report, location):
+        return
+    if value.get("schema_version") != CAUSAL_EVIDENCE_SCHEMA:
+        report.error("PUBLIC_CAUSAL_EVIDENCE", location, "invalid causal-evidence schema")
+    expected_attempt = identity.get("attempt_id") if isinstance(identity, dict) else None
+    expected_arm = identity.get("arm") if isinstance(identity, dict) else None
+    if value.get("attempt_id") != expected_attempt or value.get("arm") != expected_arm:
+        report.error("PUBLIC_CAUSAL_EVIDENCE", location, "attempt_id and arm must join the manifest identity")
+    entries = value.get("entries")
+    if not isinstance(entries, list) or len(entries) != len(CAUSAL_EVIDENCE_IDS):
+        report.error("PUBLIC_CAUSAL_EVIDENCE", f"{location}.entries", "must contain exactly E1 through E7")
+        return
+    observed_ids: list[Any] = []
+    for index, item in enumerate(entries):
+        item_location = f"{location}.entries[{index}]"
+        if not _closed_keys(item, CAUSAL_EVIDENCE_ENTRY_KEYS, report, item_location):
+            continue
+        observed_ids.append(item.get("evidence_id"))
+        if item.get("status") not in CAUSAL_EVIDENCE_STATUSES:
+            report.error("PUBLIC_CAUSAL_EVIDENCE", f"{item_location}.status", "invalid evidence status")
+        for key in ("claim", "reason"):
+            if not _non_empty_string(item.get(key)):
+                report.error("PUBLIC_CAUSAL_EVIDENCE", f"{item_location}.{key}", "must be non-empty")
+        for key in ("public_refs", "controlled_source_refs"):
+            refs = item.get(key)
+            if not isinstance(refs, list) or any(not _non_empty_string(ref) for ref in refs):
+                report.error("PUBLIC_CAUSAL_EVIDENCE", f"{item_location}.{key}", "must be an array of refs")
+        if item.get("status") in {"unavailable", "unsupported-inference"} and item.get("public_refs"):
+            report.error(
+                "PUBLIC_CAUSAL_EVIDENCE",
+                item_location,
+                "unavailable or unsupported evidence must not carry a PASS-shaped public ref",
+            )
+    if observed_ids != CAUSAL_EVIDENCE_IDS:
+        report.error("PUBLIC_CAUSAL_EVIDENCE", f"{location}.entries", "evidence ids must be ordered E1 through E7")
+
+
+def _validate_observable_lineage(
+    value: Any,
+    *,
+    identity: Any,
+    source_custody: Any,
+    official: Any,
+    location: str,
+    report: Report,
+) -> None:
+    if not _closed_keys(value, OBSERVABLE_LINEAGE_KEYS, report, location):
+        return
+    if value.get("schema_version") != OBSERVABLE_LINEAGE_SCHEMA:
+        report.error("PUBLIC_OBSERVABLE_LINEAGE", location, "invalid observable-lineage schema")
+    expected_attempt = identity.get("attempt_id") if isinstance(identity, dict) else None
+    expected_arm = identity.get("arm") if isinstance(identity, dict) else None
+    if value.get("attempt_id") != expected_attempt or value.get("arm") != expected_arm:
+        report.error("PUBLIC_OBSERVABLE_LINEAGE", location, "attempt_id and arm must join the manifest identity")
+
+    service = value.get("service_revision")
+    if _closed_keys(service, LINEAGE_SERVICE_KEYS, report, f"{location}.service_revision"):
+        if expected_arm == "treatment":
+            if service.get("status") != "frozen-and-consumed":
+                report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.service_revision.status", "invalid Treatment status")
+            if not isinstance(source_custody, dict) or (
+                service.get("commit") != source_custody.get("builder_service_commit")
+                or service.get("tree") != source_custody.get("builder_service_tree")
+            ):
+                report.error("PUBLIC_OBSERVABLE_LINEAGE_JOIN", f"{location}.service_revision", "service identity is not joined to source custody")
+        elif service != {"commit": None, "status": "not-available-to-control", "tree": None}:
+            report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.service_revision", "Control must record no service access")
+
+    worker_log = value.get("worker_log")
+    if _closed_keys(worker_log, LINEAGE_WORKER_LOG_KEYS, report, f"{location}.worker_log"):
+        if not isinstance(worker_log.get("sha256"), str) or not SHA256_RE.fullmatch(worker_log["sha256"]):
+            report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.worker_log.sha256", "invalid digest")
+        for key in ("size_bytes", "command_count", "agent_message_count", "hidden_reasoning_event_count"):
+            if not _non_negative_integer(worker_log.get(key)):
+                report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.worker_log.{key}", "must be non-negative integer")
+        if worker_log.get("reasoning_effort") not in {"low", "medium", "high", "xhigh"}:
+            report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.worker_log.reasoning_effort", "must be a declared runtime effort")
+        if worker_log.get("hidden_reasoning_event_count") != 0:
+            report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.worker_log", "public source must report zero hidden-reasoning events")
+        if not _non_empty_string(worker_log.get("source_ref")):
+            report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.worker_log.source_ref", "must be non-empty")
+
+    events = value.get("events")
+    known_event_ids: set[str] = set()
+    if not isinstance(events, list) or not events:
+        report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.events", "must contain observable event receipts")
+    else:
+        for index, event in enumerate(events):
+            event_location = f"{location}.events[{index}]"
+            if not _closed_keys(event, LINEAGE_EVENT_KEYS, report, event_location):
+                continue
+            event_id = event.get("event_id")
+            if not _non_empty_string(event_id) or event_id in known_event_ids:
+                report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{event_location}.event_id", "must be a unique event id")
+            else:
+                known_event_ids.add(event_id)
+            if event.get("status") not in {"failed", "observed", "succeeded"}:
+                report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{event_location}.status", "invalid event status")
+            if not isinstance(event.get("exit_code"), int) or isinstance(event.get("exit_code"), bool):
+                report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{event_location}.exit_code", "must be an integer")
+            if not isinstance(event.get("output_sha256"), str) or not SHA256_RE.fullmatch(event["output_sha256"]):
+                report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{event_location}.output_sha256", "invalid digest")
+            for key in ("kind", "public_summary", "source_ref"):
+                if not _non_empty_string(event.get(key)):
+                    report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{event_location}.{key}", "must be non-empty")
+
+    writebacks = value.get("writebacks")
+    systems: list[Any] = []
+    if not isinstance(writebacks, list) or len(writebacks) != 3:
+        report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.writebacks", "must bind ERP, MES, and WMS")
+    else:
+        for index, receipt in enumerate(writebacks):
+            receipt_location = f"{location}.writebacks[{index}]"
+            if not _closed_keys(receipt, LINEAGE_WRITEBACK_KEYS, report, receipt_location):
+                continue
+            systems.append(receipt.get("system"))
+            if not isinstance(receipt.get("sha256"), str) or not SHA256_RE.fullmatch(receipt["sha256"]):
+                report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{receipt_location}.sha256", "invalid digest")
+            if not _non_negative_integer(receipt.get("size_bytes")):
+                report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{receipt_location}.size_bytes", "must be non-negative integer")
+            if not _non_empty_string(receipt.get("source_ref")):
+                report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{receipt_location}.source_ref", "must be non-empty")
+        if systems != ["erp", "mes", "wms"]:
+            report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.writebacks", "systems must be ordered ERP, MES, WMS")
+
+    prescore = value.get("prescore_world")
+    if _closed_keys(prescore, LINEAGE_PRESCORE_KEYS, report, f"{location}.prescore_world"):
+        for key in ("capture_sha256", "image_sha256"):
+            if not isinstance(prescore.get(key), str) or not SHA256_RE.fullmatch(prescore[key]):
+                report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.prescore_world.{key}", "invalid digest")
+        if not _non_empty_string(prescore.get("source_ref")):
+            report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.prescore_world.source_ref", "must be non-empty")
+
+    evaluator = value.get("official_evaluator")
+    if _closed_keys(evaluator, LINEAGE_EVALUATOR_KEYS, report, f"{location}.official_evaluator"):
+        if not isinstance(evaluator.get("receipt_sha256"), str) or not SHA256_RE.fullmatch(evaluator["receipt_sha256"]):
+            report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.official_evaluator.receipt_sha256", "invalid digest")
+        if not _non_empty_string(evaluator.get("source_ref")):
+            report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.official_evaluator.source_ref", "must be non-empty")
+        if not isinstance(official, dict) or evaluator.get("checks_passed") != official.get("checks_passed") or evaluator.get(
+            "checks_total"
+        ) != official.get("checks_total"):
+            report.error("PUBLIC_OBSERVABLE_LINEAGE_JOIN", f"{location}.official_evaluator", "evaluator counts do not join official_evaluation")
+
+    redaction = value.get("redaction")
+    if _closed_keys(redaction, LINEAGE_REDACTION_KEYS, report, f"{location}.redaction"):
+        expected_exclusions = [
+            "subscription-authentication",
+            "credential-values",
+            "host-private-paths",
+            "hidden-reasoning",
+            "hidden-tests",
+        ]
+        if redaction.get("excluded") != expected_exclusions or redaction.get("full_log_public") is not False:
+            report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.redaction", "must preserve the closed safe-public exclusion policy")
+        if not _non_empty_string(redaction.get("policy")):
+            report.error("PUBLIC_OBSERVABLE_LINEAGE", f"{location}.redaction.policy", "must be non-empty")
+
+
+def _validate_execution_amendment(
+    value: Any,
+    *,
+    identity: Any,
+    process: Any,
+    lineage: Any,
+    registry_entry: Any,
+    location: str,
+    report: Report,
+) -> None:
+    if not _closed_keys(value, EXECUTION_AMENDMENT_KEYS, report, location):
+        return
+    if value.get("schema_version") != EXECUTION_AMENDMENT_SCHEMA:
+        report.error("PUBLIC_EXECUTION_AMENDMENT", location, "invalid execution-amendment schema")
+    if not isinstance(identity, dict) or value.get("attempt_id") != identity.get(
+        "attempt_id"
+    ) or value.get("arm") != identity.get("arm"):
+        report.error("PUBLIC_EXECUTION_AMENDMENT_JOIN", location, "attempt and arm must join identity")
+    if value.get("frozen_study_overwritten") is not False:
+        report.error("PUBLIC_EXECUTION_AMENDMENT", location, "must not rewrite the frozen study")
+    if not _non_empty_string(value.get("amendment_reason")):
+        report.error("PUBLIC_EXECUTION_AMENDMENT", f"{location}.amendment_reason", "must be non-empty")
+    source_refs = value.get("source_refs")
+    if not isinstance(source_refs, list) or not source_refs or any(
+        not _non_empty_string(item) for item in source_refs
+    ):
+        report.error("PUBLIC_EXECUTION_AMENDMENT", f"{location}.source_refs", "must be non-empty refs")
+
+    worker_log = lineage.get("worker_log") if isinstance(lineage, dict) else None
+    contamination = (
+        registry_entry.get("contamination_facts")
+        if isinstance(registry_entry, dict)
+        else None
+    )
+    tools_runtime = value.get("tools_runtime")
+    if _closed_keys(
+        tools_runtime,
+        EXECUTION_TOOLS_RUNTIME_KEYS,
+        report,
+        f"{location}.tools_runtime",
+    ):
+        expected = {
+            "model": contamination.get("evaluated_model") if isinstance(contamination, dict) else None,
+            "network_policy": contamination.get("network_policy") if isinstance(contamination, dict) else None,
+            "reasoning_effort": worker_log.get("reasoning_effort") if isinstance(worker_log, dict) else None,
+            "runtime_identity": contamination.get("runtime_identity") if isinstance(contamination, dict) else None,
+            "command_count": worker_log.get("command_count") if isinstance(worker_log, dict) else None,
+            "agent_message_count": worker_log.get("agent_message_count") if isinstance(worker_log, dict) else None,
+        }
+        if any(tools_runtime.get(key) != expected_value for key, expected_value in expected.items()):
+            report.error("PUBLIC_EXECUTION_AMENDMENT_JOIN", f"{location}.tools_runtime", "runtime facts do not join registry and lineage")
+        if not _non_empty_string(tools_runtime.get("codex_version")):
+            report.error("PUBLIC_EXECUTION_AMENDMENT", f"{location}.tools_runtime.codex_version", "must be non-empty")
+
+    timing = value.get("timing")
+    if _closed_keys(timing, EXECUTION_TIMING_KEYS, report, f"{location}.timing"):
+        timing_status = timing.get("status")
+        if timing_status == "observed":
+            if not _non_empty_string(timing.get("started_at")) or not _non_empty_string(timing.get("finished_at")) or timing.get("reason") is not None:
+                report.error("PUBLIC_EXECUTION_AMENDMENT", f"{location}.timing", "observed timing requires start/finish and null reason")
+        elif timing_status == "unavailable":
+            if timing.get("started_at") is not None or timing.get("finished_at") is not None or not _non_empty_string(timing.get("reason")):
+                report.error("PUBLIC_EXECUTION_AMENDMENT", f"{location}.timing", "unavailable timing requires null values and a reason")
+        else:
+            report.error("PUBLIC_EXECUTION_AMENDMENT", f"{location}.timing.status", "invalid timing status")
+
+    usage = value.get("usage")
+    if _closed_keys(usage, EXECUTION_USAGE_KEYS, report, f"{location}.usage"):
+        usage_status = usage.get("status")
+        metrics = ("input_tokens", "cached_input_tokens", "output_tokens")
+        if usage_status == "observed":
+            if any(not _non_negative_integer(usage.get(key)) for key in metrics) or usage.get("reason") is not None:
+                report.error("PUBLIC_EXECUTION_AMENDMENT", f"{location}.usage", "observed usage requires integer metrics and null reason")
+            elif usage["cached_input_tokens"] > usage["input_tokens"]:
+                report.error("PUBLIC_EXECUTION_AMENDMENT", f"{location}.usage", "cached input must not exceed input tokens")
+        elif usage_status == "unavailable":
+            if any(usage.get(key) is not None for key in metrics) or not _non_empty_string(usage.get("reason")):
+                report.error("PUBLIC_EXECUTION_AMENDMENT", f"{location}.usage", "unavailable usage requires null metrics and a reason")
+        else:
+            report.error("PUBLIC_EXECUTION_AMENDMENT", f"{location}.usage.status", "invalid usage status")
+
+    seed_retry = value.get("seed_retry")
+    if _closed_keys(
+        seed_retry,
+        EXECUTION_SEED_RETRY_KEYS,
+        report,
+        f"{location}.seed_retry",
+    ):
+        if (
+            seed_retry.get("seed_status") != "unavailable"
+            or seed_retry.get("seed") is not None
+            or seed_retry.get("retry_status") != "unavailable"
+            or seed_retry.get("retry_count") is not None
+            or not _non_empty_string(seed_retry.get("reason"))
+        ):
+            report.error("PUBLIC_EXECUTION_AMENDMENT", f"{location}.seed_retry", "missing seed/retry must remain explicitly unavailable")
+        expected_repairs = process.get("repair_attempts_executed") if isinstance(process, dict) else None
+        if seed_retry.get("repair_attempts_executed") != expected_repairs:
+            report.error("PUBLIC_EXECUTION_AMENDMENT_JOIN", f"{location}.seed_retry", "repair count does not join process")
+
+    qa_repair = value.get("qa_repair_order")
+    if _closed_keys(
+        qa_repair,
+        EXECUTION_QA_REPAIR_KEYS,
+        report,
+        f"{location}.qa_repair_order",
+    ):
+        if not isinstance(process, dict) or any(
+            qa_repair.get(key) != process.get(key) for key in EXECUTION_QA_REPAIR_KEYS
+        ):
+            report.error("PUBLIC_EXECUTION_AMENDMENT_JOIN", f"{location}.qa_repair_order", "QA/repair order does not join process")
+
+    if not isinstance(lineage, dict) or value.get("service_revision") != lineage.get(
+        "service_revision"
+    ) or value.get("prescore_world") != lineage.get("prescore_world"):
+        report.error("PUBLIC_EXECUTION_AMENDMENT_JOIN", location, "service and pre-score identities do not join observable lineage")
+
+
+def _validate_attempt_disposition(
+    value: Any,
+    *,
+    identity: Any,
+    location: str,
+    report: Report,
+) -> None:
+    if not _closed_keys(value, ATTEMPT_DISPOSITION_KEYS, report, location):
+        return
+    if value.get("schema_version") != ATTEMPT_DISPOSITION_SCHEMA:
+        report.error("PUBLIC_ATTEMPT_DISPOSITION", location, "invalid attempt-disposition schema")
+    current = value.get("current_attempt")
+    if _closed_keys(current, ATTEMPT_CURRENT_KEYS, report, f"{location}.current_attempt"):
+        if (
+            not isinstance(identity, dict)
+            or current.get("attempt_id") != identity.get("attempt_id")
+            or current.get("run_id") != identity.get("run_id")
+            or current.get("counted") is not True
+            or current.get("status") != "counted-completed"
+            or not _non_empty_string(current.get("reason"))
+        ):
+            report.error("PUBLIC_ATTEMPT_DISPOSITION_JOIN", f"{location}.current_attempt", "current attempt does not join the counted identity")
+    invalid = value.get("invalid_predecessors")
+    if not isinstance(invalid, list):
+        report.error("PUBLIC_ATTEMPT_DISPOSITION", f"{location}.invalid_predecessors", "must be an array")
+        return
+    labels: set[str] = set()
+    for index, item in enumerate(invalid):
+        item_location = f"{location}.invalid_predecessors[{index}]"
+        if not _closed_keys(item, ATTEMPT_INVALID_KEYS, report, item_location):
+            continue
+        label = item.get("attempt_label")
+        if not _non_empty_string(label) or label in labels:
+            report.error("PUBLIC_ATTEMPT_DISPOSITION", f"{item_location}.attempt_label", "must be a unique non-empty label")
+        else:
+            labels.add(label)
+        if item.get("counted") is not False or item.get("status") != "invalid-not-a-study-result" or item.get("public_record_status") != "waived-no-posthoc-backfill":
+            report.error("PUBLIC_ATTEMPT_DISPOSITION", item_location, "invalid predecessor must remain noncounting and waived without backfill")
+        for key in ("reason", "source_ref", "waiver_reason"):
+            if not _non_empty_string(item.get(key)):
+                report.error("PUBLIC_ATTEMPT_DISPOSITION", f"{item_location}.{key}", "must be non-empty")
+
+
 def _validate_public_result_manifest(
     entry: dict[str, Any],
     manifest_bytes: bytes,
@@ -686,6 +1196,20 @@ def _validate_public_result_manifest(
             "manifest top level must be an object",
         )
         return
+    schema_version = manifest.get("schema_version")
+    manifest_keys = {
+        PUBLIC_RESULT_SCHEMA: PUBLIC_RESULT_V1_KEYS,
+        PUBLIC_RESULT_EVIDENCE_SCHEMA: PUBLIC_RESULT_V2_KEYS,
+    }.get(schema_version)
+    if manifest_keys is None:
+        report.error(
+            "PUBLIC_RESULT_MANIFEST",
+            manifest_location,
+            "schema_version must name a supported public-result schema",
+        )
+        return
+    if not _closed_keys(manifest, manifest_keys, report, manifest_location):
+        return
     canonical = (
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     ).encode("utf-8")
@@ -694,12 +1218,6 @@ def _validate_public_result_manifest(
             "PUBLIC_RESULT_MANIFEST",
             manifest_location,
             "manifest must use canonical sorted, indented JSON",
-        )
-    if manifest.get("schema_version") != PUBLIC_RESULT_SCHEMA:
-        report.error(
-            "PUBLIC_RESULT_MANIFEST",
-            manifest_location,
-            f"schema_version must equal {PUBLIC_RESULT_SCHEMA}",
         )
     for key in ("release_id", "identity", "sealed_artifacts"):
         if manifest.get(key) != entry.get(key):
@@ -716,7 +1234,12 @@ def _validate_public_result_manifest(
         "control": ("Control", False),
         "treatment": ("Treatment", True),
     }.get(arm)
-    if not isinstance(condition, dict) or expected_condition is None:
+    if not _closed_keys(
+        condition,
+        PUBLIC_RESULT_CONDITION_KEYS,
+        report,
+        f"{manifest_location}.condition",
+    ) or expected_condition is None:
         report.error(
             "PUBLIC_RESULT_CONDITION",
             manifest_location,
@@ -733,9 +1256,22 @@ def _validate_public_result_manifest(
                 manifest_location,
                 "condition label and Corridor access do not match the typed arm",
             )
+        observed = condition.get("corridor_observably_used")
+        if schema_version == PUBLIC_RESULT_EVIDENCE_SCHEMA and observed is not expected_access:
+            report.error(
+                "PUBLIC_RESULT_CONDITION",
+                manifest_location,
+                "v2 must record contemporaneously evidenced Corridor use for Treatment and false for Control",
+            )
 
     interpretation = manifest.get("interpretation")
-    if not isinstance(interpretation, dict) or any(
+    interpretation_closed = _closed_keys(
+        interpretation,
+        PUBLIC_RESULT_INTERPRETATION_KEYS,
+        report,
+        f"{manifest_location}.interpretation",
+    )
+    if not interpretation_closed or any(
         interpretation.get(key) is not False
         for key in ("causal_claim", "leaderboard_claim", "multi_task_evidence")
     ) or interpretation.get("distinct_benchmark_tasks") != 1:
@@ -747,7 +1283,13 @@ def _validate_public_result_manifest(
 
     official = manifest.get("official_evaluation")
     outcomes = entry.get("outcomes")
-    if not isinstance(official, dict) or not isinstance(outcomes, dict):
+    official_closed = _closed_keys(
+        official,
+        PUBLIC_RESULT_OFFICIAL_KEYS,
+        report,
+        f"{manifest_location}.official_evaluation",
+    )
+    if not official_closed or not isinstance(outcomes, dict):
         report.error(
             "PUBLIC_RESULT_OUTCOME",
             manifest_location,
@@ -772,9 +1314,97 @@ def _validate_public_result_manifest(
                 "official outcome does not match the single-arm registry count",
             )
 
+    process = manifest.get("process")
+    _closed_keys(
+        process,
+        PUBLIC_RESULT_PROCESS_KEYS,
+        report,
+        f"{manifest_location}.process",
+    )
+    source_custody = manifest.get("source_custody")
+    source_closed = _closed_keys(
+        source_custody,
+        PUBLIC_RESULT_SOURCE_CUSTODY_KEYS,
+        report,
+        f"{manifest_location}.source_custody",
+    )
+    if schema_version == PUBLIC_RESULT_EVIDENCE_SCHEMA and source_closed:
+        for key in (
+            "controlled_result_commit",
+            "controlled_result_tree",
+            "method_source_commit",
+            "official_task_source_commit",
+        ):
+            if not isinstance(source_custody.get(key), str) or not COMMIT_RE.fullmatch(source_custody[key]):
+                report.error(
+                    "PUBLIC_RESULT_SOURCE_CUSTODY",
+                    f"{manifest_location}.source_custody.{key}",
+                    "must be a full lowercase 40-hex Git object id",
+                )
+        for key in ("builder_service_commit", "builder_service_tree"):
+            item = source_custody.get(key)
+            if arm == "treatment":
+                if not isinstance(item, str) or not COMMIT_RE.fullmatch(item):
+                    report.error(
+                        "PUBLIC_RESULT_SOURCE_CUSTODY",
+                        f"{manifest_location}.source_custody.{key}",
+                        "Treatment must bind a full lowercase 40-hex Git object id",
+                    )
+            elif item is not None:
+                report.error(
+                    "PUBLIC_RESULT_SOURCE_CUSTODY",
+                    f"{manifest_location}.source_custody.{key}",
+                    "Control must not claim a builder service identity",
+                )
+        if not isinstance(source_custody.get("controlled_result_path"), str) or not source_custody[
+            "controlled_result_path"
+        ].startswith("exogenous/results/"):
+            report.error(
+                "PUBLIC_RESULT_SOURCE_CUSTODY",
+                f"{manifest_location}.source_custody.controlled_result_path",
+                "must name normalized controlled result custody",
+            )
+
+    if schema_version == PUBLIC_RESULT_EVIDENCE_SCHEMA:
+        _validate_causal_evidence(
+            manifest.get("causal_evidence"),
+            identity=identity,
+            location=f"{manifest_location}.causal_evidence",
+            report=report,
+        )
+        _validate_observable_lineage(
+            manifest.get("observable_lineage"),
+            identity=identity,
+            source_custody=source_custody,
+            official=official,
+            location=f"{manifest_location}.observable_lineage",
+            report=report,
+        )
+        _validate_execution_amendment(
+            manifest.get("execution_amendment"),
+            identity=identity,
+            process=process,
+            lineage=manifest.get("observable_lineage"),
+            registry_entry=entry,
+            location=f"{manifest_location}.execution_amendment",
+            report=report,
+        )
+        _validate_attempt_disposition(
+            manifest.get("attempt_disposition"),
+            identity=identity,
+            location=f"{manifest_location}.attempt_disposition",
+            report=report,
+        )
+
     public_summary = manifest.get("public_summary")
     expected_summary_path = str(PurePosixPath(manifest_path).with_name("SUMMARY.md"))
-    if not isinstance(public_summary, dict) or public_summary.get("path") != expected_summary_path:
+    summary_closed = _closed_keys(
+        public_summary,
+        PUBLIC_RESULT_SUMMARY_KEYS,
+        report,
+        f"{manifest_location}.public_summary",
+    )
+    if not summary_closed or public_summary.get("path") != expected_summary_path:
         report.error(
             "PUBLIC_RESULT_SUMMARY",
             manifest_location,
@@ -806,6 +1436,7 @@ def validate_registry(
     *,
     repo: Path | None = None,
     base_ref: str | None = None,
+    history_base_ref: str | None = None,
     genesis: bool = False,
     source_bytes: bytes | None = None,
     source_label: str | None = None,
@@ -866,24 +1497,36 @@ def validate_registry(
     resolved_base_commit: str | None = None
     if genesis and not base_ref:
         report.error("REGISTRY_GENESIS", "genesis", "--genesis requires --base-ref naming the candidate public root")
+    if genesis and history_base_ref:
+        report.error("REGISTRY_GENESIS", "history_base_ref", "genesis cannot use a separate history base")
     if base_ref:
         if repo is None:
             report.error("REGISTRY_BASE", "base_ref", "repo is required with base_ref")
+        else:
+            resolved_base = _git(repo.resolve(), ["rev-parse", "--verify", f"{base_ref}^{{commit}}"])
+            if resolved_base.returncode != 0:
+                report.error("REGISTRY_BASE", base_ref, "cannot resolve base ref")
+            else:
+                resolved_base_commit = resolved_base.stdout.decode().strip()
+    history_ref = history_base_ref or base_ref
+    if history_ref:
+        if repo is None:
+            report.error("REGISTRY_BASE", "history_base_ref", "repo is required with a history base")
         else:
             try:
                 relative = path.relative_to(repo.resolve()).as_posix()
             except ValueError:
                 report.error("REGISTRY_BASE", str(path), "registry must be inside repo")
             else:
-                resolved_base = _git(repo.resolve(), ["rev-parse", "--verify", f"{base_ref}^{{commit}}"])
-                if resolved_base.returncode != 0:
-                    report.error("REGISTRY_BASE", base_ref, "cannot resolve base ref")
+                resolved_history = _git(repo.resolve(), ["rev-parse", "--verify", f"{history_ref}^{{commit}}"])
+                if resolved_history.returncode != 0:
+                    report.error("REGISTRY_BASE", history_ref, "cannot resolve history base ref")
                     base = None
                 else:
-                    resolved_base_commit = resolved_base.stdout.decode().strip()
-                    shown = _git(repo.resolve(), ["show", f"{base_ref}:{relative}"])
+                    resolved_history_commit = resolved_history.stdout.decode().strip()
+                    shown = _git(repo.resolve(), ["show", f"{history_ref}:{relative}"])
                     if shown.returncode != 0:
-                        report.error("REGISTRY_BASE", base_ref, "base ref does not contain the registry")
+                        report.error("REGISTRY_BASE", history_ref, "history base ref does not contain the registry")
                         base = None
                     else:
                         try:
@@ -893,7 +1536,7 @@ def validate_registry(
                         except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
                             report.error(
                                 "REGISTRY_BASE",
-                                base_ref,
+                                history_ref,
                                 "base registry is not valid strict JSON",
                             )
                             base = None
@@ -901,7 +1544,7 @@ def validate_registry(
                             if not isinstance(parsed_base, dict):
                                 report.error(
                                     "REGISTRY_BASE",
-                                    base_ref,
+                                    history_ref,
                                     "base registry top level must be an object",
                                 )
                                 base = None
@@ -909,10 +1552,10 @@ def validate_registry(
                                 base = parsed_base
                 if base is not None:
                     if genesis:
-                        parents = _git(repo.resolve(), ["rev-list", "--parents", "-n", "1", resolved_base_commit])
+                        parents = _git(repo.resolve(), ["rev-list", "--parents", "-n", "1", resolved_history_commit])
                         parent_fields = parents.stdout.decode().strip().split() if parents.returncode == 0 else []
                         if len(parent_fields) != 1 or releases:
-                            report.error("REGISTRY_GENESIS", base_ref, "genesis must be an empty registry in a no-parent public root")
+                            report.error("REGISTRY_GENESIS", history_ref, "genesis must be an empty registry in a no-parent public root")
                     base_releases = base.get("releases")
                     if not isinstance(base_releases, list):
                         report.error("REGISTRY_APPEND_ONLY", "base_ref", "base registry is malformed")
@@ -1419,7 +2062,13 @@ def command_validate_registry(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
     registry_argument = Path(args.registry)
     registry_path = registry_argument if registry_argument.is_absolute() else repo / registry_argument
-    report = validate_registry(registry_path, repo=repo, base_ref=args.base_ref, genesis=args.genesis)
+    report = validate_registry(
+        registry_path,
+        repo=repo,
+        base_ref=args.base_ref,
+        history_base_ref=args.history_base_ref,
+        genesis=args.genesis,
+    )
     _emit(report, args.json)
     return 0 if report.ok else 1
 
@@ -1454,6 +2103,7 @@ def command_check(args: argparse.Namespace) -> int:
         registry_path,
         repo=repo,
         base_ref=args.base_ref,
+        history_base_ref=args.history_base_ref,
         genesis=args.genesis,
         source_bytes=registry_bytes,
         source_label=registry_source,
@@ -1504,6 +2154,7 @@ def make_parser() -> argparse.ArgumentParser:
     registry.add_argument("--repo", default=".")
     registry.add_argument("--registry", default="exogenous/registry/PUBLIC-RELEASES.json")
     registry.add_argument("--base-ref")
+    registry.add_argument("--history-base-ref")
     registry.add_argument("--genesis", action="store_true")
     registry.add_argument("--json", action="store_true")
     registry.set_defaults(func=command_validate_registry)
@@ -1513,6 +2164,7 @@ def make_parser() -> argparse.ArgumentParser:
     check.add_argument("--ref", required=True)
     check.add_argument("--allow-ref", action="append", required=True)
     check.add_argument("--base-ref")
+    check.add_argument("--history-base-ref")
     check.add_argument("--genesis", action="store_true")
     check.add_argument("--max-blob-bytes", type=int, default=DEFAULT_MAX_BLOB_BYTES)
     check.add_argument("--allow-dirty", action="store_true")

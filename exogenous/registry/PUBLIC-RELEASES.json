@@ -676,6 +676,1000 @@
       "supersedes_release_id": null,
       "tree_sha": "3d4469403cbbfe0eb9d9859a7e15b5fb0291aff0",
       "visibility": "public-summary"
+    },
+    {
+      "artifact_manifest_path": "public/results/cl030/treatment/MANIFEST.json",
+      "artifact_manifest_sha256": "sha256:cca5496f3d11fecf8b7219057e5c4ba38a45a18e8a977cb36f39ee1675474bfe",
+      "branch_kind": "results",
+      "branch_ref": "refs/heads/results/terminal-bench/3.0/tb30-cl027-production-planning/production-planning/cl027-tb3-production-planning/cl030-attempt-001/treatment/public-v2",
+      "claims": [
+        "descriptive"
+      ],
+      "commit_sha": "49e704f199022a58f43180798aabceae8954bfa5",
+      "contamination_facts": {
+        "counting_disposition": "counted",
+        "evaluated_model": "openai/gpt-5.6-sol",
+        "local_artifact_published_at": null,
+        "local_artifact_visibility": "controlled",
+        "method_attribution": "paper2-current-v2",
+        "model_knowledge_cutoff": "unknown",
+        "network_policy": "unknown",
+        "runtime_identity": "codex-0.147.0-alpha.6.5-terminal-bench-3.0",
+        "training_ingestion": "not-inferred",
+        "upstream_oracle_published_at": "2026-07-23T06:49:14Z",
+        "upstream_oracle_visibility": "public-before-run"
+      },
+      "contamination_status": "active-task-embargoed",
+      "identity": {
+        "arm": "treatment",
+        "attempt_id": "b9efb631-d15e-4cda-b9a2-81951dd7b84e",
+        "benchmark_dataset": "terminal-bench",
+        "benchmark_release": "3.0",
+        "build_id": "builder-service-build-001",
+        "candidate_id": "production-planning-corridor",
+        "candidate_revision": "a5c3d4663857cf64d8ac8690096ae7f0e5ce9ae3",
+        "construction_id": "cl030-builder-service",
+        "launch_id": "cl030-treatment-launch",
+        "method_version_id": "paper2-current-v2",
+        "protocol_id": "cl027-tb3-worker-qa",
+        "result_release": "public-v2",
+        "run_id": "cl030-attempt-001",
+        "study_id": "cl027-tb3-production-planning",
+        "task_id": "production-planning",
+        "taskset_id": "tb30-cl027-production-planning"
+      },
+      "outcomes": {
+        "blocked": 0,
+        "fail": 0,
+        "invalid": 0,
+        "pass": 1,
+        "timeout": 0,
+        "total": 1,
+        "unscored": 0
+      },
+      "publication_evidence": {
+        "maintainer_clearance_ref": null,
+        "retirement_evidence_ref": null
+      },
+      "release_id": "cl030-treatment-public-v2",
+      "released_at": "2026-08-16T12:38:25Z",
+      "sealed_artifacts": [
+        {
+          "artifact_id": "pair-result",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "original paired result record",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:de94ed44c921b5764143b180c785853569c0ee573753b5f4bc4a4804f62a53d0",
+          "size_bytes": 2618,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/RESULT.json"
+        },
+        {
+          "artifact_id": "database-audit",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "post-score database audit",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:77b54efedef36bc59b1a0daccb3cff030e6206e70ac9fd682d6cd0de0a095879",
+          "size_bytes": 2370,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/DB-AUDIT.json"
+        },
+        {
+          "artifact_id": "official-score-event",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "original official evaluator score event",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:899792157f8d56da981260d7dc93afd6cd3034724d8bfc9bf2f5eb56ad7a449a",
+          "size_bytes": 784,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/score/treatment-score-event.json"
+        },
+        {
+          "artifact_id": "worker-observable-log",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/x-ndjson",
+          "provenance": "observable Codex command and message event stream",
+          "release_trigger": "publish only a separately scanned redacted derivative",
+          "sha256": "sha256:7c0ba43d0b41e634f014e8a4bd45832e44ac95d17dd8e2ec7a9dd3a9157ac8ba",
+          "size_bytes": 275139,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/worker-logs/treatment-codex.jsonl"
+        },
+        {
+          "artifact_id": "erp-writeback",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "ERP writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:0a8861896bb4c55b6976b1224cbd5d391123dcf78e6a7345899a5b83c798593f",
+          "size_bytes": 3836,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/sql/treatment/erp_writeback.sql"
+        },
+        {
+          "artifact_id": "mes-writeback",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "MES writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:24362ceb7f8edaff51dd921fe65eedb8a5183ead3301501495631bcfa116e5e6",
+          "size_bytes": 2949,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/sql/treatment/mes_writeback.sql"
+        },
+        {
+          "artifact_id": "wms-writeback",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "WMS writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:0228631e56dec2c35bd9688d34c93a058edaa9273d84bbf87e50433f213e7942",
+          "size_bytes": 3803,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/sql/treatment/wms_writeback.sql"
+        },
+        {
+          "artifact_id": "prescore-capture",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "pre-score container and image identity capture",
+          "release_trigger": "publish only a separately scanned redacted derivative",
+          "sha256": "sha256:179f58190801e134a3437e2181b95d06954d071514083655ca83bd6cb258c463",
+          "size_bytes": 1786,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/container/treatment-prescore.json"
+        }
+      ],
+      "sequence": 7,
+      "supersedes_release_id": "cl030-treatment-public-v1",
+      "tree_sha": "0eaef2549aa7b42f3e69240ce8b60505dbb231bf",
+      "visibility": "public-summary"
+    },
+    {
+      "artifact_manifest_path": "public/results/cl030/control/MANIFEST.json",
+      "artifact_manifest_sha256": "sha256:a1bfc863cdb96667b382e8c0b3ffc8a4274d87b4ea2a54c8c0bed1c65c293ad3",
+      "branch_kind": "results",
+      "branch_ref": "refs/heads/results/terminal-bench/3.0/tb30-cl027-production-planning/production-planning/cl027-tb3-production-planning/cl030-attempt-001/control/public-v2",
+      "claims": [
+        "descriptive"
+      ],
+      "commit_sha": "a191c3787a89db159f3fcfacbce7d8293d304acd",
+      "contamination_facts": {
+        "counting_disposition": "counted",
+        "evaluated_model": "openai/gpt-5.6-sol",
+        "local_artifact_published_at": null,
+        "local_artifact_visibility": "controlled",
+        "method_attribution": "no-method",
+        "model_knowledge_cutoff": "unknown",
+        "network_policy": "unknown",
+        "runtime_identity": "codex-0.147.0-alpha.6.5-terminal-bench-3.0",
+        "training_ingestion": "not-inferred",
+        "upstream_oracle_published_at": "2026-07-23T06:49:14Z",
+        "upstream_oracle_visibility": "public-before-run"
+      },
+      "contamination_status": "active-task-embargoed",
+      "identity": {
+        "arm": "control",
+        "attempt_id": "033367af-149c-4a2d-8505-f0c7cd862aac",
+        "benchmark_dataset": "terminal-bench",
+        "benchmark_release": "3.0",
+        "build_id": null,
+        "candidate_id": null,
+        "candidate_revision": null,
+        "construction_id": null,
+        "launch_id": "cl030-control-launch",
+        "method_version_id": "paper2-current-v2",
+        "protocol_id": "cl027-tb3-worker-qa",
+        "result_release": "public-v2",
+        "run_id": "cl030-attempt-001",
+        "study_id": "cl027-tb3-production-planning",
+        "task_id": "production-planning",
+        "taskset_id": "tb30-cl027-production-planning"
+      },
+      "outcomes": {
+        "blocked": 0,
+        "fail": 1,
+        "invalid": 0,
+        "pass": 0,
+        "timeout": 0,
+        "total": 1,
+        "unscored": 0
+      },
+      "publication_evidence": {
+        "maintainer_clearance_ref": null,
+        "retirement_evidence_ref": null
+      },
+      "release_id": "cl030-control-public-v2",
+      "released_at": "2026-08-16T12:38:25Z",
+      "sealed_artifacts": [
+        {
+          "artifact_id": "pair-result",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "original paired result record",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:de94ed44c921b5764143b180c785853569c0ee573753b5f4bc4a4804f62a53d0",
+          "size_bytes": 2618,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/RESULT.json"
+        },
+        {
+          "artifact_id": "database-audit",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "post-score database audit",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:77b54efedef36bc59b1a0daccb3cff030e6206e70ac9fd682d6cd0de0a095879",
+          "size_bytes": 2370,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/DB-AUDIT.json"
+        },
+        {
+          "artifact_id": "official-score-event",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "original official evaluator score event",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:c42e2c0e4721961b1a74a7269070b69e8c46d5161b29430453b9c957bd9da39a",
+          "size_bytes": 780,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/score/control-score-event.json"
+        },
+        {
+          "artifact_id": "worker-observable-log",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/x-ndjson",
+          "provenance": "observable Codex command and message event stream",
+          "release_trigger": "publish only a separately scanned redacted derivative",
+          "sha256": "sha256:475197a3c1a7b0795ffcb17f9fd3760acd02c55ce2b9b20f6a689c549bde7ac5",
+          "size_bytes": 278088,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/worker-logs/control-codex.jsonl"
+        },
+        {
+          "artifact_id": "erp-writeback",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "ERP writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:975600d6461ed5f49b9a01e7d6be8d940e8defc47ff7545bf9bbc7174fdc0550",
+          "size_bytes": 3877,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/sql/control/erp_writeback.sql"
+        },
+        {
+          "artifact_id": "mes-writeback",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "MES writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:40abbfbe4e064405d3dde27dd9fb268b09d31cfa60a1ac7390d8e60589c0ed78",
+          "size_bytes": 2993,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/sql/control/mes_writeback.sql"
+        },
+        {
+          "artifact_id": "wms-writeback",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "WMS writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:4e559f98cbe155ab93ad07bc28a014f033b37026dd6bc3e7962047172e580a06",
+          "size_bytes": 4056,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/sql/control/wms_writeback.sql"
+        },
+        {
+          "artifact_id": "prescore-capture",
+          "custody": "controlled result commit a1238a2c2734bda4e5e12be507520a6e019d4443",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "pre-score container and image identity capture",
+          "release_trigger": "publish only a separately scanned redacted derivative",
+          "sha256": "sha256:0ce5a93d0461772a5035c78fa06d885e6458bb300ac25b332596b65e60080946",
+          "size_bytes": 1776,
+          "source_ref": "a1238a2c2734bda4e5e12be507520a6e019d4443:exogenous/results/cl030-tb3-production-planning-worker-qa-001/container/control-prescore.json"
+        }
+      ],
+      "sequence": 8,
+      "supersedes_release_id": "cl030-control-public-v1",
+      "tree_sha": "d0dc020e90dfb523eac80f3569688133408dbf50",
+      "visibility": "public-summary"
+    },
+    {
+      "artifact_manifest_path": "public/results/cl031/treatment/MANIFEST.json",
+      "artifact_manifest_sha256": "sha256:74e93946e7a6b02d7a368add9cccf527c25cffab85164d3df6587b8f87f5b1f3",
+      "branch_kind": "results",
+      "branch_ref": "refs/heads/results/terminal-bench/3.0/tb30-cl027-production-planning/production-planning/cl027-tb3-production-planning/cl031-attempt-002/treatment/public-v2",
+      "claims": [
+        "descriptive"
+      ],
+      "commit_sha": "64d1147c8b95dd8d9287535f75135aec7bc51b7f",
+      "contamination_facts": {
+        "counting_disposition": "counted",
+        "evaluated_model": "openai/gpt-5.6-sol",
+        "local_artifact_published_at": null,
+        "local_artifact_visibility": "controlled",
+        "method_attribution": "paper2-current-v2",
+        "model_knowledge_cutoff": "unknown",
+        "network_policy": "unknown",
+        "runtime_identity": "codex-0.147.0-alpha.6.5-terminal-bench-3.0",
+        "training_ingestion": "not-inferred",
+        "upstream_oracle_published_at": "2026-07-23T06:49:14Z",
+        "upstream_oracle_visibility": "public-before-run"
+      },
+      "contamination_status": "active-task-embargoed",
+      "identity": {
+        "arm": "treatment",
+        "attempt_id": "f3f949eb-d3c2-430e-bab9-2bfa1f47dbd4",
+        "benchmark_dataset": "terminal-bench",
+        "benchmark_release": "3.0",
+        "build_id": "builder-service-build-001",
+        "candidate_id": "production-planning-corridor",
+        "candidate_revision": "a5c3d4663857cf64d8ac8690096ae7f0e5ce9ae3",
+        "construction_id": "cl030-builder-service",
+        "launch_id": "cl031-treatment-launch",
+        "method_version_id": "paper2-current-v2",
+        "protocol_id": "cl027-tb3-worker-qa",
+        "result_release": "public-v2",
+        "run_id": "cl031-attempt-002",
+        "study_id": "cl027-tb3-production-planning",
+        "task_id": "production-planning",
+        "taskset_id": "tb30-cl027-production-planning"
+      },
+      "outcomes": {
+        "blocked": 0,
+        "fail": 0,
+        "invalid": 0,
+        "pass": 1,
+        "timeout": 0,
+        "total": 1,
+        "unscored": 0
+      },
+      "publication_evidence": {
+        "maintainer_clearance_ref": null,
+        "retirement_evidence_ref": null
+      },
+      "release_id": "cl031-treatment-public-v2",
+      "released_at": "2026-08-16T12:38:25Z",
+      "sealed_artifacts": [
+        {
+          "artifact_id": "pair-result",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "matched-pair study result",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:996e01eb667c3fe7d0ff2d4ea4cb625c79130d052c7dea9d2843547ca5b2628f",
+          "size_bytes": 3952,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/STUDY-RESULT.json"
+        },
+        {
+          "artifact_id": "controlled-content-manifest",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "content index for sealed result artifacts",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:ce2e7742a30c258b3efaec3154c9c2eed3a223f93dad6fc4abda3b2e3e77ba95",
+          "size_bytes": 9614,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/MANIFEST.json"
+        },
+        {
+          "artifact_id": "database-audit",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "post-score database audit",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:02de3fa0671930134e7e7e6f7e6248a38608b65be43214fcda5e95d16eb8163b",
+          "size_bytes": 9226,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/DB-AUDIT.json"
+        },
+        {
+          "artifact_id": "official-result-record",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "original benchmark result record used by replay",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:3a2b3d4805ad1f9bf17a461af6460799f1251a5fe5a06685d3e98a82a3ada75f",
+          "size_bytes": 13196,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/treatment/evidence/ORIGINAL-HARBOR-RESULT.json"
+        },
+        {
+          "artifact_id": "worker-observable-log",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/x-ndjson",
+          "provenance": "observable Codex command and message event stream",
+          "release_trigger": "publish only a separately scanned redacted derivative",
+          "sha256": "sha256:a7828fe32c17910baa2f35d3b4144eecc72eb78a659479fe20c52f2ce3e38799",
+          "size_bytes": 276460,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/treatment/logs/worker-codex.txt"
+        },
+        {
+          "artifact_id": "erp-writeback",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "ERP writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:0a8861896bb4c55b6976b1224cbd5d391123dcf78e6a7345899a5b83c798593f",
+          "size_bytes": 3836,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/treatment/output/erp_writeback.sql"
+        },
+        {
+          "artifact_id": "mes-writeback",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "MES writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:24362ceb7f8edaff51dd921fe65eedb8a5183ead3301501495631bcfa116e5e6",
+          "size_bytes": 2949,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/treatment/output/mes_writeback.sql"
+        },
+        {
+          "artifact_id": "wms-writeback",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "WMS writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:0228631e56dec2c35bd9688d34c93a058edaa9273d84bbf87e50433f213e7942",
+          "size_bytes": 3803,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/treatment/output/wms_writeback.sql"
+        },
+        {
+          "artifact_id": "prescore-capture",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "pre-score container and image identity capture",
+          "release_trigger": "publish only a separately scanned redacted derivative",
+          "sha256": "sha256:c9a6af41e5fa35c81ecc3e8e5a393ab2aefa8884d66705717926692389be8977",
+          "size_bytes": 1717,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/treatment/evidence/PRESCORE-CAPTURE.json"
+        }
+      ],
+      "sequence": 9,
+      "supersedes_release_id": "cl031-treatment-public-v1",
+      "tree_sha": "4c86a6a76027d4b5c73bd12d4e9cc9bc25181a69",
+      "visibility": "public-summary"
+    },
+    {
+      "artifact_manifest_path": "public/results/cl031/control/MANIFEST.json",
+      "artifact_manifest_sha256": "sha256:25095f1bd238212a8bae8674f8ee546d48e54e5687b6f67e398f20f0b40a0a52",
+      "branch_kind": "results",
+      "branch_ref": "refs/heads/results/terminal-bench/3.0/tb30-cl027-production-planning/production-planning/cl027-tb3-production-planning/cl031-attempt-002/control/public-v2",
+      "claims": [
+        "descriptive"
+      ],
+      "commit_sha": "be42757e1e47d93daa032cb2754d7a145210f6a3",
+      "contamination_facts": {
+        "counting_disposition": "counted",
+        "evaluated_model": "openai/gpt-5.6-sol",
+        "local_artifact_published_at": null,
+        "local_artifact_visibility": "controlled",
+        "method_attribution": "no-method",
+        "model_knowledge_cutoff": "unknown",
+        "network_policy": "unknown",
+        "runtime_identity": "codex-0.147.0-alpha.6.5-terminal-bench-3.0",
+        "training_ingestion": "not-inferred",
+        "upstream_oracle_published_at": "2026-07-23T06:49:14Z",
+        "upstream_oracle_visibility": "public-before-run"
+      },
+      "contamination_status": "active-task-embargoed",
+      "identity": {
+        "arm": "control",
+        "attempt_id": "7f56325a-95c7-4aea-9834-0e488ba85af2",
+        "benchmark_dataset": "terminal-bench",
+        "benchmark_release": "3.0",
+        "build_id": null,
+        "candidate_id": null,
+        "candidate_revision": null,
+        "construction_id": null,
+        "launch_id": "cl031-control-launch",
+        "method_version_id": "paper2-current-v2",
+        "protocol_id": "cl027-tb3-worker-qa",
+        "result_release": "public-v2",
+        "run_id": "cl031-attempt-002",
+        "study_id": "cl027-tb3-production-planning",
+        "task_id": "production-planning",
+        "taskset_id": "tb30-cl027-production-planning"
+      },
+      "outcomes": {
+        "blocked": 0,
+        "fail": 1,
+        "invalid": 0,
+        "pass": 0,
+        "timeout": 0,
+        "total": 1,
+        "unscored": 0
+      },
+      "publication_evidence": {
+        "maintainer_clearance_ref": null,
+        "retirement_evidence_ref": null
+      },
+      "release_id": "cl031-control-public-v2",
+      "released_at": "2026-08-16T12:38:25Z",
+      "sealed_artifacts": [
+        {
+          "artifact_id": "pair-result",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "matched-pair study result",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:996e01eb667c3fe7d0ff2d4ea4cb625c79130d052c7dea9d2843547ca5b2628f",
+          "size_bytes": 3952,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/STUDY-RESULT.json"
+        },
+        {
+          "artifact_id": "controlled-content-manifest",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "content index for sealed result artifacts",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:ce2e7742a30c258b3efaec3154c9c2eed3a223f93dad6fc4abda3b2e3e77ba95",
+          "size_bytes": 9614,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/MANIFEST.json"
+        },
+        {
+          "artifact_id": "database-audit",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "post-score database audit",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:02de3fa0671930134e7e7e6f7e6248a38608b65be43214fcda5e95d16eb8163b",
+          "size_bytes": 9226,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/DB-AUDIT.json"
+        },
+        {
+          "artifact_id": "official-result-record",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "original benchmark result record used by replay",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:1daeaf5f2936bf03ca9f7bbe2450ad49a4d204e08b55204aad7b4bad63de706f",
+          "size_bytes": 13143,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/control/evidence/ORIGINAL-HARBOR-RESULT.json"
+        },
+        {
+          "artifact_id": "worker-observable-log",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/x-ndjson",
+          "provenance": "observable Codex command and message event stream",
+          "release_trigger": "publish only a separately scanned redacted derivative",
+          "sha256": "sha256:ba1cbb5a60a5f2bf2be4a3a982dd52c3f36fe403c5ad11bc1bb7c7b3109e65bf",
+          "size_bytes": 220309,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/control/logs/worker-codex.txt"
+        },
+        {
+          "artifact_id": "erp-writeback",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "ERP writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:6408e9d90c39a024332fad39d6b6b1cb445f24e094ece531d9f68fda8df4ebb3",
+          "size_bytes": 2335,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/control/output/erp_writeback.sql"
+        },
+        {
+          "artifact_id": "mes-writeback",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "MES writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:76ae9ccf791e6482746f1a75fcf633fa2e3de7b3b679d04817527c3349ccac00",
+          "size_bytes": 1660,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/control/output/mes_writeback.sql"
+        },
+        {
+          "artifact_id": "wms-writeback",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "WMS writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:f2badaefddf95512dc5dba2119729235a391fb124bc64bf752601af2113160ec",
+          "size_bytes": 2140,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/control/output/wms_writeback.sql"
+        },
+        {
+          "artifact_id": "prescore-capture",
+          "custody": "controlled result commit 6b45cca3ce32d0ca1eefc062e3fda6104132f6f1",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "pre-score container and image identity capture",
+          "release_trigger": "publish only a separately scanned redacted derivative",
+          "sha256": "sha256:f322822ea8e021a4fb48715295d1cf1099c84f323555701cd1c81d4322cf3385",
+          "size_bytes": 1707,
+          "source_ref": "6b45cca3ce32d0ca1eefc062e3fda6104132f6f1:exogenous/results/cl031-tb3-production-planning-worker-qa-002/control/evidence/PRESCORE-CAPTURE.json"
+        }
+      ],
+      "sequence": 10,
+      "supersedes_release_id": "cl031-control-public-v1",
+      "tree_sha": "4fa85159e63d1941a8f5fb692cc4fd02d72ee364",
+      "visibility": "public-summary"
+    },
+    {
+      "artifact_manifest_path": "public/results/cl032/treatment/MANIFEST.json",
+      "artifact_manifest_sha256": "sha256:f03c970b0e9ee2e4c26fd454fe4b4c294f719923658c3abac81c6eeefa916580",
+      "branch_kind": "results",
+      "branch_ref": "refs/heads/results/terminal-bench/3.0/tb30-cl027-production-planning/production-planning/cl027-tb3-production-planning/cl032-attempt-004/treatment/public-v2",
+      "claims": [
+        "descriptive"
+      ],
+      "commit_sha": "d3f939995002fcf1bba913d56383f4493984a580",
+      "contamination_facts": {
+        "counting_disposition": "counted",
+        "evaluated_model": "openai/gpt-5.6-sol",
+        "local_artifact_published_at": null,
+        "local_artifact_visibility": "controlled",
+        "method_attribution": "paper2-current-v2",
+        "model_knowledge_cutoff": "unknown",
+        "network_policy": "unknown",
+        "runtime_identity": "codex-0.147.0-alpha.6.5-terminal-bench-3.0",
+        "training_ingestion": "not-inferred",
+        "upstream_oracle_published_at": "2026-07-23T06:49:14Z",
+        "upstream_oracle_visibility": "public-before-run"
+      },
+      "contamination_status": "active-task-embargoed",
+      "identity": {
+        "arm": "treatment",
+        "attempt_id": "e0685590-fe72-49c0-a456-1abf69ff65fe",
+        "benchmark_dataset": "terminal-bench",
+        "benchmark_release": "3.0",
+        "build_id": "builder-service-build-001",
+        "candidate_id": "production-planning-corridor",
+        "candidate_revision": "a5c3d4663857cf64d8ac8690096ae7f0e5ce9ae3",
+        "construction_id": "cl030-builder-service",
+        "launch_id": "cl032-treatment-launch",
+        "method_version_id": "paper2-current-v2",
+        "protocol_id": "cl027-tb3-worker-qa",
+        "result_release": "public-v2",
+        "run_id": "cl032-attempt-004",
+        "study_id": "cl027-tb3-production-planning",
+        "task_id": "production-planning",
+        "taskset_id": "tb30-cl027-production-planning"
+      },
+      "outcomes": {
+        "blocked": 0,
+        "fail": 0,
+        "invalid": 0,
+        "pass": 1,
+        "timeout": 0,
+        "total": 1,
+        "unscored": 0
+      },
+      "publication_evidence": {
+        "maintainer_clearance_ref": null,
+        "retirement_evidence_ref": null
+      },
+      "release_id": "cl032-treatment-public-v2",
+      "released_at": "2026-08-16T12:38:25Z",
+      "sealed_artifacts": [
+        {
+          "artifact_id": "pair-result",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "matched-pair study result",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:7946522c292205ca557ec97edd40d0812d2931c049be7ff9134b905e739dd543",
+          "size_bytes": 4669,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/STUDY-RESULT.json"
+        },
+        {
+          "artifact_id": "controlled-content-manifest",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "content index for sealed result artifacts",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:1a0b50a14e990d22004df9767013613d5e93cc7f6cae66a5d580bce4e55ac365",
+          "size_bytes": 13385,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/MANIFEST.json"
+        },
+        {
+          "artifact_id": "database-audit",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "post-repair database audit",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:9f92c4a8170ebb363c33881a2aaa80383c79b17ee6cc149b0e876483af9788c2",
+          "size_bytes": 10795,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/DB-AUDIT.json"
+        },
+        {
+          "artifact_id": "repair-delta-audit",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "pre/post repair database delta audit",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:9c90b072364f472e6ef43d7e3243e86ed8bca7f1f92cc150736909cbeec23ee9",
+          "size_bytes": 12202,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/REPAIR-DELTA-AUDIT.json"
+        },
+        {
+          "artifact_id": "official-score-event",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "original official evaluator score event",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:ef055102b4fc7099c75acce92fd0ff6b5b714c1845a1821e99c10354845e585c",
+          "size_bytes": 784,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/treatment/evidence/OFFICIAL-SCORE-EVENT.json"
+        },
+        {
+          "artifact_id": "worker-observable-log",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/x-ndjson",
+          "provenance": "observable Codex command and message event stream",
+          "release_trigger": "publish only a separately scanned redacted derivative",
+          "sha256": "sha256:61a499f0a96391f9515882f19b63e26c2c67415ce480a1b3a526edcf60a366b0",
+          "size_bytes": 243186,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/treatment/logs/worker-codex.txt"
+        },
+        {
+          "artifact_id": "erp-writeback",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "ERP writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:0a8861896bb4c55b6976b1224cbd5d391123dcf78e6a7345899a5b83c798593f",
+          "size_bytes": 3836,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/treatment/output/erp_writeback.sql"
+        },
+        {
+          "artifact_id": "mes-writeback",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "MES writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:24362ceb7f8edaff51dd921fe65eedb8a5183ead3301501495631bcfa116e5e6",
+          "size_bytes": 2949,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/treatment/output/mes_writeback.sql"
+        },
+        {
+          "artifact_id": "wms-writeback",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "WMS writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:0228631e56dec2c35bd9688d34c93a058edaa9273d84bbf87e50433f213e7942",
+          "size_bytes": 3803,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/treatment/output/wms_writeback.sql"
+        },
+        {
+          "artifact_id": "prescore-capture",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "pre-score container and image identity capture",
+          "release_trigger": "publish only a separately scanned redacted derivative",
+          "sha256": "sha256:35ceebc11dedea6a7f797d447ff7970d6c913fcc82b6bb8040f1cb4fc31ac4db",
+          "size_bytes": 1717,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/treatment/evidence/PRESCORE-CAPTURE.json"
+        },
+        {
+          "artifact_id": "repair-observable-log",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/x-ndjson",
+          "provenance": "observable bounded repair event stream",
+          "release_trigger": "publish only a separately scanned redacted derivative",
+          "sha256": "sha256:7c9120999fbf99eef6b50d103666b78c5ed002854807753bded763992a7fef76",
+          "size_bytes": 39004,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/treatment/logs/repair-events.jsonl"
+        }
+      ],
+      "sequence": 11,
+      "supersedes_release_id": "cl032-treatment-public-v1",
+      "tree_sha": "246c0326269d9fff4ccac082771beca0db88c831",
+      "visibility": "public-summary"
+    },
+    {
+      "artifact_manifest_path": "public/results/cl032/control/MANIFEST.json",
+      "artifact_manifest_sha256": "sha256:2355650942a6303c77766e722dbd0734141f5eec606675d3dd9915b8f34ca7cd",
+      "branch_kind": "results",
+      "branch_ref": "refs/heads/results/terminal-bench/3.0/tb30-cl027-production-planning/production-planning/cl027-tb3-production-planning/cl032-attempt-004/control/public-v2",
+      "claims": [
+        "descriptive"
+      ],
+      "commit_sha": "d45790a8449d686a8fbcdc8e847fd8bccca58e20",
+      "contamination_facts": {
+        "counting_disposition": "counted",
+        "evaluated_model": "openai/gpt-5.6-sol",
+        "local_artifact_published_at": null,
+        "local_artifact_visibility": "controlled",
+        "method_attribution": "no-method",
+        "model_knowledge_cutoff": "unknown",
+        "network_policy": "unknown",
+        "runtime_identity": "codex-0.147.0-alpha.6.5-terminal-bench-3.0",
+        "training_ingestion": "not-inferred",
+        "upstream_oracle_published_at": "2026-07-23T06:49:14Z",
+        "upstream_oracle_visibility": "public-before-run"
+      },
+      "contamination_status": "active-task-embargoed",
+      "identity": {
+        "arm": "control",
+        "attempt_id": "b4119707-b92b-4834-865d-b055ca38d9ea",
+        "benchmark_dataset": "terminal-bench",
+        "benchmark_release": "3.0",
+        "build_id": null,
+        "candidate_id": null,
+        "candidate_revision": null,
+        "construction_id": null,
+        "launch_id": "cl032-control-launch",
+        "method_version_id": "paper2-current-v2",
+        "protocol_id": "cl027-tb3-worker-qa",
+        "result_release": "public-v2",
+        "run_id": "cl032-attempt-004",
+        "study_id": "cl027-tb3-production-planning",
+        "task_id": "production-planning",
+        "taskset_id": "tb30-cl027-production-planning"
+      },
+      "outcomes": {
+        "blocked": 0,
+        "fail": 1,
+        "invalid": 0,
+        "pass": 0,
+        "timeout": 0,
+        "total": 1,
+        "unscored": 0
+      },
+      "publication_evidence": {
+        "maintainer_clearance_ref": null,
+        "retirement_evidence_ref": null
+      },
+      "release_id": "cl032-control-public-v2",
+      "released_at": "2026-08-16T12:38:25Z",
+      "sealed_artifacts": [
+        {
+          "artifact_id": "pair-result",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "matched-pair study result",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:7946522c292205ca557ec97edd40d0812d2931c049be7ff9134b905e739dd543",
+          "size_bytes": 4669,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/STUDY-RESULT.json"
+        },
+        {
+          "artifact_id": "controlled-content-manifest",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "content index for sealed result artifacts",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:1a0b50a14e990d22004df9767013613d5e93cc7f6cae66a5d580bce4e55ac365",
+          "size_bytes": 13385,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/MANIFEST.json"
+        },
+        {
+          "artifact_id": "database-audit",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "post-repair database audit",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:9f92c4a8170ebb363c33881a2aaa80383c79b17ee6cc149b0e876483af9788c2",
+          "size_bytes": 10795,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/DB-AUDIT.json"
+        },
+        {
+          "artifact_id": "repair-delta-audit",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "pre/post repair database delta audit",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:9c90b072364f472e6ef43d7e3243e86ed8bca7f1f92cc150736909cbeec23ee9",
+          "size_bytes": 12202,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/REPAIR-DELTA-AUDIT.json"
+        },
+        {
+          "artifact_id": "official-score-event",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "original official evaluator score event",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance",
+          "sha256": "sha256:b8ec80c566ede2122845f71c09812c7dfd4f060dfd22f2e6a80a9327190e1465",
+          "size_bytes": 780,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/evidence/OFFICIAL-SCORE-EVENT.json"
+        },
+        {
+          "artifact_id": "worker-observable-log",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/x-ndjson",
+          "provenance": "observable Codex command and message event stream",
+          "release_trigger": "publish only a separately scanned redacted derivative",
+          "sha256": "sha256:66ba02cd0abc2960e15f229a20c80626327b43da39642905acd2b61b29cedb4e",
+          "size_bytes": 320923,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/logs/worker-codex.txt"
+        },
+        {
+          "artifact_id": "erp-writeback",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "ERP writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:3d3a6f735ec16c519400d8dae5797c63038e1b50c173e15839151426ae862498",
+          "size_bytes": 2387,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/output/erp_writeback.sql"
+        },
+        {
+          "artifact_id": "mes-writeback",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "MES writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:716a6067f5bcdf848d32baa89c2fe1bc9c58e24a2e31789c736a8950f3b2f521",
+          "size_bytes": 1717,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/output/mes_writeback.sql"
+        },
+        {
+          "artifact_id": "wms-writeback",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/sql",
+          "provenance": "WMS writeback emitted by this arm",
+          "release_trigger": "task retirement or written benchmark-maintainer clearance for raw SQL bytes",
+          "sha256": "sha256:bdc953cbef9df64a82f6bba44565c63c77061078054ff3ed31d4b08e8d6dd58e",
+          "size_bytes": 2412,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/output/wms_writeback.sql"
+        },
+        {
+          "artifact_id": "prescore-capture",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/json",
+          "provenance": "pre-score container and image identity capture",
+          "release_trigger": "publish only a separately scanned redacted derivative",
+          "sha256": "sha256:2f4145ea3cfb040928119f8586902ad52ab7de5ca601a1537735407490c5f0ad",
+          "size_bytes": 1707,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/evidence/PRESCORE-CAPTURE.json"
+        },
+        {
+          "artifact_id": "repair-observable-log",
+          "custody": "controlled result commit fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6",
+          "license_status": "restricted",
+          "media_type": "application/x-ndjson",
+          "provenance": "observable bounded repair event stream",
+          "release_trigger": "publish only a separately scanned redacted derivative",
+          "sha256": "sha256:4a36fb317b01afff231c2d845e3d2d31208ab49d33ac039183c8ebd5b00a91a8",
+          "size_bytes": 45752,
+          "source_ref": "fc30cfd9097f9fd68e37dca1b0622a1f38fea8a6:exogenous/results/cl032-tb3-production-planning-worker-qa-003/control/logs/repair-events.jsonl"
+        }
+      ],
+      "sequence": 12,
+      "supersedes_release_id": "cl032-control-public-v1",
+      "tree_sha": "1fd6bdb5e098c03943f70027a17dc5941df84624",
+      "visibility": "public-summary"
     }
   ],
   "restricted_artifact_classes": [

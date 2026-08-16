@@ -80,6 +80,29 @@ Structural validation proves only these declared bytes and joins. It does not es
 that the method outperforms a control, that a public evaluator is a hidden oracle, that
 an authority is legitimate, or that the same behavior generalizes beyond this fixture.
 
+## Public observable-result derivative
+
+The public result evidence schemas documented in `MANIFEST-SCHEMA.md` are a separate
+post-hoc derivative, not an extension of this synthetic runtime bundle and not a new
+gate. A derivative may bind contemporaneous observable command receipts to a frozen
+service revision, full-log digest, writeback digests, pre-score image, and official
+evaluator receipt. It may not manufacture a missing event, infer hidden reasoning, or
+upgrade a digest-only source to independently verified evidence.
+
+When the historical STUDY/RUN shape differs from what actually executed, the public
+result may add `charting-loop/public-execution-amendment/v1`; it must set
+`frozen_study_overwritten=false`. Missing timing, usage, seed, retry, or predecessor
+receipts remain typed unavailable/waived fields. The companion
+`charting-loop/public-attempt-disposition-ledger/v1` records counted and invalid
+attempts without manufacturing a replacement RUN.
+
+The safe-public receipt keeps task identifiers and mechanism-relevant outcomes. It
+removes subscription authentication, credential values, host-private paths, hidden
+reasoning, and hidden tests; credential-bearing full logs remain controlled and
+content-addressed. This profile supports audit of the observed sequence and custody
+joins. It does not prove that Corridor caused an outcome, certify a Candidate, mint a
+Warranty, or generalize a one-task matched comparison.
+
 ## Prospective Position-ledger and QA projection
 
 Prospective draft-v3 runners may append `charting-loop/position-ledger-entry/v1` records

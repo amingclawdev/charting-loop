@@ -14,6 +14,7 @@ method.
 | task constraint | `charting-loop/task-constraint-datum/v1` | `charting-loop/task-constraint-datum/v2` | v1 retains the no-repair pair; v2 validates the matched Worker-QA and Position-ledger policy |
 | method catalog | `charting-loop/method-index/v1` | `charting-loop/method-index/v2` | validate only against the exact selected catalog version |
 | public release registry | — | `charting-loop/public-release-registry/v1` | preserve the exact ordered row sequence; existing rows and v1 policy are append-only |
+| public result manifest | `charting-loop/public-result-summary/v1` | `charting-loop/public-result-evidence/v2` | retain v1 summary custody; append v2 to add causal-evidence and observable-lineage receipts |
 
 The remaining runner-facing dispatches are:
 
@@ -70,11 +71,15 @@ digest, size, media type, license status, provenance, source ref, custody, and r
 trigger. The publication-evidence object holds nullable maintainer-clearance and task-
 retirement refs; the corresponding ref becomes mandatory before the public-after state.
 
-The registry begins empty because invitation readiness is not a remote publication.
-Only a separately authorized release appends a row. `public-summary` permits the
+The registry's no-parent public root begins empty because invitation readiness is not
+a remote publication. Only a separately authorized release appends a row. Published
+rows remain immutable; a correction or richer package appends a new row with
+`supersedes_release_id`. `public-summary` permits the
 closed public classes in the registry; it does not make solution-shaped content safe.
-Task-specific executable code, SQL, databases, trajectories, raw or detailed logs,
-hidden evaluator bytes, and internal Git history remain embargoed or restricted.
+Task-specific executable code, raw SQL, databases, trajectories, credential-bearing
+full logs, hidden evaluator bytes, credentials, and internal Git history remain
+embargoed or restricted. A v2 result manifest may publish bounded observable event
+receipts and content digests without publishing those raw bytes.
 `tools/public_release.py` validates the registry and scans an explicitly allowlisted Git
 ref, its exact staged tree, and reachable named blobs. The tool does not authorize a
 push or establish the truth of a scientific claim. `summarize-registry` deterministically
@@ -88,6 +93,73 @@ whose raw bytes match the digest. Historical v1/v2 studies retain their exact
 `protocol_sha256` contract; they are not rewritten when a later versioned protocol is
 introduced. Protocol versioning therefore creates a new STUDY datum rather than
 changing the meaning of an earlier one.
+
+## Public result evidence v2
+
+`charting-loop/public-result-evidence/v2` is a closed, canonical JSON derivative for
+one released arm. It retains the v1 identity, condition, interpretation, official
+evaluation, process, source custody, public-summary binding, and sealed-artifact
+binding. It additionally requires two closed records:
+
+- `charting-loop/public-causal-evidence-matrix/v1`, containing exactly the ordered
+  claims E1 through E7, each with a typed evidence status, public references,
+  controlled source references, and a plain reason; and
+- `charting-loop/observable-lineage-receipt/v1`, joining the attempt and arm to the
+  frozen service identity, full observable-log digest and event counts, bounded event
+  receipts, ERP/MES/WMS writeback digests, pre-score capture and image digests, the
+  official evaluator receipt, and the closed redaction declaration;
+- `charting-loop/public-execution-amendment/v1`, recording the actually executed
+  model/effort/runtime, timing and token-usage status, seed/retry availability,
+  QA/repair order, service revision, and pre-score world without rewriting the frozen
+  STUDY or RUN; and
+- `charting-loop/public-attempt-disposition-ledger/v1`, binding the counted current
+  attempt and any known invalid predecessor. A missing public predecessor receipt is
+  `waived-no-posthoc-backfill` with a controlled source and reason, never reconstructed
+  as a successful run.
+
+The evidence states are `independently-verifiable`, `public-event-receipt`,
+`digest-only-commitment`, `declared-only`, `unavailable`, and
+`unsupported-inference`. An unavailable or unsupported item cannot carry a
+PASS-shaped public reference. E1–E7 are evidence slots, not seven success assertions.
+
+Treatment must bind a full 40-hex frozen service commit and tree, report
+`corridor_observably_used=true`, and join the lineage service revision to source
+custody. Control must carry null service identity, record no service access, and report
+`corridor_observably_used=false`. Both arms bind the exact Worker-log digest and byte
+size, command and agent-message counts, zero published hidden-reasoning events, unique
+event ids, event exit codes and output digests, the declared runtime reasoning effort,
+the ordered `erp`, `mes`, and `wms` writebacks, pre-score world, and evaluator check
+count.
+
+The public derivative is deliberately not a wholesale log dump. Its redaction object
+must exclude exactly subscription authentication, credential values, host-private
+paths, hidden reasoning, and hidden tests, and must declare `full_log_public=false`.
+Task names, official identifiers, observed scores, safe command descriptions, failure
+outcomes, and mechanism-relevant counterfactual results are not anonymized. The
+controlled full log remains content-addressed and source-located so an authorized
+reviewer can verify every published receipt.
+
+A frozen service commit/tree proves byte identity, not how the Builder obtained those
+bytes or which information the Builder saw. Unless a separate public construction
+receipt exists, the matrix must describe construction isolation as controlled or
+unavailable evidence and must not infer non-exposure from runtime use. Likewise, prose
+about an invalid predecessor is not a machine result record unless it receives its own
+typed append-only release.
+
+V1 result rows and commits are historical custody records and are never rewritten. A
+v2 release uses a new `result_release`, immutable branch, commit, tree, manifest digest,
+and registry row whose `supersedes_release_id` names its corresponding v1 row. Neither
+schema turns descriptive same-task observations into a causal or multi-task claim.
+
+Observed timing/usage values require their actual values and a null absence reason;
+unavailable timing/usage requires null values and a non-empty reason. Seed and runner
+retry fields that were not frozen contemporaneously remain null and unavailable;
+observed repair attempts are recorded separately and cannot be relabeled as retries.
+The execution amendment must join model/runtime facts to the registry row, effort and
+command counts to the Worker-log receipt, QA/repair order to the process record, and
+service/pre-score identity to observable lineage. `tools/exogenous_registry.py`
+projects these append-only amendments into `exogenous/registry/EXPERIMENTS.md` while
+leaving the frozen RUN index JSON unchanged.
 
 `charting-loop/task-constraint-datum/v2` adds closed `qa` and `position_ledger`
 objects. It freezes construction QA outside the pair and byte-identical matched QA,

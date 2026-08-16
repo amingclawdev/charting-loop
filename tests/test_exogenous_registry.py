@@ -848,7 +848,14 @@ class ExogenousRegistryTests(unittest.TestCase):
             REPOSITORY_ROOT / "exogenous", method_versions=methods
         )
         self.assertTrue(collect_report.ok, collect_report.errors)
-        json_text, markdown_text = registry.build_index_documents(summaries)
+        execution_amendments = registry.collect_public_execution_amendments(
+            REPOSITORY_ROOT
+        )
+        self.assertEqual(len(execution_amendments), 6)
+        json_text, markdown_text = registry.build_index_documents(
+            summaries,
+            public_execution_amendments=execution_amendments,
+        )
         self.assertEqual(
             json_text,
             (REPOSITORY_ROOT / "exogenous" / "registry" / "INDEX.json").read_text(
@@ -868,9 +875,25 @@ class ExogenousRegistryTests(unittest.TestCase):
             / "PUBLIC-RELEASES.json",
             repo=REPOSITORY_ROOT,
             base_ref="4e97d0ae66dc7cf7211eb57c4d7badebb13ce095",
+            history_base_ref="af6ded35225c30e3684032ecf716ceca4a3c83ca",
         )
         self.assertTrue(release_report.ok, release_report.errors)
-        self.assertEqual(release_report.facts["release_count"], 6)
+        self.assertEqual(release_report.facts["release_count"], 12)
+        for marker in (
+            "## Public executed-topology amendments",
+            "they do not rewrite the frozen STUDY or RUN registry",
+            "cl030-treatment-public-v2",
+            "openai/gpt-5.6-sol / low",
+            "cl031-treatment-public-v2",
+            "openai/gpt-5.6-sol / high",
+            "### Invalid predecessor disposition",
+            "attempt-001",
+            "launcher_repair_was_not_conditioned_on_qa_fail",
+            "attempt-003",
+            "control_independent_qa_timeout_before_matched_pipeline_completion",
+            "waived-no-posthoc-backfill",
+        ):
+            self.assertIn(marker, markdown_text)
         release_protocol = (
             REPOSITORY_ROOT / "protocol" / "PUBLIC-RELEASE-BRANCHES.md"
         ).read_text(encoding="utf-8")

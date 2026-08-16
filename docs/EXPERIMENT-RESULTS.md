@@ -17,19 +17,19 @@ a causal estimate, benchmark-wide efficacy evidence, or a production-readiness c
 
 ## Publication and participation status
 
-**Current status: the first authorized public release is live.** A reader can inspect
-six sanitized arm summaries, validate their exact Git and digest identities, use the
-bounded AI review prompts, and follow the prospective replication protocol. Publication
-does not mean that a benchmark submission, leaderboard run, or external intake channel
-already exists.
+**Current status: the public result and causal-evidence release is live.** A reader can
+inspect six current arm packages, validate their exact Git and digest identities,
+follow the observable event chain, use the bounded AI review prompts, and follow the
+prospective replication protocol. Publication does not mean that a benchmark
+submission, leaderboard run, or external intake channel already exists.
 
 | Surface | Status | What that means |
 | --- | --- | --- |
 | Human explanation and result navigation | Ready | This index and the task page explain the design, attempts, scores, mechanism evidence, and limitations. |
 | Post-hoc AI review | Ready | Complete evidence-bound prompts are available for the whole task and CL-030/031/032. They are not experiment input. |
 | Prospective replication instructions | Ready for a frozen pilot | The human invitation, operator runbook, and authoritative protocol define how to add distinct tasks without treating repetitions as new tasks. |
-| Current result artifacts | Six sanitized arm releases live | Treatment and Control for CL-030/031/032 each have an immutable public result branch containing only a summary, manifest, and the safe public-root ancestry. |
-| Public release registry | Six validated rows | `exogenous/registry/PUBLIC-RELEASES.json` binds each branch to its commit, tree, manifest digest, typed identity, outcome, and sealed-source digests. |
+| Current result artifacts | Six causal-evidence arm releases live | Treatment and Control for CL-030/031/032 each have an immutable `public-v2` branch containing a human summary and a machine-checkable evidence manifest on the safe public-root ancestry. |
+| Public release registry | Twelve validated append-only rows | Six `public-v1` rows remain immutable; six `public-v2` rows supersede them without deletion. The registry binds every branch to its commit, tree, manifest digest, typed identity, outcome, and sealed-source digests. |
 | Public remote and submission channel | Repository live; intake not opened | The repository is public at [`amingclawdev/charting-loop`](https://github.com/amingclawdev/charting-loop), but no project submission endpoint is advertised yet. |
 | Official benchmark leaderboard | Not attempted | The three same-task matched pairs are not a complete eligible leaderboard run and no rank is claimed. |
 
@@ -56,10 +56,11 @@ For a prospective independent test:
 5. Preserve completed, failed, blocked, timeout, invalid, and unscored attempts. Report
    construction cost separately from task-arm cost, and report null or negative
    results just as completely as positive ones.
-6. Prepare only an allowlisted public-safe summary and apply the human
-   [`public release checklist`](PUBLIC-RELEASE-CHECKLIST.md). Do not attach a full
-   result branch, database, SQL, detailed log, raw session, trajectory, hidden
-   evaluator material, credential, or solution-bearing artifact.
+6. Prepare an allowlisted public-safe summary plus observable evidence receipts and
+   apply the human [`public release checklist`](PUBLIC-RELEASE-CHECKLIST.md). Do not
+   attach a database, raw SQL, a credential-bearing full log, raw session,
+   trajectory, hidden evaluator material, credential value, or solution-bearing
+   service. Preserve their exact digests and controlled source locators instead.
 
 The project does not currently advertise a live external submission endpoint. Once
 the repository owner publishes and authorizes one, that endpoint—not an informal file
@@ -85,6 +86,46 @@ authorization, then append and validate its machine release entry. An official
 benchmark upload or leaderboard row is a separate process and must not be inferred
 from this registry.
 
+### What the public causal-evidence package contains
+
+Each current `public-v2` manifest exposes an ordered E1–E7 evidence matrix and an
+observable lineage receipt. Together they bind:
+
+1. the frozen protocol and task identity;
+2. the frozen Corridor commit and tree for Treatment, and its absence for Control;
+3. contemporaneous Worker command events showing whether Corridor was actually used;
+4. bounded command outcomes and output hashes rather than a retrospective narrative;
+5. ERP, MES, and WMS writeback digests and byte sizes;
+6. the pre-score container-image identity; and
+7. the official evaluator receipt and check count.
+
+This is not task anonymization. The public pages retain the official task name, order
+identifiers, scores, QA proposals, and the mechanism interpretation needed to audit
+the causal story. The closed redaction boundary removes subscription authentication,
+credential values, host-private paths, hidden reasoning, and hidden tests. Full Worker
+logs remain content-addressed but are not copied wholesale because the observable logs
+contain benchmark connection credentials. The public event receipts retain event ids,
+exit codes, safe summaries, exact output hashes, and controlled source references, so
+an authorized reviewer can reproduce the join without treating an edited summary as
+the source evidence.
+
+Two limits remain explicit. First, the receipts demonstrate runtime access and use;
+they do not independently prove that the earlier builder construction session never
+saw an undeclared oracle, because no separately public builder transcript exists. E2
+therefore binds service identity and controlled custody rather than claiming a public
+construction-process proof. Second, the two invalid predecessors do not have
+standalone public arm manifests. The current v2 manifests preserve their exact
+controlled disposition in a machine-readable attempt ledger and mark the absent
+public execution receipts `waived-no-posthoc-backfill`; they remain noncounting and
+cannot support a mechanism claim.
+
+The same manifests contain a post-hoc executed-topology amendment rather than
+rewriting the frozen v1 study datum. It records observed model, effort, runtime,
+QA/repair order, service and pre-score identity, and CL-030 timing/token usage.
+CL-031/032 timing and usage plus all seed/runner-retry fields remain explicitly
+`unavailable`. A generated cross-arm view appears in
+[`exogenous/registry/EXPERIMENTS.md`](../exogenous/registry/EXPERIMENTS.md).
+
 ## The causal story, in plain language
 
 **1. Design — change one intended thing.** For each counted attempt, we ran two fresh
@@ -97,6 +138,17 @@ an executable global planning model, not just a hint or an answer sheet.
 pairs, Treatment passed 20/20 official checks every time. Control passed 16/20,
 16/20, and 15/20. This makes the difference worth explaining, but repetition on one
 task does not by itself show that Corridor caused it.
+
+Runtime effort was matched within each pair but not across attempts: CL-030 used
+`low`, while CL-031 and CL-032 used `high`. The v2 lineage records this per arm. This
+is another reason to treat the three pairs as repeated descriptive observations rather
+than interchangeable independent replications.
+
+The contemporaneous CL-031 Treatment log also closes an earlier ambiguity: the Worker
+read the frozen service source and tests, ran the service tests and a planning dry-run,
+then invoked apply. Corridor was therefore observably consumed, not merely made
+available or mentioned in a prompt. Its `public-v2` receipt publishes the corresponding
+event ids and output hashes.
 
 **3. Mechanism evidence — CL-032 shows how Corridor could make the difference.** The
 Treatment Worker observably read the frozen service and tests, ran its three unit

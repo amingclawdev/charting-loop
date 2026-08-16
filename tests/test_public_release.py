@@ -14,6 +14,7 @@ from tools import public_release
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_BASE_COMMIT = "4e97d0ae66dc7cf7211eb57c4d7badebb13ce095"
+PUBLIC_V1_MAIN_COMMIT = "af6ded35225c30e3684032ecf716ceca4a3c83ca"
 
 
 def git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -336,10 +337,11 @@ class PublicReleaseTests(unittest.TestCase):
 
         publication_markers = (
             "## Publication and participation status",
-            "**Current status: the first authorized public release is live.**",
-            "| Current result artifacts | Six sanitized arm releases live |",
-            "| Public release registry | Six validated rows |",
-            "binds each branch to its commit, tree, manifest digest",
+            "**Current status: the public result and causal-evidence release is live.**",
+            "| Current result artifacts | Six causal-evidence arm releases live |",
+            "| Public release registry | Twelve validated append-only rows |",
+            "six `public-v2` rows supersede them without deletion",
+            "binds every branch to its commit, tree, manifest digest",
             "| Public remote and submission channel | Repository live; intake not opened |",
             "| Official benchmark leaderboard | Not attempted |",
             "reader, runner, and sanitized result package is public",
@@ -359,6 +361,17 @@ class PublicReleaseTests(unittest.TestCase):
             "Do not add a row merely because a controlled result branch exists",
             "sanitized public result commit from allowlisted bytes",
             "An official benchmark upload or leaderboard row is a separate process",
+            "### What the public causal-evidence package contains",
+            "ordered E1–E7 evidence matrix",
+            "subscription authentication",
+            "credential values",
+            "Full Worker logs remain content-addressed",
+            "contain benchmark connection credentials",
+            "not task anonymization",
+            "do not independently prove that the earlier builder construction session never saw an undeclared oracle",
+            "invalid predecessors do not have standalone public arm manifests",
+            "waived-no-posthoc-backfill",
+            "post-hoc executed-topology amendment",
         )
         for marker in publication_markers:
             self.assertIn(marker, index_words)
@@ -471,20 +484,21 @@ class PublicReleaseTests(unittest.TestCase):
         for _commit, path in summary_locators:
             self.assertFalse((REPOSITORY_ROOT / path).exists())
         public_summaries = (
-            ("e5785e1c3b4b0ab2570d7558d17ca6f97d650d89", "public/results/cl030/treatment/SUMMARY.md"),
-            ("4c2526a177f19497bae21aa6bb34b0fb20a216c7", "public/results/cl030/control/SUMMARY.md"),
-            ("892d31e4e971040323c8cb7a8bd18cd3de701034", "public/results/cl031/treatment/SUMMARY.md"),
-            ("d0732f4dfab592fafe80535670ee4e4b9051bb16", "public/results/cl031/control/SUMMARY.md"),
-            ("e7d5401bbb71b4bdf7d7ee7caca99d822c943a93", "public/results/cl032/treatment/SUMMARY.md"),
-            ("368a725bfc1bfe12f1431ff6698b884e12985fa5", "public/results/cl032/control/SUMMARY.md"),
+            ("49e704f199022a58f43180798aabceae8954bfa5", "public/results/cl030/treatment/SUMMARY.md"),
+            ("a191c3787a89db159f3fcfacbce7d8293d304acd", "public/results/cl030/control/SUMMARY.md"),
+            ("64d1147c8b95dd8d9287535f75135aec7bc51b7f", "public/results/cl031/treatment/SUMMARY.md"),
+            ("be42757e1e47d93daa032cb2754d7a145210f6a3", "public/results/cl031/control/SUMMARY.md"),
+            ("d3f939995002fcf1bba913d56383f4493984a580", "public/results/cl032/treatment/SUMMARY.md"),
+            ("d45790a8449d686a8fbcdc8e847fd8bccca58e20", "public/results/cl032/control/SUMMARY.md"),
         )
         for commit, path in public_summaries:
             self.assertIn(f"/blob/{commit}/{path}", task_result)
             self.assertTrue((REPOSITORY_ROOT / path).is_file())
         for marker in (
-            "Main contains all six public packages for discovery",
+            "Main contains all six current packages for discovery",
+            "six superseding v2 evidence releases",
             "branch-to-commit-to-tree join",
-            "represented only by SHA-256 digests",
+            "safe observable event receipts",
         ):
             self.assertIn(marker, task_words)
 
@@ -611,19 +625,20 @@ class PublicReleaseTests(unittest.TestCase):
         )
         self.assertEqual(unsafe_paths, [])
 
-    def test_checked_in_registry_and_six_public_arm_packages_are_bound(self) -> None:
+    def test_checked_in_registry_and_public_v2_evidence_packages_are_bound(self) -> None:
         path = REPOSITORY_ROOT / "exogenous" / "registry" / "PUBLIC-RELEASES.json"
         report = public_release.validate_registry(
             path,
             repo=REPOSITORY_ROOT,
             base_ref=PUBLIC_BASE_COMMIT,
+            history_base_ref=PUBLIC_V1_MAIN_COMMIT,
         )
         self.assertTrue(report.ok, report.errors)
-        self.assertEqual(report.facts["release_count"], 6)
+        self.assertEqual(report.facts["release_count"], 12)
         releases = checked_registry()["releases"]
         self.assertEqual(
             [(row["identity"]["run_id"], row["identity"]["arm"]) for row in releases],
-            [
+            2 * [
                 ("cl030-attempt-001", "treatment"),
                 ("cl030-attempt-001", "control"),
                 ("cl031-attempt-002", "treatment"),
@@ -632,15 +647,29 @@ class PublicReleaseTests(unittest.TestCase):
                 ("cl032-attempt-004", "control"),
             ],
         )
-        for row in releases:
-            manifest_path = REPOSITORY_ROOT / row["artifact_manifest_path"]
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            self.assertEqual(manifest["schema_version"], "charting-loop/public-result-summary/v1")
+        expected_schemas = ["charting-loop/public-result-summary/v1"] * 6 + [
+            "charting-loop/public-result-evidence/v2"
+        ] * 6
+        for row, expected_schema in zip(releases, expected_schemas, strict=True):
+            shown = git(
+                REPOSITORY_ROOT,
+                "show",
+                f'{row["commit_sha"]}:{row["artifact_manifest_path"]}',
+            )
+            self.assertEqual(shown.returncode, 0, shown.stderr)
+            manifest = json.loads(shown.stdout)
+            self.assertEqual(manifest["schema_version"], expected_schema)
             self.assertEqual(manifest["release_id"], row["release_id"])
             self.assertEqual(manifest["identity"], row["identity"])
             self.assertEqual(manifest["sealed_artifacts"], row["sealed_artifacts"])
             summary = manifest["public_summary"]
-            summary_bytes = (REPOSITORY_ROOT / summary["path"]).read_bytes()
+            summary_result = git(
+                REPOSITORY_ROOT,
+                "show",
+                f'{row["commit_sha"]}:{summary["path"]}',
+            )
+            self.assertEqual(summary_result.returncode, 0, summary_result.stderr)
+            summary_bytes = summary_result.stdout.encode("utf-8")
             self.assertEqual(summary["size_bytes"], len(summary_bytes))
             self.assertEqual(
                 summary["sha256"],
@@ -658,6 +687,97 @@ class PublicReleaseTests(unittest.TestCase):
                 set(changed.stdout.splitlines()),
                 {row["artifact_manifest_path"], summary["path"]},
             )
+        for previous, current in zip(releases[:6], releases[6:], strict=True):
+            self.assertEqual(current["supersedes_release_id"], previous["release_id"])
+            self.assertEqual(current["identity"]["result_release"], "public-v2")
+            self.assertTrue(current["branch_ref"].endswith("/public-v2"))
+
+        v2_manifests = {
+            (row["identity"]["run_id"], row["identity"]["arm"]): json.loads(
+                git(
+                    REPOSITORY_ROOT,
+                    "show",
+                    f'{row["commit_sha"]}:{row["artifact_manifest_path"]}',
+                ).stdout
+            )
+            for row in releases[6:]
+        }
+        expected_redactions = [
+            "subscription-authentication",
+            "credential-values",
+            "host-private-paths",
+            "hidden-reasoning",
+            "hidden-tests",
+        ]
+        for (_run_id, arm), manifest in v2_manifests.items():
+            self.assertEqual(
+                [item["evidence_id"] for item in manifest["causal_evidence"]["entries"]],
+                ["E1", "E2", "E3", "E4", "E5", "E6", "E7"],
+            )
+            lineage = manifest["observable_lineage"]
+            self.assertEqual(lineage["redaction"]["excluded"], expected_redactions)
+            self.assertFalse(lineage["redaction"]["full_log_public"])
+            self.assertEqual(
+                [item["system"] for item in lineage["writebacks"]],
+                ["erp", "mes", "wms"],
+            )
+            self.assertEqual(lineage["worker_log"]["hidden_reasoning_event_count"], 0)
+            self.assertEqual(
+                lineage["worker_log"]["reasoning_effort"],
+                "low" if manifest["identity"]["run_id"] == "cl030-attempt-001" else "high",
+            )
+            self.assertEqual(
+                manifest["condition"]["corridor_observably_used"],
+                arm == "treatment",
+            )
+            self.assertEqual(
+                manifest["causal_evidence"]["entries"][2]["status"],
+                "public-event-receipt" if arm == "treatment" else "declared-only",
+            )
+            amendment = manifest["execution_amendment"]
+            self.assertFalse(amendment["frozen_study_overwritten"])
+            self.assertEqual(amendment["attempt_id"], manifest["identity"]["attempt_id"])
+            self.assertEqual(amendment["arm"], arm)
+            expected_observation = (
+                "observed"
+                if manifest["identity"]["run_id"] == "cl030-attempt-001"
+                else "unavailable"
+            )
+            self.assertEqual(amendment["timing"]["status"], expected_observation)
+            self.assertEqual(amendment["usage"]["status"], expected_observation)
+            self.assertEqual(amendment["seed_retry"]["seed_status"], "unavailable")
+            self.assertEqual(amendment["seed_retry"]["retry_status"], "unavailable")
+            disposition = manifest["attempt_disposition"]
+            self.assertTrue(disposition["current_attempt"]["counted"])
+            self.assertEqual(
+                disposition["current_attempt"]["run_id"],
+                manifest["identity"]["run_id"],
+            )
+        cl031_treatment = v2_manifests[("cl031-attempt-002", "treatment")]
+        self.assertEqual(
+            cl031_treatment["source_custody"]["builder_service_tree"],
+            "8a79394a426c87f69a1ea1aa8044b9cd7071d5ad",
+        )
+        self.assertEqual(
+            [event["event_id"] for event in cl031_treatment["observable_lineage"]["events"]],
+            ["worker:item_24", "worker:item_27", "worker:item_39"],
+        )
+        treatment_writebacks = {
+            tuple(item["sha256"] for item in manifest["observable_lineage"]["writebacks"])
+            for (_run_id, arm), manifest in v2_manifests.items()
+            if arm == "treatment"
+        }
+        self.assertEqual(len(treatment_writebacks), 1)
+        self.assertEqual(
+            v2_manifests[("cl031-attempt-002", "treatment")]["attempt_disposition"]
+            ["invalid_predecessors"][0]["attempt_label"],
+            "attempt-001",
+        )
+        self.assertEqual(
+            v2_manifests[("cl032-attempt-004", "control")]["attempt_disposition"]
+            ["invalid_predecessors"][0]["attempt_label"],
+            "attempt-003",
+        )
         first = public_release.render_registry_summary(checked_registry())
         second = public_release.render_registry_summary(checked_registry())
         self.assertEqual(first, second)
@@ -669,8 +789,84 @@ class PublicReleaseTests(unittest.TestCase):
             "cl031-control-public-v1",
             "cl032-treatment-public-v1",
             "cl032-control-public-v1",
+            "cl030-treatment-public-v2",
+            "cl030-control-public-v2",
+            "cl031-treatment-public-v2",
+            "cl031-control-public-v2",
+            "cl032-treatment-public-v2",
+            "cl032-control-public-v2",
         ):
             self.assertEqual(first.count(release_id), 1)
+
+    def test_public_v2_manifest_rejects_broken_causal_and_lineage_joins(self) -> None:
+        row = checked_registry()["releases"][8]
+        shown = git(
+            REPOSITORY_ROOT,
+            "show",
+            f'{row["commit_sha"]}:{row["artifact_manifest_path"]}',
+        )
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        original = json.loads(shown.stdout)
+
+        mutations = []
+        extra_field = copy.deepcopy(original)
+        extra_field["unreviewed_narrative"] = True
+        mutations.append(("closed schema", extra_field, "REGISTRY_FIELDS"))
+
+        service_join = copy.deepcopy(original)
+        service_join["observable_lineage"]["service_revision"]["tree"] = "f" * 40
+        mutations.append(("service join", service_join, "PUBLIC_OBSERVABLE_LINEAGE_JOIN"))
+
+        causal_identity = copy.deepcopy(original)
+        causal_identity["causal_evidence"]["attempt_id"] = "different-attempt"
+        mutations.append(("causal identity", causal_identity, "PUBLIC_CAUSAL_EVIDENCE"))
+
+        redaction = copy.deepcopy(original)
+        redaction["observable_lineage"]["redaction"]["excluded"] = [
+            "subscription-authentication"
+        ]
+        mutations.append(("redaction", redaction, "PUBLIC_OBSERVABLE_LINEAGE"))
+
+        evaluator_join = copy.deepcopy(original)
+        evaluator_join["observable_lineage"]["official_evaluator"]["checks_passed"] = 19
+        mutations.append(("evaluator join", evaluator_join, "PUBLIC_OBSERVABLE_LINEAGE_JOIN"))
+
+        execution_join = copy.deepcopy(original)
+        execution_join["execution_amendment"]["service_revision"]["tree"] = "e" * 40
+        mutations.append(("execution join", execution_join, "PUBLIC_EXECUTION_AMENDMENT_JOIN"))
+
+        invalid_disposition = copy.deepcopy(original)
+        invalid_disposition["attempt_disposition"]["invalid_predecessors"][0][
+            "counted"
+        ] = True
+        mutations.append(
+            (
+                "invalid disposition",
+                invalid_disposition,
+                "PUBLIC_ATTEMPT_DISPOSITION",
+            )
+        )
+
+        for name, manifest, expected_code in mutations:
+            with self.subTest(name=name):
+                report = public_release.Report(subject=name)
+                public_release._validate_public_result_manifest(
+                    row,
+                    (
+                        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True)
+                        + "\n"
+                    ).encode("utf-8"),
+                    manifest_path=row["artifact_manifest_path"],
+                    commit=row["commit_sha"],
+                    repo=REPOSITORY_ROOT,
+                    location="release",
+                    report=report,
+                )
+                self.assertFalse(report.ok)
+                self.assertTrue(
+                    any(expected_code in error for error in report.errors),
+                    report.errors,
+                )
 
     def test_registry_allows_append_but_rejects_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

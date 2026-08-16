@@ -3029,7 +3029,43 @@ def collect_registry(
     return report, summaries
 
 
-def build_index_documents(summaries: list[dict[str, Any]]) -> tuple[str, str]:
+def collect_public_execution_amendments(repo_root: Path) -> list[dict[str, Any]]:
+    """Project current public-v2 execution amendments without rewriting RUN data."""
+    result_root = repo_root / "public" / "results"
+    amendments: list[dict[str, Any]] = []
+    if not result_root.is_dir():
+        return amendments
+    for manifest_path in sorted(result_root.glob("*/[a-z]*/MANIFEST.json")):
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        execution = manifest.get("execution_amendment")
+        disposition = manifest.get("attempt_disposition")
+        identity = manifest.get("identity")
+        if (
+            manifest.get("schema_version") != "charting-loop/public-result-evidence/v2"
+            or not isinstance(execution, dict)
+            or not isinstance(disposition, dict)
+            or not isinstance(identity, dict)
+        ):
+            continue
+        amendments.append(
+            {
+                "attempt_disposition": disposition,
+                "execution_amendment": execution,
+                "manifest_path": manifest_path.relative_to(repo_root).as_posix(),
+                "release_id": manifest.get("release_id"),
+                "run_id": identity.get("run_id"),
+            }
+        )
+    return amendments
+
+
+def build_index_documents(
+    summaries: list[dict[str, Any]],
+    public_execution_amendments: list[dict[str, Any]] | None = None,
+) -> tuple[str, str]:
     ordered = sorted(summaries, key=lambda item: (str(item["study_id"]), str(item["run_id"])))
     json_text = json.dumps(
         {"schema_version": INDEX_SCHEMA, "runs": ordered},
@@ -3066,6 +3102,78 @@ def build_index_documents(summaries: list[dict[str, Any]]) -> tuple[str, str]:
                 str(value).replace("|", "\\|").replace("\n", " ") for value in cells
             ]
             lines.append("| " + " | ".join(escaped) + " |")
+    amendments = sorted(
+        public_execution_amendments or [],
+        key=lambda item: (str(item.get("run_id")), str(item.get("release_id"))),
+    )
+    if amendments:
+        lines.extend(
+            [
+                "",
+                "## Public executed-topology amendments",
+                "",
+                "These append-only public-v2 projections describe what actually ran; they do not rewrite the frozen STUDY or RUN registry.",
+                "",
+                "| release | run | arm | model / effort | timing | usage | seed / retry | QA / repair | service | pre-score image |",
+                "|---|---|---|---|---|---|---|---|---|---|",
+            ]
+        )
+        invalid_records: dict[tuple[str, str], dict[str, Any]] = {}
+        for item in amendments:
+            execution = item["execution_amendment"]
+            runtime = execution["tools_runtime"]
+            seed_retry = execution["seed_retry"]
+            qa_repair = execution["qa_repair_order"]
+            service = execution["service_revision"]
+            prescore = execution["prescore_world"]
+            cells = [
+                item["release_id"],
+                item["run_id"],
+                execution["arm"],
+                f"{runtime['model']} / {runtime['reasoning_effort']}",
+                execution["timing"]["status"],
+                execution["usage"]["status"],
+                f"{seed_retry['seed_status']} / {seed_retry['retry_status']}",
+                f"QA={qa_repair['qa_outcome']}; repairs={qa_repair['repair_attempts_executed']}; post-QA={str(qa_repair['post_repair_qa_performed']).lower()}",
+                service["status"],
+                prescore["image_sha256"],
+            ]
+            escaped = [
+                str(value).replace("|", "\\|").replace("\n", " ")
+                for value in cells
+            ]
+            lines.append("| " + " | ".join(escaped) + " |")
+            disposition = item["attempt_disposition"]
+            for record in disposition.get("invalid_predecessors", []):
+                key = (str(record.get("attempt_label")), str(record.get("reason")))
+                invalid_records[key] = record
+        lines.extend(
+            [
+                "",
+                "### Invalid predecessor disposition",
+                "",
+                "| attempt | status | counted | public record | reason | waiver |",
+                "|---|---|---|---|---|---|",
+            ]
+        )
+        if not invalid_records:
+            lines.append("| _(none)_ | | | | | |")
+        else:
+            for key in sorted(invalid_records):
+                record = invalid_records[key]
+                cells = [
+                    record["attempt_label"],
+                    record["status"],
+                    str(record["counted"]).lower(),
+                    record["public_record_status"],
+                    record["reason"],
+                    record["waiver_reason"],
+                ]
+                escaped = [
+                    str(value).replace("|", "\\|").replace("\n", " ")
+                    for value in cells
+                ]
+                lines.append("| " + " | ".join(escaped) + " |")
     return json_text, "\n".join(lines) + "\n"
 
 
@@ -3342,7 +3450,11 @@ def command_build_index(args: argparse.Namespace) -> int:
     if not report.ok:
         _emit(report, args.json)
         return 1
-    json_text, markdown_text = build_index_documents(summaries)
+    public_execution_amendments = collect_public_execution_amendments(root.resolve().parent)
+    json_text, markdown_text = build_index_documents(
+        summaries,
+        public_execution_amendments=public_execution_amendments,
+    )
     targets = (
         (root / "registry" / "INDEX.json", json_text),
         (root / "registry" / "EXPERIMENTS.md", markdown_text),
