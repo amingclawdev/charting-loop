@@ -102,6 +102,49 @@ WorldRef, it returns the same single result: a next Entrance or a typed refusal.
 implementation may use caches or indexes, but observable selection cannot depend on an
 unbounded search, branch tip, ambient state, or undeclared ranking choice.
 
+#### Rule closure, Contract binding, and Gate conformance
+
+A **Rule closure** is the exact applicable Rule set for one role, scope, and
+`WorldRef`, including every Rule ID, version, digest, source-authorized precedence or
+unresolved conflict, and the closure digest. Rule is the normative authority layer.
+An operational **Contract** may be a useful versioned container that binds a Rule
+closure to interfaces, identities, and evidence fields, but it is not a third input
+plane or an independent source of authority. Changing a Contract changes normative
+meaning only when an authorized transition changes its Rule closure or binding; that
+transition creates an explicit new revision rather than silently editing the old one.
+
+Rule closure has two separate proof obligations:
+
+- **Rule consistency:** within one revision, scope, and `WorldRef`, no two applicable
+  Rules have an unresolved requirement to produce incompatible verdicts, actions, or
+  state. Any precedence that resolves a conflict is itself source-authorized and
+  pinned. An unresolved conflict produces a typed `rule_conflict`; repairing a Gate
+  or Guide locally cannot resolve it.
+- **Rule-transition coherence:** across a declared path, the admitted output Facts,
+  identities, scopes, and warranty states of each transition are admissible inputs to
+  the next transition under the pinned Rule revisions. A Rule change, identity
+  rotation, or invalidation is an explicit transition to a new revision or generation,
+  never an ambient reinterpretation of earlier evidence.
+
+A **Gate** is an optional enforcement projection
+`Check(Rule closure, admitted Facts, role/scope, warranties, WorldRef) -> permit | typed block`.
+It can block an action, but it cannot invent a Rule, admit a Fact, synthesize missing
+evidence, or amend a Contract. Every Gate predicate maps to a pinned Rule ID and the
+exact admitted-Fact selector it evaluates. Gate conformance is complete when no
+applicable Rule is silently omitted and sound when no predicate imposes an orphan
+condition that lacks Rule authority. A Gate, Guide, and resulting Entrance for one
+decision must bind the same Rule-closure digest, admitted-Fact root, role/scope,
+`WorldRef`, warranty states, and verdict. A stale projection or disagreement produces
+a typed `projection_mismatch`, not a fallback decision.
+
+**Gate-chain coherence** is stronger than pairwise Gate success. For every declared
+path, the chain must be jointly satisfiable: a legal output of one Gate is admissible
+to the next, and this remains explicit through retry, resume, repair, identity or fence
+rotation, fan-out, fan-in, merge order, invalidation, and terminal transitions. A
+later Gate must not require evidence that an earlier legal transition could never
+produce. Whole-chain analysis includes blocked and bypassed paths; a no-PASS bypass
+can reveal later dependent blocks but cannot make the chain coherent or establish C.
+
 ### Entrance
 
 A Guide evaluation has exactly one semantic result. A successful result is one
@@ -399,11 +442,14 @@ Position, Direction, Entrance, EvidentialWarranty, and AuthorityWarranty must re
 separately named and their evidence receipts separately checkable.
 
 The proof-obligation order is: pin method and exact world; compile source-complete
-task acceptance; admit Rules and Facts; bind role definition and assignment; evaluate
-Guide to one tagged result; freeze the semantic closure; traverse one base world;
-certify the demonstrated path; establish a live scope-bound EvidentialWarranty; then
-establish a live AuthorityWarranty where the assignment, Rule, or tier requires it. A
-later obligation cannot retroactively satisfy an earlier one.
+task acceptance; admit Rules and Facts; establish a consistent Rule closure and
+coherent Rule transitions; bind role definition and assignment; for a profile that
+declares Gates, prove Gate conformance and whole-chain coherence; evaluate Guide to
+one tagged result from the same closure and Fact root; freeze the semantic closure;
+traverse one base world; certify the demonstrated path; establish a live scope-bound
+EvidentialWarranty; then establish a live AuthorityWarranty where the assignment,
+Rule, or tier requires it. A later obligation cannot retroactively satisfy an earlier
+one.
 
 ## 8. Authority and conflicts
 
@@ -470,6 +516,13 @@ A prospective v4 implementation conforms only if it:
 - uses exact `WorldRef` and closed `WorldSpan` identities;
 - keeps Rule and Fact input planes distinct from the Guide control plane and from
   MethodRef/knowledge inputs;
+- treats Rule as the normative authority layer and any operational Contract as a
+  versioned Rule-closure container/binding, never as an independent authority source;
+- proves Rule consistency and Rule-transition coherence, and represents unresolved
+  conflict, revision change, identity rotation, and invalidation explicitly;
+- when Gates are declared, maps every Gate predicate to a pinned Rule and admitted-Fact
+  selector, binds Gate and Guide to the same closure and verdict, and checks whole-chain
+  satisfiability across retry, resume, repair, fan-out, and fan-in;
 - freezes a task acceptance ledger whose atomic items retain source, scope, Rule, and
   typed relations; keeps definition, applicability, coverage, and assessment states
   distinct; and reports unmapped, ambiguous, or unresolved requirements rather than

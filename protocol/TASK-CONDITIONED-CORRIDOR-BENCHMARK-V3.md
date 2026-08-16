@@ -115,6 +115,15 @@ An incomplete or invalid acceptance ledger is therefore evidence, not a runtime 
 Worker still executes and Harbor still grades. The harness records internal QA as
 `not_assessed` whenever a purported pass cannot prove complete acceptance.
 
+The method's Rule/Gate obligations still apply as analysis boundaries. The authority
+layer is Rule. A Contract, when present, is only its versioned container or binding;
+and a Gate may only check the pinned Rules against admitted Facts. A Builder may emit a
+non-blocking Rule-closure manifest, Gate map, static checker, or post-hoc chain audit.
+The harness may record whether predicates map to Rules and whether the declared chain
+is jointly satisfiable, but neither result becomes permission to run or a prerequisite
+for Harbor grading. A Gate does not become a Rule merely because it blocks, and a
+Guide does not repair a Rule conflict by choosing a convenient next step.
+
 Gates belong in a separate long-lived-system protocol after the structure is stable.
 If an early U→C gate in such a system blocks because required evidence cannot yet
 exist, preserve the block, bypass/waive that gate without claiming PASS, finish the

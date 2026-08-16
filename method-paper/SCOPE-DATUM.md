@@ -51,6 +51,16 @@ narrower than whole-task closure. Missing or incomplete acceptance makes interna
 closure `blocked` or `not_assessed`; it does not gate execution or the external
 evaluator.
 
+Draft v4 also makes an existing architectural implication explicit: Rule is the
+normative authority layer, while an operational Contract is only a versioned container
+or binding for a Rule closure. Conformance therefore requires Rule consistency,
+Rule-transition coherence, Gate-to-Rule conformance, and whole Gate-chain coherence.
+A Gate may check applicable Rules against admitted Facts but cannot create authority,
+and Gate, Guide, and Entrance projections for one decision must share the same Rule
+closure, Fact root, role/scope, `WorldRef`, warranty state, and verdict. These are
+method-level proof obligations for a profile that declares Gates, not a requirement
+that a benchmark Builder install blocking runtime governance.
+
 This amendment was prompted by a post-hoc review of one excluded benchmark smoke run
 in which a genuine QA witness was repaired but a different public acceptance
 dimension remained omitted. Only that abstract failure shape informed the method.
