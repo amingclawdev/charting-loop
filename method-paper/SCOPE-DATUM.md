@@ -1,4 +1,4 @@
-# Scope datum for prospective draft v4
+# Scope datum for Charting Loop corridor method v4
 
 This non-normative datum freezes the source and judgment boundary used to draft
 `METHOD.md`.
@@ -14,10 +14,12 @@ This non-normative datum freezes the source and judgment boundary used to draft
   drafting provenance and is not a public theory dependency of this method version.
 - Repository design cutoff: 2026-08-16.
 - Experience boundary: checked-in v1 protocol plus the ratified CL-008 through CL-015
-  architecture decisions and their cataloged claims, followed by a generic review of
-  the distinction between executor self-report, independently replayable observation,
-  and independent assessment. No task identifier, score, failure string, test name,
-  repair hint, or empirical outcome is imported into builder-visible method text.
+  architecture decisions and their cataloged claims, followed by generic reviews of
+  executor self-report versus independently replayable observation, task-acceptance
+  omission, and authority-layer/Gate-chain failure shapes. Aming Claw is a practice
+  source that helped expose those shapes; it is not a reference architecture or
+  evidence that the method works. No task identifier, score, failure string, hidden
+  test, repair hint, or empirical outcome is imported into builder-visible method text.
 
 Draft v2 added repository-specific construction decisions—Rule/Fact input planes, a
 deterministic Guide control plane, separate role definition and assignment, one bounded
@@ -32,7 +34,7 @@ results belong to Paper 3. Those method-level mappings do not alone trigger a Th
 A future theory release requires a material change to definitions, factorization,
 scope, predictions, or falsifiers.
 
-Prospective draft v3 adds two method-level evidence decisions without revising Theory
+Draft v3 added two method-level evidence decisions without revising Theory
 v1: a runner-held hash-linked append-only Position ledger, and an Independent QA role
 whose assessment is distinct from builder and executor self-report. The ledger is RAW
 observation and QA is an additional assessment Fact; neither can mint a certificate,
@@ -41,7 +43,7 @@ budget, matched-arm topology, and scoring order remain protocol variables. These
 are deliberately un-cataloged; the frozen `paper2-current-v2` representation and its
 source/scope digests remain unchanged.
 
-Prospective draft v4 adds a task acceptance ledger to Direction and strengthens
+Version v4 adds a task acceptance ledger to Direction and strengthens
 Corridor-assisted Independent QA. The ledger atomizes every public normative task
 clause with a source reference, scope, decision Rule, and typed relationship, while
 keeping definition, applicability, coverage, and assessment states distinct. QA uses
@@ -51,7 +53,7 @@ narrower than whole-task closure. Missing or incomplete acceptance makes interna
 closure `blocked` or `not_assessed`; it does not gate execution or the external
 evaluator.
 
-Draft v4 also makes an existing architectural implication explicit: Rule is the
+Version v4 also makes an existing architectural implication explicit: Rule is the
 normative authority layer, while an operational Contract is only a versioned container
 or binding for a Rule closure. Conformance therefore requires Rule consistency,
 Rule-transition coherence, Gate-to-Rule conformance, and whole Gate-chain coherence.
@@ -61,6 +63,17 @@ closure, Fact root, role/scope, `WorldRef`, warranty state, and verdict. These a
 method-level proof obligations for a profile that declares Gates, not a requirement
 that a benchmark Builder install blocking runtime governance.
 
+Version v4 also states the architecture boundary explicitly. Its named objects are
+semantic roles and proof obligations, not mandatory services, agents, modules, files,
+schema fields, or deployment topology. Facade/interface fields and Git commit identity
+belong to a software/Git projection; other profiles may use prompts, checklists, rule
+tables, validators, workflow engines, database snapshots, API versions, device states,
+or other canonically frozen equivalents. Construction experiments use a nonblocking
+profile so that internal `blocked` or `not_assessed` outcomes remain observable without
+changing external execution. Long-lived governed systems may add Gates only with Rule
+authority, Fact selectors, projection conformance, whole-chain coherence, and the
+linear-unlock recovery rule.
+
 This amendment was prompted by a post-hoc review of one excluded benchmark smoke run
 in which a genuine QA witness was repaired but a different public acceptance
 dimension remained omitted. Only that abstract failure shape informed the method.
@@ -68,4 +81,6 @@ The task identifier, task files, hidden-verifier material, solution details, sco
 role transcripts, and repair content remain in git-ignored exogenous custody and are
 not imported into these builder-visible bytes. The observation does not retroactively
 change the frozen v2 method, the earlier matched study, or the already-completed smoke
-run. These v4 bytes are deliberately un-cataloged and not study-eligible.
+run. Version v4 is frozen as a separate, exactly addressed research package; the v2
+package and its catalog identities remain unchanged. Study eligibility is a catalog
+property of exact bytes and never implies operational adoption eligibility.

@@ -1,12 +1,11 @@
-# Charting Loop corridor method — prospective draft v4
+# Charting Loop corridor method — v4
 
-Status: **prospective, un-cataloged working draft**. This file is the sole normative
-method source in this repository, but these worktree bytes are not a cataloged study
-input and are not builder-eligible. The frozen `paper2-current-v2` package remains
-unchanged at its cataloged source commit; a study that names it receives those exact
-v2 bytes, not this prospective amendment. Other Markdown, templates, schemas, and
-checklists are explanatory or executable projections and must not silently add
-requirements.
+Status: **normative source**. A study or implementation adopts this version only by
+pinning an exact frozen catalog identity (source commit, path, content digest, and
+scope-datum digest); a branch tip or mutable working-tree copy is not a method input.
+The earlier frozen `paper2-current-v2` package remains an independently addressable
+historical study input. Other Markdown, templates, schemas, and checklists are
+explanatory or executable projections and must not silently add requirements.
 
 ## 1. Claim boundary
 
@@ -36,6 +35,24 @@ The method has two input planes and one control plane:
 A paper, method package, retrieval corpus, or other supporting material is a pinned
 `MethodRef` or knowledge input. It may inform Rule construction, but a runtime cannot
 promote it or a Fact into an authorizing Rule without an explicit authorized transition.
+
+### Architecture and projection boundary
+
+The named objects in this method are **semantic roles and proof obligations**, not a
+required software architecture. Position, Direction, Entrance, Rule, Fact, Guide,
+Gate, Contract, Candidate, receipt, certificate, and warranty do not imply separate
+services, agents, classes, files, tables, or schema field names. One physical component
+may discharge several roles, and one role may be projected across several components,
+provided the propositions, identities, transitions, and evidence remain separately
+checkable.
+
+A Corridor may therefore be implemented as a prompt or checklist, a rule table, a
+static validator, a command-line tool, a deterministic service, a workflow or policy
+engine, or a declared composition of these. Conformance depends on semantic and
+evidence equivalence to this method, not on naming, module boundaries, deployment
+shape, or resemblance to any source system. Repository examples, including Aming
+Claw, are practice sources and non-normative projections; none is a reference
+architecture.
 
 The architectural correspondence is dominant, not one-to-one: Facts principally
 supply the substrate for Position (P); Rules principally anchor Direction (D) while
@@ -156,36 +173,37 @@ binds:
 1. the frozen task and Direction;
 2. the starting Position and exact `WorldRef`;
 3. the applicable Rule set;
-4. one deterministic, consumable instruction whose declared facade ID/version/digest,
-   nested interface ID/version/digest/operation, canonical argument digest
-   (`argument_mode` plus `opaque_key`), and lookup-scope ID/version/digest are pinned,
-   closed, bounded, and single-result;
+4. one deterministic, consumable instruction with a pinned operation identity and
+   version, canonical input binding, closed lookup or selection scope, declared result
+   cardinality, and content or closure digest;
 5. a unique allowed-action string set, its canonical set digest, exactly one declared
    action-transition Rule with matching ID/version/scope/ref and the same digest, and an
    explicit blocked outcome; and
 6. the assigned role permitted to traverse it.
 
-The Entrance may be serialized across several files, commands, or interfaces, but those
-are projections of the same entrance identity. Multiple UI buttons or files are not
-multiple semantic Entrances. An opaque key is acceptable only when its lookup is
-deterministically bounded; an unconstrained key or query merely defers the decision.
+The Entrance may be serialized across several files, commands, interfaces, messages,
+or physical actions, but those are projections of the same entrance identity. Multiple
+UI buttons or files are not multiple semantic Entrances. A key, query, or human-readable
+reference is acceptable only when its resolution is deterministically bounded; an
+unconstrained lookup merely defers the decision.
 Giving the executor a large file and telling it to use grep, search, or RAG formally
 pushes bytes but semantically pulls the instruction at execution time. That pattern is
 not a consumable Entrance unless the selection scope, digest, rule, and result bound are
 already frozen. Choosing any undeclared path is a bypass.
 
-These pins are structural declarations. A manifest validator cannot dereference the
-facade, interface, or lookup-scope digests, prove that the interface operation ran, or
-prove closed runtime selection. Navigation-keyword rejection is only an auxiliary
-fail-closed check; a real Candidate needs a GuideReceipt and consume-time verifier to
-establish what the runtime actually selected and invoked.
+These pins are structural declarations. A manifest validator cannot by itself
+dereference an operation or selection-scope digest, prove that the declared operation
+ran, or prove closed runtime selection. A real Candidate needs a GuideReceipt or
+profile-equivalent observation and a consume-time verifier to establish what the
+runtime actually selected and invoked.
 
 ### Candidate
 
 A Candidate is a version-identifiable proposal for a corridor revision. An open
 Candidate may still be built and corrected; it is neither immutable nor certifiable.
 A frozen Candidate revision seals its semantic closure: the selected Guide result,
-role-bound Position, implementation tree (including its runner-owned Guide contract), pinned
+role-bound Position, implementation artifact closure (including its runner-owned Guide
+binding), pinned
 MethodRefs/knowledge inputs, Rule and Fact planes, exact WorldRef, and known limits.
 Only that frozen revision is immutable and eligible for traversal or certification.
 Any semantic change after freezing creates a new revision. A Candidate, open or frozen,
@@ -193,13 +211,10 @@ makes no certificate, warranty, authority, charted-state, or score claim by itse
 
 ## 3. Exact worlds
 
-A `WorldRef` is exact rather than branch-relative. It contains:
+A `WorldRef` is exact rather than ambient or moving-target-relative. It contains:
 
-- the project, run, and generation identities;
-- the canonical repository identity as a strict HTTPS URL and full immutable base
-  commit; the URL has
-  a valid host and port and no credentials, query, fragment, whitespace/control
-  characters, backslash, or dangling port separator;
+- the project, run, and generation identities, or profile-declared equivalents;
+- the canonical governed-world identity and an immutable base revision;
 - the environment or fixture digest;
 - the RAW ledger stream identity, contiguous prefix watermark, and prefix digest;
 - the admission receipt and admitted-root digest plus the admission Rule revision and
@@ -207,20 +222,45 @@ A `WorldRef` is exact rather than branch-relative. It contains:
 - the projector schema version and algorithm identity, version, and digest; and
 - the derived-state digest.
 
-A branch is only a location hint. “Current,” a short commit, or an unpinned tag is not a
-`WorldRef`. Changing any listed identity or digest creates a different `WorldRef`.
+The active environment, “current,” a mutable label, or an unpinned version is not a
+`WorldRef`. A software/Git profile may require a credential-free canonical HTTPS
+repository URL and full commit; a database, API, image, device, or physical-process
+profile must declare an equivalently immutable identity and canonical serialization.
+Changing any listed identity or digest creates a different `WorldRef`.
 Timeline presence alone is not an admitted Fact: only the admission receipt/root under
 the pinned admission Rule can move evidence into the Fact plane.
 
 A `WorldSpan` is closed only when it binds exact start and end `WorldRef` values over
-the same project, run, generation, repository identity, full base commit, environment,
+the same project, run, generation, governed-world identity, immutable base revision, environment,
 admission Rule, and projector. Its end may extend only the same RAW ledger by a
 contiguous prefix. The admitted Fact subset and derived state may change as newly
 present evidence is admitted, but every such change yields a new endpoint `WorldRef`.
-A base-commit, admission-Rule, or projector change ends the old span and requires a new
-generation and Candidate revision; no certificate may bridge those worlds. An
+A base-revision, admission-Rule, or projector change ends the old span and requires a
+new generation and Candidate revision; no certificate may bridge those worlds. An
 open-ended “until now” span cannot certify a traversal, and an admitted-prefix summary
 cannot substitute for the RAW prefix.
+
+### Implementation profiles
+
+Every use declares one profile whose additional encodings and enforcement choices are
+frozen with the Candidate. A profile may strengthen the core but cannot weaken it or
+silently change the meaning of a core object.
+
+- The **construction-experiment profile** freezes the acceptance ledger, Guide result,
+  Candidate, evidence visibility, and scoring order, but does not install new blocking
+  runtime Gates. Incomplete internal closure remains visible as `blocked` or
+  `not_assessed` while the executor and external evaluator continue.
+- The **long-lived governed-system profile** may enforce declared Gates after their Rule
+  authority, Fact selectors, projection conformance, and whole-chain satisfiability are
+  established. Its recovery procedure uses the linear-unlock rule in Section 6.
+- A **software/Git projection** may encode an Entrance as facade/interface/operation,
+  canonical arguments such as `argument_mode` and `opaque_key`, and a closed lookup
+  scope; it may encode a WorldRef with a strict HTTPS repository URL and full commit.
+  These are profile fields, not universal vocabulary.
+- A **non-Git projection** supplies equivalent canonical identities—for example a
+  database snapshot, API version, image digest, device state, signed record set, or
+  bounded physical-process checkpoint—and declares how they are serialized and
+  verified.
 
 ### Append-only Position ledger
 
@@ -241,7 +281,7 @@ reported as evidence loss; it does not erase the run or suppress an official sco
 
 ### Independent QA
 
-For a prospective current-C or consumability claim, an **Independent QA** actor and
+For a current-C or consumability claim, an **Independent QA** actor and
 session are distinct from the Candidate Builder and the Executor. QA binds the exact
 frozen subject revision, Direction, Position, `WorldRef` or closed `WorldSpan`, and the
 Position-ledger prefix it actually reviewed. It emits one append-only assessment Fact:
@@ -272,11 +312,12 @@ incomplete Corridor.
 
 ## 4. Construction procedure
 
-1. **Pin the method.** Select one cataloged method version. The cataloged
-   `paper2-current-v2` package is `study_eligible=true` and may be frozen as a research
-   input, while `adoption_eligible=false` (and its legacy projection
-   `builder_eligible=false`) means it is not approved for operational adoption. This
-   prospective draft v4 is not cataloged or study-eligible.
+1. **Pin the method.** Select one exact cataloged method version and verify its source
+   commit, path, content digest, and scope-datum digest. More than one historical
+   version may remain independently study-eligible; “latest” is never a valid
+   MethodRef. Study eligibility permits a package to be frozen as a research input,
+   while `adoption_eligible=false` (and its legacy projection
+   `builder_eligible=false`) means it is not approved for operational adoption.
 2. **Freeze exogenous inputs.** A runner freezes the task, Direction, fixtures,
    evaluator/scorer, model/runtime constraints, and initial `WorldRef`. Empirical task,
    run, score, and optional-log data remain under `exogenous/`; they are not imported
@@ -293,15 +334,15 @@ incomplete Corridor.
 5. **Bind Position.** Name the Candidate revision, versioned role-definition Rule,
    separate authority- and liveness-bearing assignment Fact, governed object, and exact
    `WorldRef`. Declare which independent Facts can establish the assignment.
-6. **Compile Guide and one result.** The runner freezes the deterministic Guide contract
+6. **Compile Guide and one result.** The runner freezes the deterministic Guide binding
    over Rules, admitted Facts, role/scope, and warranties before builder dispatch.
    Materialize one Entrance with a bounded consumable instruction, or one typed refusal
    with a durable reason. The Entrance binds its effective Direction to the declared
    Direction-compilation Rule and its canonical allowed-action set to the declared
    action-transition Rule carrying the identical action-set digest; a typed refusal
-   binds its governing Rule and evaluated input context. The runner pins the facade,
-   interface operation, exact argument digest, lookup-scope identity/digest, and
-   single-result bound. A physically co-located contract remains runner-owned and
+   binds its governing Rule and evaluated input context. The runner pins the operation,
+   canonical input digest, selection-scope identity/digest, and result bound using the
+   declared profile. A physically co-located Contract remains runner-owned and
    read-only; location does not make it builder-writable.
 7. **Build the open Candidate.** Give the builder only the declared Entrance and pinned
    MethodRef/knowledge inputs. The builder writes only the explicitly builder-owned
@@ -325,7 +366,7 @@ incomplete Corridor.
    and outcome, and signs or otherwise identifies the receipt issuer.
 12. **Certify the demonstrated path.** An independent PathCertificate may make only its
    certificate-covered path provisionally charted. No other Candidate scope is implied.
-13. **Establish current consumability.** Under this prospective draft, only scope with
+13. **Establish current consumability.** Only scope with
     a QA `pass`, PathCertificate, and live EvidentialWarranty enters current,
     scope-indexed C. QA pass is not a substitute for either record. Consuming the
     actor–role Assignment additionally requires its EvidentialWarranty and
@@ -437,9 +478,10 @@ one gate defect at a time. It never converts the bypassed path into PASS or C.
 
 ## 7. Composite mechanisms and proof-obligation order
 
-Physical modules and agents may combine responsibilities. For example, one handoff can
-materialize Direction, role-bound Position, and Entrance; the method does not require a
-separate component per P/D/E factor. Composition does not collapse propositions:
+Physical modules, documents, tools, and agents may combine responsibilities. For
+example, one handoff can materialize Direction, role-bound Position, and Entrance; the
+method does not require a separate component per P/D/E factor. Composition does not
+collapse propositions:
 Position, Direction, Entrance, EvidentialWarranty, and AuthorityWarranty must remain
 separately named and their evidence receipts separately checkable.
 
@@ -460,7 +502,8 @@ claim must resolve actor, act, scope, version, provenance, and applicable confli
 An AI may activate a Rule only inside a pre-authorized envelope and inherits no broader
 permission. When a cataloged method paper is adopted, it defines method Rules and a
 construction specification. It still never supplies the task-specific Direction or an
-external authority grant; this checked-in draft is not adopted for builder use.
+external authority grant. Research-input eligibility does not imply operational
+adoption eligibility.
 
 ## 9. Probability and experimental-unit bridge
 
@@ -494,27 +537,25 @@ or a method-level claim that C has been established. The default parity record i
 one deterministic evaluator rather than two agents. One digest-bound, sanitized
 Docker/Codex pair is retained only as a runner-reported engineering observation.
 Neither is a benchmark, an effect estimate, an authority assessment, or evidence that
-this draft method is ready for adoption.
+this method is ready for operational adoption.
 
-An Aming Claw Contract handoff remains a useful future composite-mechanism example: one
-bound handoff may jointly carry Direction, a role definition plus live assignment, and
-one Entrance. That example must pin an exact repository commit and trace cutoff, then
-map distinct evidence receipts to each proposition. Its worked-example commit, trace,
-GuideReceipt, PathCertificate, and live EvidentialWarranty references remain
-`TODO/unresolved`; this paragraph does not claim that Aming Claw currently implements
-every abstract obligation above.
+An Aming Claw Contract handoff illustrates one possible composite projection: one bound
+handoff may jointly carry Direction, a role definition plus live assignment, and one
+Entrance. It is neither privileged nor required. Any use as evidence must pin an exact
+repository commit and trace cutoff, then map distinct receipts to each proposition;
+this paragraph does not claim that Aming Claw implements every abstract obligation.
 
 ## 11. Conformance
 
-A prospective v4 implementation conforms only if it:
+A v4 implementation conforms only if it:
 
 - preserves an exact role definition, separate role assignment, and role-bound Position;
 - uses a declared deterministic Guide to return exactly one tagged, bounded, consumable
   Entrance or typed refusal, while recognizing that structure alone cannot prove runtime
   determinism;
 - binds the Entrance action set and digest to exactly one declared action-transition
-  Rule, and pins the declared facade/interface operation, canonical arguments, and
-  closed lookup scope at cardinality one;
+  Rule, and pins the profile-declared operation, canonical inputs, closed selection
+  scope, and result cardinality;
 - uses exact `WorldRef` and closed `WorldSpan` identities;
 - keeps Rule and Fact input planes distinct from the Guide control plane and from
   MethodRef/knowledge inputs;
@@ -538,9 +579,12 @@ A prospective v4 implementation conforms only if it:
   revisions, and completes U → C only through fresh traversal, PathCertificate, and a
   live scope-bound EvidentialWarranty;
 - keeps experimental acceptance/QA incompleteness non-gating and reports it as
-  `blocked` or `not_assessed` while preserving external evaluation; and
-- reports this version as draft, `study_eligible=false`, and
-  `adoption_eligible=false`/`builder_eligible=false`.
+  `blocked` or `not_assessed` while preserving external evaluation;
+- declares the exact implementation profile and proves semantic/evidence equivalence
+  without requiring any named source system's modules, services, schema fields, or
+  deployment shape; and
+- reports eligibility from the exact frozen method catalog rather than inferring it
+  from this mutable file or from version recency.
 
 Conformance does not imply that the method works better than a control. That question
 belongs to separately frozen, exogenous studies and repeated independent trials.
