@@ -11,8 +11,10 @@ apart. The method proposes compiling those task-specific relationships into a
 Corridor that later agents can inspect and replay.
 
 Version 3 asks a performance question: how well does the complete method-instantiated
-agent perform on Terminal-Bench 3.0? It includes construction, execution, and an
-independent Corridor-visible QA/rework loop in one scored Harbor trial.
+agent perform on Terminal-Bench 3.0? Its next run uses the prospective v4 method and
+agent v0.2.0. It includes construction, execution, and an independent
+Corridor-visible QA/rework loop in one scored Harbor trial. This prospective change
+does not relabel an earlier smoke run that used the v3 method and agent v0.1.0.
 
 A leaderboard score is an end-to-end performance result. It is not, by itself,
 evidence that the paper caused an improvement. Method attribution still needs a
@@ -54,6 +56,18 @@ adapter does not provide a read-only clone of mutable databases or services. Tha
 limitation is acceptable for a leaderboard probe but must be removed or separately
 measured before treating the run as a clean causal experiment.
 
+The frozen Corridor contains `ACCEPTANCE.json`, a task acceptance ledger compiled
+from the official instruction and all named public specifications. Each atomic item
+has a stable ID, source reference, task scope, decision rule, and typed relations to
+overlapping or dependent items. The freeze manifest records whether that ledger is
+complete, incomplete, invalid, or missing and records the exact expected ID set.
+
+Worker uses the ledger to check the entire task. QA uses the same ledger and Corridor
+for diagnostics, but also independently re-reads the original public sources so all
+three roles do not merely inherit the same omission. QA emits one result for every
+expected ID and distinguishes definition, applicability, source coverage, and
+observed assessment. Closing one repair witness never implies whole-task closure.
+
 ## Per-trial sequence
 
 1. Start a fresh official task environment.
@@ -63,16 +77,20 @@ measured before treating the run as a clean causal experiment.
 4. Close the Corridor byte set: reject symlinks/special files, record every relative
    path, size, and SHA-256, hash the manifest, and remove all write bits. If the
    Builder produced no safe files, freeze an explicit construction-failure Corridor
-   rather than importing a prebuilt artifact or aborting the trial.
+   rather than importing a prebuilt artifact or aborting the trial. Record the
+   acceptance-ledger status and exact IDs without blocking the trial when the ledger
+   is absent or incomplete.
 5. Start a fresh Worker session. It reads the frozen Corridor, executes the official
    task, and verifies its own mutations.
 6. Start a distinct QA session. It reads and may execute the same Corridor for
-   diagnostic and counterfactual checks, but it may write only its assessment.
+   diagnostic and counterfactual checks, independently re-reads the public task
+   sources, and may write only its assessment.
 7. Treat `pass`, `blocked`, and `not_assessed` as advisory terminal QA observations.
    A `fail` can trigger repair only when it contains a concrete constraint,
    observation, and safe replay witness tied to the expected Corridor digest.
-8. On one valid witnessed fail, restore the original Worker session for exactly one
-   repair pass, then restore the original QA session for exactly one closure check.
+8. On one valid witnessed fail tied to an acceptance ID, restore the original Worker
+   session for exactly one repair pass, then restore the original QA session for
+   exactly one whole-ledger closure check.
 9. Return unconditionally to Harbor grading. QA never suppresses, replaces, or
    short-circuits the benchmark grader.
 
@@ -93,6 +111,10 @@ A Corridor may expose a validator, planner, warning, diagnostic refusal, or boun
 write API. Those are explicit tools. They must not become a new prerequisite for the
 Worker to continue, and QA must not become a grading gate.
 
+An incomplete or invalid acceptance ledger is therefore evidence, not a runtime gate.
+Worker still executes and Harbor still grades. The harness records internal QA as
+`not_assessed` whenever a purported pass cannot prove complete acceptance.
+
 Gates belong in a separate long-lived-system protocol after the structure is stable.
 If an early U→C gate in such a system blocks because required evidence cannot yet
 exist, preserve the block, bypass/waive that gate without claiming PASS, finish the
@@ -108,6 +130,10 @@ it is not the benchmark procedure in this document.
 - No oracle, verifier test, hidden reward, or task-specific online solution search.
 - No omission of Builder/QA calls or their token and cost accounting.
 - No conversion of an invalid or witness-free QA fail into repair authority.
+- No internal QA pass with a missing, duplicate, unknown, unmapped, unresolved, or
+  unassessed acceptance item.
+- No use of any post-hoc downloaded task, verifier output, or role transcript as an
+  input to a later Builder, Worker, or QA.
 - No claim that three attempts on one task are three distinct task samples.
 
 ## Interpretation

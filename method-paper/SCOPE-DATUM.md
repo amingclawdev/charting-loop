@@ -1,4 +1,4 @@
-# Scope datum for prospective draft v3
+# Scope datum for prospective draft v4
 
 This non-normative datum freezes the source and judgment boundary used to draft
 `METHOD.md`.
@@ -12,7 +12,7 @@ This non-normative datum freezes the source and judgment boundary used to draft
 - Consulted drafting snapshot: `internal-v5-arxiv-initial` at commit
   `e0dd3a466654011ecf0cb6d8f32e9cbbc4c3cc99`. It is retained only as non-primary
   drafting provenance and is not a public theory dependency of this method version.
-- Repository design cutoff: 2026-08-14.
+- Repository design cutoff: 2026-08-16.
 - Experience boundary: checked-in v1 protocol plus the ratified CL-008 through CL-015
   architecture decisions and their cataloged claims, followed by a generic review of
   the distinction between executor self-report, independently replayable observation,
@@ -40,3 +40,22 @@ Warranty, authority, PASS, or current C. Experiment-facing QA visibility, timing
 budget, matched-arm topology, and scoring order remain protocol variables. These bytes
 are deliberately un-cataloged; the frozen `paper2-current-v2` representation and its
 source/scope digests remain unchanged.
+
+Prospective draft v4 adds a task acceptance ledger to Direction and strengthens
+Corridor-assisted Independent QA. The ledger atomizes every public normative task
+clause with a source reference, scope, decision Rule, and typed relationship, while
+keeping definition, applicability, coverage, and assessment states distinct. QA uses
+the same frozen Corridor as the Worker but independently re-reads the public task
+sources, accounts for the exact acceptance-ID set, and treats witness closure as
+narrower than whole-task closure. Missing or incomplete acceptance makes internal
+closure `blocked` or `not_assessed`; it does not gate execution or the external
+evaluator.
+
+This amendment was prompted by a post-hoc review of one excluded benchmark smoke run
+in which a genuine QA witness was repaired but a different public acceptance
+dimension remained omitted. Only that abstract failure shape informed the method.
+The task identifier, task files, hidden-verifier material, solution details, score,
+role transcripts, and repair content remain in git-ignored exogenous custody and are
+not imported into these builder-visible bytes. The observation does not retroactively
+change the frozen v2 method, the earlier matched study, or the already-completed smoke
+run. These v4 bytes are deliberately un-cataloged and not study-eligible.

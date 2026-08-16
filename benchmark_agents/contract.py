@@ -19,13 +19,19 @@ from typing import Any
 RUNTIME_ROOT = "/tmp/charting-loop"
 METHOD_PATH = f"{RUNTIME_ROOT}/method/METHOD.md"
 CORRIDOR_PATH = f"{RUNTIME_ROOT}/corridor"
+ACCEPTANCE_PATH = f"{CORRIDOR_PATH}/ACCEPTANCE.json"
 FREEZE_PATH = f"{RUNTIME_ROOT}/FREEZE.json"
 QA_PATH = f"{RUNTIME_ROOT}/qa/assessment.json"
 CLOSURE_PATH = f"{RUNTIME_ROOT}/qa/closure.json"
 
 FREEZE_SCHEMA = "charting-loop/frozen-task-corridor/v1"
-ASSESSMENT_SCHEMA = "charting-loop/corridor-qa-assessment/v1"
+ACCEPTANCE_SCHEMA = "charting-loop/task-acceptance-ledger/v1"
+ASSESSMENT_SCHEMA = "charting-loop/corridor-qa-assessment/v2"
 QA_OUTCOMES = frozenset({"pass", "fail", "blocked", "not_assessed"})
+ACCEPTANCE_APPLICABILITY = frozenset(
+    {"applicable", "not_applicable", "unknown"}
+)
+ACCEPTANCE_STATES = frozenset({"pass", "fail", "unknown", "not_reached"})
 SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 MAX_QA_JSON_BYTES = 256 * 1024
 
@@ -140,6 +146,176 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
                 raise ValueError("corridor contains no regular files")
             return records
 
+        def summarize_acceptance():
+            path = corridor / "ACCEPTANCE.json"
+            summary = {{
+                "status": "missing",
+                "schema_version": None,
+                "acceptance_ids": [],
+                "required_acceptance_ids": [],
+                "unmapped_count": 0,
+                "ambiguous_count": 0,
+                "errors": [],
+            }}
+            if path.is_symlink() or not path.is_file():
+                summary["errors"].append("ACCEPTANCE_LEDGER_MISSING")
+                return summary
+
+            def reject_duplicates(pairs):
+                value = {{}}
+                for key, item in pairs:
+                    if key in value:
+                        raise ValueError(f"duplicate key: {{key}}")
+                    value[key] = item
+                return value
+
+            try:
+                ledger = json.loads(
+                    path.read_text(encoding="utf-8"),
+                    object_pairs_hook=reject_duplicates,
+                    parse_constant=lambda item: (_ for _ in ()).throw(
+                        ValueError(f"non-finite value: {{item}}")
+                    ),
+                )
+            except Exception as exc:
+                summary["status"] = "invalid"
+                summary["errors"].append(
+                    f"ACCEPTANCE_LEDGER_JSON:{{type(exc).__name__}}"
+                )
+                return summary
+
+            if not isinstance(ledger, dict):
+                summary["status"] = "invalid"
+                summary["errors"].append("ACCEPTANCE_LEDGER_OBJECT_REQUIRED")
+                return summary
+            summary["schema_version"] = ledger.get("schema_version")
+            if ledger.get("schema_version") != {ACCEPTANCE_SCHEMA!r}:
+                summary["errors"].append("ACCEPTANCE_LEDGER_SCHEMA")
+
+            coverage = ledger.get("coverage")
+            if not isinstance(coverage, dict):
+                summary["errors"].append("ACCEPTANCE_COVERAGE_OBJECT_REQUIRED")
+                coverage = {{}}
+            for field in ("unmapped_clauses", "ambiguous_clauses"):
+                values = coverage.get(field)
+                if not isinstance(values, list):
+                    summary["errors"].append(
+                        "ACCEPTANCE_" + field.upper() + "_LIST_REQUIRED"
+                    )
+                    values = []
+                summary[
+                    "unmapped_count"
+                    if field == "unmapped_clauses"
+                    else "ambiguous_count"
+                ] = len(values)
+                for index, value in enumerate(values):
+                    if not isinstance(value, dict):
+                        summary["errors"].append(
+                            f"ACCEPTANCE_{{field.upper()}}_{{index}}"
+                        )
+                        continue
+                    for required_field in ("source_ref", "statement", "reason"):
+                        item = value.get(required_field)
+                        if not isinstance(item, str) or not item.strip():
+                            summary["errors"].append(
+                                f"ACCEPTANCE_{{field.upper()}}_"
+                                f"{{required_field.upper()}}_{{index}}"
+                            )
+
+            items = ledger.get("items")
+            if not isinstance(items, list) or not items:
+                summary["errors"].append("ACCEPTANCE_ITEMS_NONEMPTY_LIST_REQUIRED")
+                items = []
+            seen = set()
+            relation_targets = []
+            for index, item in enumerate(items):
+                if not isinstance(item, dict):
+                    summary["errors"].append(f"ACCEPTANCE_ITEM_{{index}}")
+                    continue
+                acceptance_id = item.get("acceptance_id")
+                if not isinstance(acceptance_id, str) or not acceptance_id.strip():
+                    summary["errors"].append(f"ACCEPTANCE_ID_{{index}}")
+                    continue
+                if acceptance_id in seen:
+                    summary["errors"].append(
+                        f"ACCEPTANCE_ID_DUPLICATE:{{acceptance_id}}"
+                    )
+                    continue
+                seen.add(acceptance_id)
+                summary["acceptance_ids"].append(acceptance_id)
+                if item.get("required") is True:
+                    summary["required_acceptance_ids"].append(acceptance_id)
+                elif item.get("required") is not False:
+                    summary["errors"].append(
+                        f"ACCEPTANCE_REQUIRED_BOOLEAN:{{acceptance_id}}"
+                    )
+                for field in ("source_ref", "statement"):
+                    value = item.get(field)
+                    if not isinstance(value, str) or not value.strip():
+                        summary["errors"].append(
+                            f"ACCEPTANCE_{{field.upper()}}:{{acceptance_id}}"
+                        )
+                if item.get("definition_state") not in (
+                    "defined",
+                    "ambiguous",
+                ):
+                    summary["errors"].append(
+                        f"ACCEPTANCE_DEFINITION_STATE:{{acceptance_id}}"
+                    )
+                for field in ("scope", "rule"):
+                    value = item.get(field)
+                    if not isinstance(value, dict) or not value:
+                        summary["errors"].append(
+                            f"ACCEPTANCE_{{field.upper()}}:{{acceptance_id}}"
+                        )
+                relations = item.get("relations")
+                if not isinstance(relations, list):
+                    summary["errors"].append(
+                        f"ACCEPTANCE_RELATIONS:{{acceptance_id}}"
+                    )
+                    continue
+                for relation_index, relation in enumerate(relations):
+                    if not isinstance(relation, dict):
+                        summary["errors"].append(
+                            f"ACCEPTANCE_RELATION_{{acceptance_id}}_"
+                            f"{{relation_index}}"
+                        )
+                        continue
+                    if relation.get("type") not in (
+                        "requires",
+                        "subsumes",
+                        "overlaps",
+                        "conflicts",
+                        "derived_from",
+                    ):
+                        summary["errors"].append(
+                            f"ACCEPTANCE_RELATION_TYPE:{{acceptance_id}}"
+                        )
+                    target = relation.get("target_id")
+                    if not isinstance(target, str) or not target.strip():
+                        summary["errors"].append(
+                            f"ACCEPTANCE_RELATION_TARGET:{{acceptance_id}}"
+                        )
+                    else:
+                        relation_targets.append((acceptance_id, target))
+            for source, target in relation_targets:
+                if target not in seen:
+                    summary["errors"].append(
+                        f"ACCEPTANCE_RELATION_UNKNOWN:{{source}}:{{target}}"
+                    )
+
+            if summary["errors"]:
+                summary["status"] = "invalid"
+            elif (
+                coverage.get("status") == "complete"
+                and not summary["unmapped_count"]
+                and not summary["ambiguous_count"]
+            ):
+                summary["status"] = "complete"
+            else:
+                summary["status"] = "incomplete"
+            return summary
+
         root.mkdir(parents=True, exist_ok=True)
         status = "frozen"
         failure = None
@@ -161,12 +337,14 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
             )
             files = scan()
 
+        acceptance = summarize_acceptance()
         manifest = {{
             "schema_version": schema,
             "builder_corridor_status": status,
             "builder_failure": failure,
             "method_sha256": digest(method.read_bytes()) if method.is_file() else None,
             "corridor_tree_sha256": digest(canonical(files)),
+            "acceptance_ledger": acceptance,
             "files": files,
         }}
         freeze.write_text(
@@ -197,6 +375,10 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
             "ok": True,
             "corridor_digest": manifest["corridor_tree_sha256"],
             "builder_corridor_status": status,
+            "acceptance_ledger_status": acceptance["status"],
+            "acceptance_ids": acceptance["acceptance_ids"],
+            "required_acceptance_ids": acceptance["required_acceptance_ids"],
+            "acceptance_ledger_errors": acceptance["errors"],
             "file_count": len(files),
         }}, sort_keys=True))
         """
@@ -340,6 +522,17 @@ public task environment as needed, but do not carry out the official task or mut
 its target state. Do not read verifier/oracle material that the official task does
 not expose to ordinary agents.
 
+Create {ACCEPTANCE_PATH} using schema {ACCEPTANCE_SCHEMA}. Decompose every normative
+clause in the public task instruction and public task specification into an atomic
+item with a stable `acceptance_id`, exact `source_ref`, normalized `statement`,
+`required` boolean, `definition_state` (`defined|ambiguous`), non-empty task
+`scope`, non-empty decision `rule`, and typed `relations` (`requires`,
+`subsumes`, `overlaps`, `conflicts`, or `derived_from`). The top-level
+`coverage` object must declare `status` and list all `unmapped_clauses` and
+`ambiguous_clauses`, each with source_ref, statement, and reason. Mark coverage
+complete only after re-reading the original public sources and mapping every
+normative clause. Do not invent precedence for overlap or conflict.
+
 Experimental constraint: do not install a mandatory workflow gate, approval gate,
 or pre-mutation gate that can block the later Worker from continuing. A Corridor may
 diagnose, plan, validate, warn, or refuse an explicitly requested unsafe operation;
@@ -365,12 +558,23 @@ its diagnostics/planner/validator when relevant. The Corridor is an aid, not hid
 authority or a stored answer: inspect the live task state, obey the official task,
 and independently verify every mutation.
 
+Read the frozen task acceptance ledger at {ACCEPTANCE_PATH}. Use its stable
+acceptance IDs to plan and verify the whole task, not only the first reproduced
+failure. Re-check public source requirements when the ledger is ambiguous or
+incomplete.
+
 Execute the task now. Do not wait for QA and do not create a gate around your work.
 The harness will invoke an independent QA role afterward.
 """
 
 
-def qa_prompt(task_instruction: str, corridor_digest_value: str) -> str:
+def qa_prompt(
+    task_instruction: str,
+    corridor_digest_value: str,
+    *,
+    acceptance_ledger_status: str,
+    expected_acceptance_ids: list[str],
+) -> str:
     """Prompt an independent QA session that can use the same frozen Corridor."""
 
     return f"""You are the independent QA reviewer. Audit the Worker's current result.
@@ -390,14 +594,40 @@ Diagnostic reads are allowed. Your only write is {QA_PATH}. Write one JSON objec
   "outcome": "pass|fail|blocked|not_assessed",
   "summary": "concise human-readable conclusion",
   "corridor_digest": "{corridor_digest_value}",
+  "coverage_complete": true,
+  "acceptance_results": [{{
+    "acceptance_id": "...",
+    "applicability": "applicable|not_applicable|unknown",
+    "status": "pass|fail|unknown|not_reached",
+    "evidence": "...",
+    "replay": "..."
+  }}],
+  "unmapped_requirements": [],
+  "unresolved_relations": [],
   "checks": [{{"name": "...", "status": "pass|fail|unknown", "evidence": "..."}}],
-  "witnesses": [{{"constraint": "...", "evidence": "...", "replay": "..."}}]
+  "witnesses": [{{
+    "acceptance_id": "...",
+    "constraint": "...",
+    "evidence": "...",
+    "replay": "..."
+  }}]
 }}
 
-A fail verdict is valid only with at least one concrete witness whose constraint,
-observed evidence, and safe replay procedure are all non-empty. If you cannot
-produce such a witness, use blocked or not_assessed. QA is advisory: your verdict
-must never prevent the official verifier from running.
+The freeze manifest reports acceptance-ledger status
+`{acceptance_ledger_status}` and the expected acceptance IDs are
+{json.dumps(expected_acceptance_ids, ensure_ascii=False)}. Emit exactly one result
+for every expected ID. Independently re-read the original public task sources to
+look for omissions; the Corridor is a frozen map, not authority that its own map is
+complete. A pass is permitted only when the frozen ledger is complete, the expected
+ID set is exact, every applicable item passes, every inapplicable item is justified,
+and no requirement or relation remains unmapped, unresolved, unknown, or not
+reached. Witness closure is not task closure.
+
+A fail verdict is valid only with at least one concrete witness tied to an
+acceptance ID whose constraint, observed evidence, and safe replay procedure are all
+non-empty. If complete task closure cannot be established, use blocked or
+not_assessed. QA is advisory: your verdict must never prevent the official verifier
+from running.
 """
 
 
@@ -415,11 +645,19 @@ a locally plausible repair when the Corridor's complete constraints show it woul
 make the global result worse or infeasible.
 
 Apply only repairs justified by reproduced witnesses, then verify the complete task
-again. This is the single permitted repair pass. Do not create a new gate.
+again against every stable acceptance ID in {ACCEPTANCE_PATH}; closing the reported
+witness alone is insufficient. This is the single permitted repair pass. Do not
+create a new gate.
 """
 
 
-def closure_prompt(task_instruction: str, corridor_digest_value: str) -> str:
+def closure_prompt(
+    task_instruction: str,
+    corridor_digest_value: str,
+    *,
+    acceptance_ledger_status: str,
+    expected_acceptance_ids: list[str],
+) -> str:
     """Resume the same QA session to assess the one repair pass."""
 
     return f"""Resume as the SAME independent QA reviewer for closure verification.
@@ -429,9 +667,13 @@ def closure_prompt(task_instruction: str, corridor_digest_value: str) -> str:
 The Worker has completed the single bounded repair pass. Re-read {QA_PATH}, inspect
 the current task state, and use the same frozen Corridor at {CORRIDOR_PATH}. The
 expected digest is still {corridor_digest_value}. Do not mutate task state or the
-Corridor. Write the same JSON schema to {CLOSURE_PATH}; a fail still requires a
-concrete constraint/evidence/replay witness. This closure is advisory and must not
-gate the official verifier.
+Corridor. Re-evaluate every expected acceptance ID
+{json.dumps(expected_acceptance_ids, ensure_ascii=False)} and independently re-check
+the public source for omissions; closing the prior witness does not close the task.
+The frozen ledger status is `{acceptance_ledger_status}`. Write the same JSON
+schema to {CLOSURE_PATH}; a fail still requires a concrete
+acceptance-ID/constraint/evidence/replay witness. This closure is advisory and must
+not gate the official verifier.
 """
 
 
@@ -439,6 +681,9 @@ def validate_qa_assessment(
     value: Any,
     *,
     expected_corridor_digest: str,
+    acceptance_ledger_status: str,
+    expected_acceptance_ids: list[str],
+    required_acceptance_ids: list[str],
 ) -> list[str]:
     """Validate the QA artifact and return stable error codes.
 
@@ -462,6 +707,70 @@ def validate_qa_assessment(
         errors.append("ASSESSMENT_CORRIDOR_DIGEST")
     elif not SHA256_RE.fullmatch(digest):
         errors.append("ASSESSMENT_CORRIDOR_DIGEST_FORMAT")
+
+    coverage_complete = value.get("coverage_complete")
+    if not isinstance(coverage_complete, bool):
+        errors.append("ASSESSMENT_COVERAGE_COMPLETE")
+
+    expected_ids = set(expected_acceptance_ids)
+    if len(expected_ids) != len(expected_acceptance_ids):
+        errors.append("EXPECTED_ACCEPTANCE_IDS_DUPLICATE")
+    required_ids = set(required_acceptance_ids)
+    if not required_ids.issubset(expected_ids):
+        errors.append("REQUIRED_ACCEPTANCE_IDS_UNKNOWN")
+
+    acceptance_results = value.get("acceptance_results")
+    results_by_id: dict[str, dict[str, Any]] = {}
+    if not isinstance(acceptance_results, list):
+        errors.append("ASSESSMENT_ACCEPTANCE_RESULTS")
+        acceptance_results = []
+    for index, result in enumerate(acceptance_results):
+        if not isinstance(result, dict):
+            errors.append(f"ASSESSMENT_ACCEPTANCE_RESULT_{index}")
+            continue
+        acceptance_id = result.get("acceptance_id")
+        if not isinstance(acceptance_id, str) or not acceptance_id.strip():
+            errors.append(f"ASSESSMENT_ACCEPTANCE_ID_{index}")
+            continue
+        if acceptance_id in results_by_id:
+            errors.append(f"ASSESSMENT_ACCEPTANCE_ID_DUPLICATE_{acceptance_id}")
+            continue
+        results_by_id[acceptance_id] = result
+        if result.get("applicability") not in ACCEPTANCE_APPLICABILITY:
+            errors.append(f"ASSESSMENT_APPLICABILITY_{acceptance_id}")
+        if result.get("status") not in ACCEPTANCE_STATES:
+            errors.append(f"ASSESSMENT_ACCEPTANCE_STATUS_{acceptance_id}")
+        for field in ("evidence", "replay"):
+            item = result.get(field)
+            if not isinstance(item, str) or not item.strip():
+                errors.append(
+                    f"ASSESSMENT_ACCEPTANCE_{field.upper()}_{acceptance_id}"
+                )
+
+    actual_ids = set(results_by_id)
+    for acceptance_id in sorted(expected_ids - actual_ids):
+        errors.append(f"ASSESSMENT_ACCEPTANCE_ID_MISSING_{acceptance_id}")
+    for acceptance_id in sorted(actual_ids - expected_ids):
+        errors.append(f"ASSESSMENT_ACCEPTANCE_ID_UNKNOWN_{acceptance_id}")
+
+    collection_values: dict[str, list[Any]] = {}
+    for field, code in (
+        ("unmapped_requirements", "ASSESSMENT_UNMAPPED_REQUIREMENTS"),
+        ("unresolved_relations", "ASSESSMENT_UNRESOLVED_RELATIONS"),
+    ):
+        items = value.get(field)
+        if not isinstance(items, list):
+            errors.append(code)
+            continue
+        collection_values[field] = items
+        for index, item in enumerate(items):
+            if not isinstance(item, str) or not item.strip():
+                errors.append(f"{code}_{index}")
+    if coverage_complete is True and any(
+        collection_values.get(field)
+        for field in ("unmapped_requirements", "unresolved_relations")
+    ):
+        errors.append("ASSESSMENT_COVERAGE_CONTRADICTION")
 
     checks = value.get("checks")
     if not isinstance(checks, list):
@@ -490,6 +799,55 @@ def validate_qa_assessment(
             item = witness.get(field)
             if not isinstance(item, str) or not item.strip():
                 errors.append(f"ASSESSMENT_WITNESS_{field.upper()}_{index}")
-    if outcome == "fail" and not witnesses:
-        errors.append("FAIL_WITNESS_REQUIRED")
+    witness_acceptance_ids: set[str] = set()
+    for index, witness in enumerate(witnesses):
+        if not isinstance(witness, dict):
+            continue
+        acceptance_id = witness.get("acceptance_id")
+        if not isinstance(acceptance_id, str) or not acceptance_id.strip():
+            errors.append(f"ASSESSMENT_WITNESS_ACCEPTANCE_ID_{index}")
+        elif acceptance_id not in expected_ids:
+            errors.append(f"ASSESSMENT_WITNESS_ACCEPTANCE_ID_UNKNOWN_{index}")
+        else:
+            witness_acceptance_ids.add(acceptance_id)
+
+    if outcome == "fail":
+        if not witnesses:
+            errors.append("FAIL_WITNESS_REQUIRED")
+        failed_acceptance_ids = {
+            acceptance_id
+            for acceptance_id, result in results_by_id.items()
+            if result.get("status") == "fail"
+        }
+        if not failed_acceptance_ids:
+            errors.append("FAIL_ACCEPTANCE_RESULT_REQUIRED")
+        elif not (failed_acceptance_ids & witness_acceptance_ids):
+            errors.append("FAIL_WITNESS_ACCEPTANCE_MISMATCH")
+
+    if outcome == "pass":
+        if acceptance_ledger_status != "complete":
+            errors.append("PASS_ACCEPTANCE_LEDGER_COMPLETE_REQUIRED")
+        if not expected_ids:
+            errors.append("PASS_ACCEPTANCE_IDS_REQUIRED")
+        if coverage_complete is not True:
+            errors.append("PASS_COVERAGE_COMPLETE_REQUIRED")
+        if value.get("unmapped_requirements") != []:
+            errors.append("PASS_UNMAPPED_REQUIREMENTS_EMPTY_REQUIRED")
+        if value.get("unresolved_relations") != []:
+            errors.append("PASS_UNRESOLVED_RELATIONS_EMPTY_REQUIRED")
+        for acceptance_id in sorted(expected_ids & actual_ids):
+            result = results_by_id[acceptance_id]
+            applicability = result.get("applicability")
+            state = result.get("status")
+            if applicability == "applicable" and state != "pass":
+                errors.append(f"PASS_ACCEPTANCE_NOT_PASS_{acceptance_id}")
+            elif (
+                applicability == "not_applicable"
+                and state != "not_reached"
+            ):
+                errors.append(
+                    f"PASS_INAPPLICABLE_NOT_NOT_REACHED_{acceptance_id}"
+                )
+            elif applicability == "unknown":
+                errors.append(f"PASS_APPLICABILITY_UNKNOWN_{acceptance_id}")
     return errors

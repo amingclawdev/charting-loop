@@ -42,7 +42,7 @@ from benchmark_agents.contract import (
 )
 
 
-AGENT_VERSION = "0.1.0"
+AGENT_VERSION = "0.2.0"
 ROLE_ORDER = ("builder", "worker", "qa")
 
 
@@ -271,6 +271,9 @@ class ChartingLoopFullMethodAgent(Codex):
         *,
         path: str,
         expected_digest: str,
+        acceptance_ledger_status: str,
+        expected_acceptance_ids: list[str],
+        required_acceptance_ids: list[str],
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         result = await environment.exec(
             command=f"python3 -c {shlex.quote(remote_json_read_program(path))}",
@@ -280,6 +283,8 @@ class ChartingLoopFullMethodAgent(Codex):
             return None, {
                 "valid": False,
                 "errors": ["ASSESSMENT_UNREADABLE"],
+                "reported_outcome": None,
+                "outcome": "not_assessed",
                 "repair_required": False,
             }
         try:
@@ -288,17 +293,26 @@ class ChartingLoopFullMethodAgent(Codex):
             return None, {
                 "valid": False,
                 "errors": ["ASSESSMENT_JSON"],
+                "reported_outcome": None,
+                "outcome": "not_assessed",
                 "repair_required": False,
             }
         errors = validate_qa_assessment(
             value,
             expected_corridor_digest=expected_digest,
+            acceptance_ledger_status=acceptance_ledger_status,
+            expected_acceptance_ids=expected_acceptance_ids,
+            required_acceptance_ids=required_acceptance_ids,
+        )
+        reported_outcome = (
+            value.get("outcome") if isinstance(value, dict) else None
         )
         return value, {
             "valid": not errors,
             "errors": errors,
-            "outcome": value.get("outcome") if isinstance(value, dict) else None,
-            "repair_required": not errors and value.get("outcome") == "fail",
+            "reported_outcome": reported_outcome,
+            "outcome": reported_outcome if not errors else "not_assessed",
+            "repair_required": not errors and reported_outcome == "fail",
         }
 
     async def run(
@@ -314,7 +328,7 @@ class ChartingLoopFullMethodAgent(Codex):
         worker = self._child_agent("worker")
         qa = self._child_agent("qa")
         metadata: dict[str, Any] = {
-            "schema_version": "charting-loop/full-method-run/v1",
+            "schema_version": "charting-loop/full-method-run/v2",
             "method": "task-conditioned-corridor",
             "roles": ["builder", "worker", "qa"],
             "phase_events": [],
@@ -334,6 +348,21 @@ class ChartingLoopFullMethodAgent(Codex):
         digest = str(freeze["corridor_digest"])
         metadata["corridor_digest"] = digest
         metadata["builder_corridor_status"] = freeze.get("builder_corridor_status")
+        acceptance_ledger_status = str(
+            freeze.get("acceptance_ledger_status", "missing")
+        )
+        expected_acceptance_ids = [
+            str(item) for item in freeze.get("acceptance_ids", [])
+        ]
+        required_acceptance_ids = [
+            str(item) for item in freeze.get("required_acceptance_ids", [])
+        ]
+        metadata["acceptance_ledger_status"] = acceptance_ledger_status
+        metadata["acceptance_ids"] = expected_acceptance_ids
+        metadata["required_acceptance_ids"] = required_acceptance_ids
+        metadata["acceptance_ledger_errors"] = freeze.get(
+            "acceptance_ledger_errors", []
+        )
         metadata["phase_events"].append("corridor_frozen")
 
         await self._verify_freeze(environment, expected_digest=digest)
@@ -351,7 +380,12 @@ class ChartingLoopFullMethodAgent(Codex):
             await self._run_new_role(
                 "qa",
                 qa,
-                qa_prompt(instruction, digest),
+                qa_prompt(
+                    instruction,
+                    digest,
+                    acceptance_ledger_status=acceptance_ledger_status,
+                    expected_acceptance_ids=expected_acceptance_ids,
+                ),
                 environment,
             )
         finally:
@@ -361,6 +395,9 @@ class ChartingLoopFullMethodAgent(Codex):
             environment,
             path=QA_PATH,
             expected_digest=digest,
+            acceptance_ledger_status=acceptance_ledger_status,
+            expected_acceptance_ids=expected_acceptance_ids,
+            required_acceptance_ids=required_acceptance_ids,
         )
         metadata["qa_decision"] = decision
 
@@ -380,7 +417,12 @@ class ChartingLoopFullMethodAgent(Codex):
                 await self._resume_role(
                     "qa",
                     qa,
-                    closure_prompt(instruction, digest),
+                    closure_prompt(
+                        instruction,
+                        digest,
+                        acceptance_ledger_status=acceptance_ledger_status,
+                        expected_acceptance_ids=expected_acceptance_ids,
+                    ),
                     environment,
                 )
             finally:
@@ -390,6 +432,9 @@ class ChartingLoopFullMethodAgent(Codex):
                 environment,
                 path=CLOSURE_PATH,
                 expected_digest=digest,
+                acceptance_ledger_status=acceptance_ledger_status,
+                expected_acceptance_ids=expected_acceptance_ids,
+                required_acceptance_ids=required_acceptance_ids,
             )
             metadata["qa_closure"] = closure
 

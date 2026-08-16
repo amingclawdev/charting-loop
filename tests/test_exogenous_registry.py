@@ -2121,7 +2121,7 @@ class ExogenousRegistryTests(unittest.TestCase):
             self.assertFalse(report.ok)
             self.assertTrue(any("PATH_SYMLINK" in error for error in report.errors))
 
-    def test_prospective_v3_qa_and_position_ledger_do_not_rewrite_frozen_v2(self) -> None:
+    def test_prospective_v4_acceptance_qa_and_ledger_do_not_rewrite_frozen_v2(self) -> None:
         paths = [
             REPOSITORY_ROOT / "method-paper" / "METHOD.md",
             REPOSITORY_ROOT / "method-paper" / "SCOPE-DATUM.md",
@@ -2138,10 +2138,13 @@ class ExogenousRegistryTests(unittest.TestCase):
         protocol_v2 = documents["TASK-CONDITIONED-CORRIDOR-EXPERIMENT-V2.md"]
         running = documents["RUNNING-AN-EXPERIMENT.md"]
 
-        self.assertIn("prospective draft v3", method)
+        self.assertIn("prospective draft v4", method)
         self.assertIn("un-cataloged working draft", method)
         self.assertIn("append-only **Position ledger**", method)
         self.assertIn("IndependentQAAssessment", method)
+        self.assertIn("task acceptance ledger", method)
+        self.assertIn("Closing a reported witness is not task closure", method)
+        self.assertIn("linear unlock", method)
         self.assertIn("timeline presence alone never admits a Fact", method)
         self.assertIn("fresh Worker and a separate fresh Independent", protocol_v2)
         self.assertIn("exactly one bounded Worker repair opportunity", protocol_v2)

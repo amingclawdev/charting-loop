@@ -1,4 +1,4 @@
-# Charting Loop corridor method — prospective draft v3
+# Charting Loop corridor method — prospective draft v4
 
 Status: **prospective, un-cataloged working draft**. This file is the sole normative
 method source in this repository, but these worktree bytes are not a cataloged study
@@ -64,6 +64,35 @@ Direction supersedes by an explicit transition and creates a new Candidate; it d
 rewrite the meaning of an earlier dispatch. The effective Direction must resolve to a
 declared compilation Rule; placing objective text beside a Guide result cannot bypass
 the Rule input plane.
+
+#### Task acceptance ledger
+
+For a task-conditioned Candidate, Direction includes an immutable **task acceptance
+ledger** compiled from the complete public task instruction and every public
+specification it names as authoritative. The ledger is a map of what success means,
+not a stored solution. Each normative clause is either represented by one atomic item
+or explicitly recorded as unmapped or ambiguous. Every item has:
+
+- a stable acceptance ID, exact public source reference, normalized statement, and
+  required/optional declaration;
+- task scope: the objects, paths, record types, phases, quantifier, and applicability
+  boundary to which the item applies;
+- a decision Rule that says what observation would pass, fail, or leave the item
+  unknown; and
+- typed relations to other items—`requires`, `subsumes`, `overlaps`,
+  `conflicts`, or `derived_from`.
+
+Do not collapse definition, applicability, coverage, and assessment into one status.
+`definition_state` says whether the Rule is defined or ambiguous; applicability is
+decided for the exact task world; coverage says whether every public normative clause
+was mapped; assessment records the observed `pass`, `fail`, `unknown`, or
+`not_reached` outcome. A conflict or overlap without source-authorized precedence
+remains unresolved. The builder cannot invent priority merely to make the ledger close.
+
+The ledger is frozen inside the Corridor, while applicability and assessment outcomes
+are later Facts outside that frozen byte set. Freezing preserves an omission as
+faithfully as it preserves a correct map; it does not prove completeness. A consumer
+must therefore treat ledger identity and ledger completeness as separate claims.
 
 ### Guide
 
@@ -181,24 +210,45 @@ EvidentialWarranty, AuthorityWarranty, authority, benchmark PASS, or current C. 
 experiment, QA timing and visibility are frozen study variables. QA failure does not
 authorize deletion, repair beyond the frozen budget, or suppression of scoring.
 
+When a task acceptance ledger exists, QA reads and may execute the same frozen
+Corridor as the executor, but it must also independently re-read the original public
+task sources. Corridor-assisted QA checks each stable acceptance ID, its exact
+applicability, and the ledger's source coverage. It may report `pass` only when every
+required applicable item passes, every non-applicable item has evidence, the expected
+ID set is exact, and no clause, relation, applicability, or result remains unmapped,
+unresolved, unknown, or unexpectedly not reached. A concrete `fail` needs a
+replayable witness tied to an acceptance ID. Otherwise the correct outcome is
+`blocked` or `not_assessed`.
+
+Closing a reported witness is not task closure. After repair, QA re-evaluates the
+entire ledger and repeats its source-completeness check. This protects against a
+shared-map failure in which Builder, Worker, and QA all reason correctly from the same
+incomplete Corridor.
+
 ## 4. Construction procedure
 
 1. **Pin the method.** Select one cataloged method version. The cataloged
    `paper2-current-v2` package is `study_eligible=true` and may be frozen as a research
    input, while `adoption_eligible=false` (and its legacy projection
    `builder_eligible=false`) means it is not approved for operational adoption. This
-   prospective draft v3 is not cataloged or study-eligible.
+   prospective draft v4 is not cataloged or study-eligible.
 2. **Freeze exogenous inputs.** A runner freezes the task, Direction, fixtures,
    evaluator/scorer, model/runtime constraints, and initial `WorldRef`. Empirical task,
    run, score, and optional-log data remain under `exogenous/`; they are not imported
    into this method paper.
-3. **Freeze inputs.** Inventory the Rule and admitted-Fact planes with stable references
+3. **Compile task acceptance.** Decompose every normative clause in the public task
+   instruction and named public specifications into the task acceptance ledger. Give
+   each item a stable ID, source reference, scope, Rule, and typed relations. Re-read
+   the sources, record every unmapped or ambiguous clause, and never mark coverage
+   complete while either list is non-empty. This is Direction construction, not task
+   execution.
+4. **Freeze inputs.** Inventory the Rule and admitted-Fact planes with stable references
    and scope. Pin supporting papers or packages as MethodRefs/knowledge inputs; reject
-   implicit promotion into Rules.
-4. **Bind Position.** Name the Candidate revision, versioned role-definition Rule,
+   implicit promotion into Rules. Freeze the acceptance ledger with Direction.
+5. **Bind Position.** Name the Candidate revision, versioned role-definition Rule,
    separate authority- and liveness-bearing assignment Fact, governed object, and exact
    `WorldRef`. Declare which independent Facts can establish the assignment.
-5. **Compile Guide and one result.** The runner freezes the deterministic Guide contract
+6. **Compile Guide and one result.** The runner freezes the deterministic Guide contract
    over Rules, admitted Facts, role/scope, and warranties before builder dispatch.
    Materialize one Entrance with a bounded consumable instruction, or one typed refusal
    with a durable reason. The Entrance binds its effective Direction to the declared
@@ -208,33 +258,35 @@ authorize deletion, repair beyond the frozen budget, or suppression of scoring.
    interface operation, exact argument digest, lookup-scope identity/digest, and
    single-result bound. A physically co-located contract remains runner-owned and
    read-only; location does not make it builder-writable.
-6. **Build the open Candidate.** Give the builder only the declared Entrance and pinned
+7. **Build the open Candidate.** Give the builder only the declared Entrance and pinned
    MethodRef/knowledge inputs. The builder writes only the explicitly builder-owned
    implementation surface, excluding the frozen Guide contract, and returns completion
    or a blocker. The open proposal remains mutable and uncertifiable.
-7. **Freeze the Candidate.** Seal the implementation tree and all declared inputs by
+8. **Freeze the Candidate.** Seal the implementation tree and all declared inputs by
    digest into one semantic closure. From this point, repair creates a new revision;
    freezing alone does not place any scope in C.
-8. **Record the Position ledger.** Start the runner-held, hash-linked append-only stream
+9. **Record the Position ledger.** Start the runner-held, hash-linked append-only stream
    before execution and bind every observable transition to the frozen Position,
    Direction, actor/session, and exact world identities. Do not expose the audit stream
    to an agent unless a frozen study declares that visibility as an intervention.
-9. **Assess independently.** A distinct Independent QA session reviews the exact frozen
-   revision and the ledger prefix available to it, then appends `pass`, `fail`,
-   `blocked`, or `not_assessed`. QA cannot edit. Any permitted repair produces a new
-   revision and is bounded by a previously frozen budget.
-10. **Traverse independently.** A runner or evaluator executes the exact Candidate once
+10. **Assess independently.** A distinct Independent QA session reviews the exact
+    frozen revision, the complete task acceptance ledger, the original public task
+    sources, and the Position-ledger prefix available to it, then appends `pass`,
+    `fail`, `blocked`, or `not_assessed`. QA cannot edit. Any permitted repair
+    produces a new revision and is bounded by a previously frozen budget. After repair,
+    re-assess the entire ledger rather than only the prior witness.
+11. **Traverse independently.** A runner or evaluator executes the exact Candidate once
    over a closed `WorldSpan`, records the actual path, freshness checks, bypass status,
    and outcome, and signs or otherwise identifies the receipt issuer.
-11. **Certify the demonstrated path.** An independent PathCertificate may make only its
+12. **Certify the demonstrated path.** An independent PathCertificate may make only its
    certificate-covered path provisionally charted. No other Candidate scope is implied.
-12. **Establish current consumability.** Under this prospective draft, only scope with
+13. **Establish current consumability.** Under this prospective draft, only scope with
     a QA `pass`, PathCertificate, and live EvidentialWarranty enters current,
     scope-indexed C. QA pass is not a substitute for either record. Consuming the
     actor–role Assignment additionally requires its EvidentialWarranty and
     AuthorityWarranty to be `live`; elsewhere AuthorityWarranty gates only when the
     applicable Rule or tier requires it.
-13. **Preserve outcomes.** Passed, failed, blocked, protocol-invalid, and infrastructure
+14. **Preserve outcomes.** Passed, failed, blocked, protocol-invalid, and infrastructure
     outcomes remain indexable exogenous Facts. A task score cannot rewrite the Candidate
     or method.
 
@@ -323,6 +375,21 @@ provisionally charted path; stale, unknown, or absent warranty state leaves the 
 scope outside current C. Re-entry is available after any outcome; it is not a backedge
 that mutates history.
 
+The proof obligations above describe when current C may be claimed; they do not require
+an experimental Corridor to install a blocking runtime gate. During construction
+experiments, incomplete acceptance, QA `blocked`, or QA `not_assessed` must remain
+visible while the executor and external evaluator continue. Making the new obligations
+mandatory preconditions would change the intervention and greatly increase U→C work.
+Gate construction belongs to a separately declared long-lived-system profile after the
+structure is stable.
+
+If such a long-lived profile introduces a gate too early and the gate blocks because
+required evidence cannot yet exist, preserve the block and use an explicitly
+authorized no-PASS bypass/waiver to finish the original path. Carry one diagnostic
+root through every downstream dependent bypass; later gates may also require bypass
+because the first one intentionally left evidence gaps. This **linear unlock** exposes
+one gate defect at a time. It never converts the bypassed path into PASS or C.
+
 ## 7. Composite mechanisms and proof-obligation order
 
 Physical modules and agents may combine responsibilities. For example, one handoff can
@@ -331,12 +398,12 @@ separate component per P/D/E factor. Composition does not collapse propositions:
 Position, Direction, Entrance, EvidentialWarranty, and AuthorityWarranty must remain
 separately named and their evidence receipts separately checkable.
 
-The proof-obligation order is: pin method and exact world; admit Rules and Facts; bind
-role definition and assignment; evaluate Guide to one tagged result; freeze the semantic
-closure; traverse one base world; certify the demonstrated path; establish a live
-scope-bound EvidentialWarranty; then establish a live AuthorityWarranty where the
-assignment, Rule, or tier requires it. A later obligation cannot retroactively satisfy
-an earlier one.
+The proof-obligation order is: pin method and exact world; compile source-complete
+task acceptance; admit Rules and Facts; bind role definition and assignment; evaluate
+Guide to one tagged result; freeze the semantic closure; traverse one base world;
+certify the demonstrated path; establish a live scope-bound EvidentialWarranty; then
+establish a live AuthorityWarranty where the assignment, Rule, or tier requires it. A
+later obligation cannot retroactively satisfy an earlier one.
 
 ## 8. Authority and conflicts
 
@@ -391,7 +458,7 @@ every abstract obligation above.
 
 ## 11. Conformance
 
-A v2 implementation conforms only if it:
+A prospective v4 implementation conforms only if it:
 
 - preserves an exact role definition, separate role assignment, and role-bound Position;
 - uses a declared deterministic Guide to return exactly one tagged, bounded, consumable
@@ -403,12 +470,21 @@ A v2 implementation conforms only if it:
 - uses exact `WorldRef` and closed `WorldSpan` identities;
 - keeps Rule and Fact input planes distinct from the Guide control plane and from
   MethodRef/knowledge inputs;
+- freezes a task acceptance ledger whose atomic items retain source, scope, Rule, and
+  typed relations; keeps definition, applicability, coverage, and assessment states
+  distinct; and reports unmapped, ambiguous, or unresolved requirements rather than
+  silently dropping them;
+- requires Corridor-assisted Independent QA to account for the exact acceptance-ID set
+  and independently re-check public source completeness, while treating witness closure
+  as narrower than whole-task closure;
 - keeps the four record surfaces separate, recognizes exactly two warranty kinds, and
   keeps optional authority logs non-gating;
 - represents open and frozen Candidate states, makes semantic edits create new frozen
   revisions, and completes U → C only through fresh traversal, PathCertificate, and a
-  live scope-bound EvidentialWarranty; and
-- reports this version as draft, `study_eligible=true`, and
+  live scope-bound EvidentialWarranty;
+- keeps experimental acceptance/QA incompleteness non-gating and reports it as
+  `blocked` or `not_assessed` while preserving external evaluation; and
+- reports this version as draft, `study_eligible=false`, and
   `adoption_eligible=false`/`builder_eligible=false`.
 
 Conformance does not imply that the method works better than a control. That question

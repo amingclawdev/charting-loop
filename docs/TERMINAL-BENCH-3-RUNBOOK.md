@@ -23,7 +23,11 @@ codex login status
 Harbor and Modal authentication are interactive host setup, not benchmark context.
 `CODEX_FORCE_AUTH_JSON=1` asks the installed Harbor Codex adapter to upload the
 host's existing `~/.codex/auth.json` into an ephemeral secret path. The adapter does
-not persist the credential in ATIF or task artifacts.
+not persist the credential in ATIF or task artifacts. Export this switch in the host
+environment. Do **not** pass it through Harbor's `--ae`: extra-agent environment
+values are also registered as redaction patterns, so the literal value `1` would
+cause every `1` in captured logs and JSON to be replaced and corrupt the custody
+record.
 
 Confirm the immutable dataset identity before a paid run:
 
@@ -42,6 +46,7 @@ Run these from the Charting Loop repository root:
 ```bash
 export CHARTING_LOOP_ROOT="$PWD"
 export PYTHONPATH="$CHARTING_LOOP_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+export CODEX_FORCE_AUTH_JSON=1
 
 python3 -m unittest tests.test_full_method_agent -v
 python3 -m unittest discover -s tests -v
@@ -56,7 +61,6 @@ harbor run --print-config \
   -a benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent \
   -m openai/gpt-5.6-sol \
   --ak reasoning_effort=max \
-  --ae CODEX_FORCE_AUTH_JSON=1 \
   --n-tasks 1 \
   -n 1
 ```
@@ -73,6 +77,7 @@ logs, freeze identity, QA decision, grading result, cost, and ATIF:
 ```bash
 export CHARTING_LOOP_ROOT="$PWD"
 export PYTHONPATH="$CHARTING_LOOP_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+export CODEX_FORCE_AUTH_JSON=1
 
 harbor run \
   --job-name charting-loop-tb3-smoke-001 \
@@ -81,7 +86,6 @@ harbor run \
   -a benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent \
   -m openai/gpt-5.6-sol \
   --ak reasoning_effort=max \
-  --ae CODEX_FORCE_AUTH_JSON=1 \
   --n-tasks 1 \
   -n 1 \
   --upload --private
@@ -97,6 +101,11 @@ Acceptance checks for the smoke task:
 - `agent/trajectory.json` is ATIF-v1.7 and embeds three unique role trajectories.
 - orchestration metadata contains one `corridor_digest` and both Worker and QA logs
   refer to that same digest/path.
+- `FREEZE.json` reports `acceptance_ledger.status=complete`, a non-empty exact
+  acceptance-ID set, and no ledger errors before treating internal QA pass as valid.
+- QA emits exactly one result for every expected acceptance ID, independently checks
+  the original public task sources, and reports no unmapped or unresolved item before
+  pass.
 - the Corridor tree and `FREEZE.json` have no write bits after construction.
 - `qa_decision.repair_required` is true only for a schema-valid fail with a witness.
 - a repair, if present, resumed the saved Worker session; closure resumed saved QA.
@@ -119,6 +128,7 @@ starting point, not a scientific constant:
 ```bash
 export CHARTING_LOOP_ROOT="$PWD"
 export PYTHONPATH="$CHARTING_LOOP_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+export CODEX_FORCE_AUTH_JSON=1
 
 harbor run \
   --job-name charting-loop-tb3-3.0.0-full-001 \
@@ -127,7 +137,6 @@ harbor run \
   -a benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent \
   -m openai/gpt-5.6-sol \
   --ak reasoning_effort=max \
-  --ae CODEX_FORCE_AUTH_JSON=1 \
   -n 16 \
   --upload --private
 ```
