@@ -1,0 +1,44 @@
+{
+  "schema_version": "charting-loop/exogenous-taskset/v2",
+  "taskset_id": "tb30-cl027-production-planning",
+  "benchmark": {
+    "dataset_id": "terminal-bench",
+    "release": "3.0",
+    "repository_url": "https://github.com/harbor-framework/terminal-bench",
+    "source_commit": "2b0442c3c583b710ca8da14c8e601b99f2f1f244"
+  },
+  "tasks": [
+    {
+      "task_id": "production-planning",
+      "input": {
+        "kind": "vendored",
+        "locator": "tasks/production-planning/instruction.md",
+        "sha256": "sha256:b4e85ed8bc8e9f5ea093ae6b144ea8b66c085a585d32bfef6917eef61022e702"
+      },
+      "constraint_datum": {
+        "path": "tasks/production-planning/TASK-CONSTRAINTS.json",
+        "sha256": "sha256:2d5e34e9cc0c083ecd367000bb6e1e2d50c897fc3d703218b927ffeb6d9cb1a7"
+      }
+    }
+  ],
+  "task_list_sha256": "sha256:74afdd165ffdec16215ad2a3276c099371c1ad01262d549a9cba42b1f25758ab",
+  "environment": {
+    "environment_id": "terminal-bench/3.0/production-planning/source-environment",
+    "source_path": "tasks/production-planning/environment",
+    "source_tree_git_sha1": "e89beb1f89937a78280233128e722dda63e26cd5",
+    "source_manifest_sha256": "sha256:7cb826cc24000da42dafe5c0af1094da104183cb4af6e706ba6a31ca2a101b75",
+    "runtime_image_policy": "build-from-frozen-source-and-pin-in-run"
+  },
+  "evaluator": {
+    "scorer_id": "terminal-bench/3.0/production-planning/official-verifier",
+    "scorer_revision": "2b0442c3c583b710ca8da14c8e601b99f2f1f244",
+    "scorer_sha256": "sha256:3f1e574e7ea09f9a43f107381feb75e8d410ce609fd2f9b759a45c95f9128660",
+    "verifier_id": "terminal-bench/3.0/production-planning/tests",
+    "verifier_revision": "2b0442c3c583b710ca8da14c8e601b99f2f1f244",
+    "verifier_sha256": "sha256:3f1e574e7ea09f9a43f107381feb75e8d410ce609fd2f9b759a45c95f9128660"
+  },
+  "license": {
+    "identifier": "Apache-2.0",
+    "redistribution": "vendored"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "branch_namespaces": [
+    {
+      "artifact_kind": "custody",
+      "default_visibility": "public-summary",
+      "template": "main"
+    },
+    {
+      "artifact_kind": "corridor",
+      "default_visibility": "embargoed-solution-bearing",
+      "template": "corridor/{dataset}/{release}/{taskset}/{task}/{construction}/{build}/{candidate}/{revision}"
+    },
+    {
+      "artifact_kind": "results",
+      "default_visibility": "public-summary",
+      "template": "results/{dataset}/{release}/{taskset}/{task}/{study}/{run}/{arm}/{result-release}"
+    }
+  ],
+  "public_artifact_classes": [
+    "citation",
+    "digest",
+    "index",
+    "license",
+    "method",
+    "protocol",
+    "summary",
+    "validation-tool"
+  ],
+  "release_policy": {
+    "append_only": true,
+    "claim_default": "descriptive-only",
+    "default_visibility": "restricted-on-request",
+    "exact_service_replay": "embargoed-solution-bearing",
+    "method_transfer_replication": "public-default",
+    "publication_gate": "human-authorization-after-machine-check"
+  },
+  "releases": [],
+  "restricted_artifact_classes": [
+    "database",
+    "detailed-agent-log",
+    "hidden-evaluator",
+    "internal-git-history",
+    "raw-session",
+    "solution-code",
+    "trajectory",
+    "writeback-sql"
+  ],
+  "schema_version": "charting-loop/public-release-registry/v1"
+}

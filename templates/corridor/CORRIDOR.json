@@ -1,0 +1,198 @@
+{
+  "schema_version": "charting-loop/candidate/v2",
+  "template": true,
+  "candidate_id": "template-candidate",
+  "revision_id": "candidate-001",
+  "status": "candidate",
+  "candidate_state": "open",
+  "semantic_closure_sha256": null,
+  "method_ref": {
+    "version_id": "paper2-current-v2",
+    "source_commit": "c500c07a2138212e7ddc9ea77ff2a20c379c6492",
+    "path": "method-paper/METHOD.md",
+    "content_sha256": "sha256:ce9c94c12660c57a8dc34c98afd46c644b07214a2f9e7a9a494078fbe7be0905",
+    "builder_eligible": false
+  },
+  "input_planes": {
+    "rules": [
+      {
+        "rule_id": "builder-role-rule",
+        "version": "draft",
+        "scope": "implementation subtree",
+        "ref": "runner-supplied immutable builder-role rule"
+      },
+      {
+        "rule_id": "direction-compilation-rule",
+        "version": "draft",
+        "scope": "candidate direction",
+        "ref": "runner-supplied immutable direction-compilation rule"
+      },
+      {
+        "rule_id": "builder-action-transition-rule",
+        "version": "draft",
+        "scope": "implementation subtree",
+        "ref": "runner-supplied immutable action-transition rule",
+        "allowed_actions_sha256": "sha256:678c007fd99966de116b5c7152788d9d635b46ee1ce9a9be95c2f6418a7b1146"
+      }
+    ],
+    "facts": [
+      {
+        "fact_id": "template-start-fact",
+        "world_ref_ref": "world_ref",
+        "ref": "runner-supplied immutable fact"
+      },
+      {
+        "fact_id": "builder-role-assignment-fact",
+        "world_ref_ref": "world_ref",
+        "ref": "runner-supplied immutable assignment"
+      }
+    ]
+  },
+  "guide": {
+    "contract_path": "implementation/GUIDE-CONTRACT.md",
+    "evaluation": "deterministic",
+    "input_refs": {
+      "rules": "input_planes.rules",
+      "admitted_facts": "input_planes.facts",
+      "position": "position",
+      "evidential_warranty": "assurances.evidential_warranty",
+      "authority_warranty": "assurances.authority_warranty"
+    },
+    "result": {
+      "cardinality": "exactly-one",
+      "variants": [
+        "entrance",
+        "typed-refusal"
+      ]
+    }
+  },
+  "position": {
+    "role_definition": {
+      "role_id": "builder",
+      "version": "draft",
+      "scope": "implementation subtree",
+      "ref": "runner-supplied immutable builder-role rule"
+    },
+    "role_assignment": {
+      "holder": "template-builder",
+      "role_id": "builder",
+      "scope": "implementation subtree",
+      "assignment_fact_id": "builder-role-assignment-fact",
+      "assignment_ref": "runner-supplied immutable assignment",
+      "required_warranty_kinds": [
+        "EvidentialWarranty",
+        "AuthorityWarranty"
+      ]
+    },
+    "object_ref": "template-candidate@candidate-001",
+    "world_ref_ref": "world_ref"
+  },
+  "world_ref": {
+    "project_id": "charting-loop",
+    "run_id": "template-run",
+    "generation_id": "template-generation",
+    "repository_url": "https://example.invalid/participant",
+    "base_commit": "0000000000000000000000000000000000000000",
+    "environment_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "evidence_prefix": {
+      "stream_id": "template-ledger",
+      "through_sequence": 0,
+      "prefix_sha256": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "admission": {
+        "receipt_id": "template-admission-0",
+        "admitted_root_sha256": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "rule_revision": "draft",
+        "rule_sha256": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+      },
+      "projector": {
+        "schema_version": "charting-loop/world-projector/v1",
+        "algorithm_id": "runner-supplied-projector",
+        "algorithm_version": "draft",
+        "algorithm_sha256": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+      }
+    },
+    "derived_state_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "guide_result": {
+    "kind": "entrance",
+    "entrance": {
+      "entrance_id": "entrance-001",
+      "task_ref": {
+        "taskset_id": "template-taskset",
+        "task_id": "template-task",
+        "manifest_sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "direction": {
+        "direction_id": "template-direction",
+        "statement": "runner-supplied frozen objective",
+        "acceptance_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "rule_id": "direction-compilation-rule",
+        "rule_version": "draft",
+        "rule_ref": "runner-supplied immutable direction-compilation rule"
+      },
+      "consumable_instruction": {
+        "facade": {
+          "facade_id": "runner-supplied-facade",
+          "facade_version": "draft",
+          "facade_sha256": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+          "interface": {
+            "interface_id": "runner-supplied-interface",
+            "interface_version": "draft",
+            "interface_sha256": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+            "operation": "lookup"
+          }
+        },
+        "argument_mode": "bounded-opaque-key",
+        "opaque_key": "template-input",
+        "arguments_sha256": "sha256:c486a569b66830b85734ec8f18b04cf4415c51bc123d9e87e60cb7833db196d7",
+        "lookup_scope_id": "template-entrance-scope",
+        "lookup_scope_version": "draft",
+        "lookup_scope_sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "max_matches": 1
+      },
+      "instruction_contract": {
+        "navigation_responsibility": "runtime",
+        "lookup_scope": "closed",
+        "selection_cardinality": 1,
+        "agent_source_selection": false
+      },
+      "allowed_actions": [
+        "read declared Entrance",
+        "write implementation subtree",
+        "report completion or blocker"
+      ],
+      "allowed_actions_sha256": "sha256:678c007fd99966de116b5c7152788d9d635b46ee1ce9a9be95c2f6418a7b1146",
+      "action_transition_rule": {
+        "rule_id": "builder-action-transition-rule",
+        "rule_version": "draft",
+        "rule_scope": "implementation subtree",
+        "rule_ref": "runner-supplied immutable action-transition rule"
+      }
+    }
+  },
+  "implementation": {
+    "path": "implementation",
+    "runner_owned_paths": [
+      "implementation/GUIDE-CONTRACT.md"
+    ],
+    "tree_sha256": null
+  },
+  "authority_evidence": null,
+  "assurances": {
+    "traversal_receipt": null,
+    "path_certificate": null,
+    "evidential_warranty": null,
+    "authority_warranty": null
+  },
+  "reentry": {
+    "from_candidate_id": null,
+    "reason": null
+  },
+  "builder_eligible": false,
+  "known_limits": [
+    "Open template only; task, WorldRef, Direction, and role holder are not frozen.",
+    "Structural validation cannot prove runtime Guide determinism; a future GuideReceipt and consume-time verifier are required.",
+    "No traversal, certificate, EvidentialWarranty, AuthorityWarranty, charted state, or empirical score is claimed.",
+    "paper2-current-v2 is frozen only as a study input; METHOD.md remains draft-maturity, and adoption_eligible and builder_eligible are false."
+  ]
+}

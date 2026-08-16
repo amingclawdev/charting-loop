@@ -1,0 +1,61 @@
+{
+  "schema_version": "charting-loop/corridor/v1",
+  "template": true,
+  "corridor_id": "template-corridor",
+  "revision_id": "candidate-001",
+  "revision_frozen_at": "2026-08-11T12:00:02-04:00",
+  "status": "candidate",
+  "evaluation_protocol_ref": {
+    "task_id": "reference-v1",
+    "tree_sha256": "sha256:f6c3a82a5b5138f8b630a413dc8764f3b714609bd3f82f5559ed49c87a9bb996",
+    "subject_diagnosis_prompt_sha256": "sha256:d0361aba0f744d26a450d3d314f771d498c6b332a6134e31ffe67d9f99556947"
+  },
+  "analysis_theory_ref": {
+    "version_id": "internal-v5-arxiv-initial",
+    "artifact_id": "charting-loop-theory",
+    "version_labels": {
+      "internal": "v5",
+      "publication": "initial"
+    },
+    "source_commit": "e0dd3a466654011ecf0cb6d8f32e9cbbc4c3cc99",
+    "representation": "markdown",
+    "content_sha256": "sha256:7c7a1522d3d6abd7fb3568046816e8f2708a979cbce0f3c2e041d24f4f8135ea"
+  },
+  "theory_ref": null,
+  "methodology_ref": null,
+  "framework_ref": null,
+  "builder": {
+    "actor_id": "template-ai",
+    "model": "template-model",
+    "runtime": "template-runtime",
+    "run_date": "2026-08-11",
+    "web_access": "disabled"
+  },
+  "input_bundle": {
+    "manifest_path": "inputs/INPUTS.json",
+    "manifest_sha256": "sha256:13fcb822172f8385406542e481bce1d772412315f1c69efca2004d70a93cef11"
+  },
+  "exogenous_authority": {
+    "authority_boundary_id": "template-authority-boundary",
+    "input_condition": "standardized-interactive",
+    "boundary_design_sha256": "sha256:cd92125b13b692a4fc3a511a3d8c6f8aa1d13b29347a15288b4b2c3862da9d28",
+    "assignment_sha256": "sha256:59cbea48725434800a962910418d6e8682efbc7e47725d0c7eccead07a555ce3",
+    "manifest_path": "authority/AUTHORITY.json",
+    "manifest_sha256": "sha256:b033011e2d3043bf41c0706d839b6a03c1e0c8b6aecd162796c66e0967d052a1",
+    "interaction_log_path": "authority/interactions.jsonl",
+    "interaction_log_sha256": "sha256:451118806923afc8e033582b408f0c9d453e3bc1a9c00ad6c287a9b21cf4a71b",
+    "event_log_path": "authority/events.jsonl",
+    "event_log_sha256": "sha256:6cb4629af0a91368e06a7901c315613858fda10ad1cf02dab19e5b82f2ff87c2"
+  },
+  "artifacts": {
+    "corridor_path": "corridor",
+    "trace_path": "trace",
+    "evaluation_path": "evaluation"
+  },
+  "corridor_tree_sha256": "sha256:0d26dc5f47b89cf5214d8d23ec4071750d5d71c96e6a235c6ca02b4c0fb974ea",
+  "payload_tree_sha256": "sha256:4404312bec6cfb601a8efaa165b8d18201c01b274f6393782852675221043424",
+  "certificate": null,
+  "known_limits": [
+    "This is a non-indexable template, not an experimental result."
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "schema_version": "charting-loop/authority/v1",
+  "authority_boundary_id": "template-authority-boundary",
+  "study_design": {
+    "path": "authority/DESIGN.md",
+    "sha256": "sha256:52159f2f7c34e8fff8d0477dc5fff75eac1ea2ba43aa7852353f51b548ab1a65"
+  },
+  "assigned_condition": {
+    "mode": "standardized-interactive",
+    "protocol_path": "authority/CONDITION.md",
+    "protocol_sha256": "sha256:0c20106bf2ab79921077bef66e15278cbd8ebe16324a8dcfd8829eb5d4d266fa",
+    "frozen_at": "2026-08-11T11:59:00-04:00"
+  },
+  "actors": [
+    {
+      "actor_id": "template-user",
+      "actor_type": "human",
+      "role": "exogenous-authority",
+      "authorized_acts": [
+        "provision",
+        "reframe",
+        "redirect",
+        "ratify",
+        "repeal",
+        "delegate"
+      ],
+      "authority_scope": [
+        "input-bundle",
+        "position-representation",
+        "direction",
+        "corridor-revision",
+        "rule",
+        "authority-scope"
+      ]
+    },
+    {
+      "actor_id": "template-ai",
+      "actor_type": "ai",
+      "role": "executor",
+      "authorized_acts": [],
+      "authority_scope": []
+    },
+    {
+      "actor_id": "independent-runner",
+      "actor_type": "service",
+      "role": "observer",
+      "authorized_acts": [],
+      "authority_scope": []
+    },
+    {
+      "actor_id": "independent-human-evaluator",
+      "actor_type": "human",
+      "role": "observer",
+      "authorized_acts": [],
+      "authority_scope": []
+    }
+  ],
+  "capture": {
+    "interaction_log": "authority/interactions.jsonl",
+    "authority_event_log": "authority/events.jsonl",
+    "completeness": "complete",
+    "first_interaction_id": "interaction-001",
+    "last_interaction_id": "interaction-002",
+    "build_cutoff_at": "2026-08-11T12:00:02-04:00",
+    "record_frozen_at": "2026-08-11T12:00:02-04:00",
+    "redaction_policy": "none",
+    "gap_reason": null
+  },
+  "record_counts": {
+    "interactions": 2,
+    "authority_events": 1
+  }
+}

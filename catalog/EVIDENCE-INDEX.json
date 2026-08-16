@@ -1,0 +1,64 @@
+{
+  "schema_version": "charting-loop/method-evidence-index/v1",
+  "method_version_id": "paper2-current-v2",
+  "bindings": [
+    {
+      "claim_id": "claim-plane-control-separation",
+      "source_ids": ["charting-loop-theory-zenodo-v1", "charting-loop-repository-v1"],
+      "relationship": "new repository method distinction informed by theory and v1 experience"
+    },
+    {
+      "claim_id": "claim-role-bound-position",
+      "source_ids": [
+        "charting-loop-theory-zenodo-v1",
+        "charting-loop-repository-v1"
+      ],
+      "relationship": "repository method decision separating the role-definition Rule, admitted Assignment Fact, and independent Warranty obligations"
+    },
+    {
+      "claim_id": "claim-one-entrance",
+      "source_ids": ["charting-loop-theory-zenodo-v1"],
+      "relationship": "restricted construction mapping; not quoted as an original theorem"
+    },
+    {
+      "claim_id": "claim-exact-worldspan",
+      "source_ids": ["charting-loop-theory-zenodo-v1", "charting-loop-repository-v1"],
+      "relationship": "operational closure requirement"
+    },
+    {
+      "claim_id": "claim-orthogonal-warranties",
+      "source_ids": ["charting-loop-theory-zenodo-v1", "charting-loop-repository-v1"],
+      "relationship": "new method separation preserving theory warranty boundaries"
+    },
+    {
+      "claim_id": "claim-optional-authority",
+      "source_ids": ["charting-loop-repository-v1"],
+      "relationship": "method correction to keep empirical authority treatment outside the core Candidate"
+    },
+    {
+      "claim_id": "claim-u-to-c",
+      "source_ids": ["charting-loop-theory-zenodo-v1"],
+      "relationship": "method-level re-entry mapping"
+    },
+    {
+      "claim_id": "claim-candidate-lifecycle",
+      "source_ids": ["charting-loop-theory-zenodo-v1", "charting-loop-repository-v1"],
+      "relationship": "repository lifecycle rule aligned to immutable-world semantics"
+    },
+    {
+      "claim_id": "claim-composite-obligations",
+      "source_ids": ["charting-loop-theory-zenodo-v1", "charting-loop-repository-v1"],
+      "relationship": "method mapping that separates proof obligations from physical module boundaries"
+    },
+    {
+      "claim_id": "claim-conditional-probability-bridge",
+      "source_ids": ["charting-loop-theory-zenodo-v1"],
+      "relationship": "conditional method-to-experiment bridge; estimator design remains deferred"
+    },
+    {
+      "claim_id": "claim-failure-diagnostic-rubric",
+      "source_ids": ["charting-loop-theory-zenodo-v1", "charting-loop-theory-internal-v5", "charting-loop-repository-v1"],
+      "relationship": "method-level evaluator procedure grounded in published v1 and repository experience; exact invariant-classification wording is disclosed as consulted, non-primary internal-v5 drafting provenance, not asserted as a published theory theorem or estimator"
+    }
+  ]
+}

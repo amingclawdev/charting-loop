@@ -1,0 +1,91 @@
+{
+  "schema_version": "charting-loop/theory-index/v2",
+  "artifacts": [
+    {
+      "version_id": "zenodo-v1",
+      "artifact_id": "charting-loop-theory",
+      "version_labels": {
+        "publication": "v1",
+        "deposit": "zenodo.21844624"
+      },
+      "provenance_role": "published-primary",
+      "publication": {
+        "provider": "zenodo",
+        "record_doi": "10.5281/zenodo.21844624",
+        "concept_doi": "10.5281/zenodo.21844623",
+        "record_url": "https://zenodo.org/records/21844624",
+        "version": "v1",
+        "publication_date": "2026-08-08",
+        "resource_type": "publication-preprint",
+        "license": "cc-by-4.0"
+      },
+      "source": {
+        "repository_id": "drift-gym",
+        "repository_url": null,
+        "commit": "cf5ac479e208a2401b9358527d58df48e22c0670",
+        "tag": null,
+        "tag_signature": "not-applicable"
+      },
+      "representations": [
+        {
+          "kind": "pdf",
+          "path": "paper/charting-loop-zenodo.pdf",
+          "git_blob_sha1": "083ca2c18dbbb44804208d081b70e7a161df1187",
+          "sha256": "sha256:f557af476441e814e4d86041969c18fde2299a6a47d28658bdeb8cec2d7296c1"
+        },
+        {
+          "kind": "source-archive",
+          "path": "paper/charting-loop-arxiv.tar.gz",
+          "git_blob_sha1": "6bae14bbb194c604004adad2ac391fdda34901db",
+          "sha256": "sha256:1c7b2fafa1569809ca6923fc1682e44188c93a0e19cdd81b9746ecc7ad4de026"
+        }
+      ],
+      "notes": [
+        "The record DOI identifies the exact published v1; the concept DOI identifies the all-versions collection.",
+        "The PDF and source archive are byte-identical to the files deposited in Zenodo record 21844624.",
+        "The source commit has no dedicated release tag in this local checkout; commit, blob, and content digests form the Git-side identity boundary."
+      ]
+    },
+    {
+      "version_id": "internal-v5-arxiv-initial",
+      "artifact_id": "charting-loop-theory",
+      "version_labels": {
+        "internal": "v5",
+        "publication": "initial"
+      },
+      "provenance_role": "consulted-drafting",
+      "publication": null,
+      "source": {
+        "repository_id": "drift-gym",
+        "repository_url": null,
+        "commit": "e0dd3a466654011ecf0cb6d8f32e9cbbc4c3cc99",
+        "tag": "internal-v5-arxiv-initial",
+        "tag_signature": "unverified"
+      },
+      "representations": [
+        {
+          "kind": "markdown",
+          "path": "paper/charting-loop-theory-v2.md",
+          "git_blob_sha1": "9330142540cdaf299ec7c863bd725b8136e3d622",
+          "sha256": "sha256:7c7a1522d3d6abd7fb3568046816e8f2708a979cbce0f3c2e041d24f4f8135ea"
+        },
+        {
+          "kind": "latex",
+          "path": "paper/arxiv-submission/main.tex",
+          "git_blob_sha1": "19f9aef64468f5d2d464664ac82b607e679ec9d3",
+          "sha256": "sha256:3e1d10f6bd9803547714a6e7afaa3630d910278155b1eb50b42e27613bde70ce"
+        },
+        {
+          "kind": "pdf",
+          "path": "paper/charting-loop-arxiv-v5.pdf",
+          "git_blob_sha1": "161c01258f565c8c1d59d3a1cea2269acf693c82",
+          "sha256": "sha256:0c501151f5e386f3823b713c39934723fb14cf150ae00a6ade327836ab68d189"
+        }
+      ],
+      "notes": [
+        "The source repository has no configured remote in this workspace.",
+        "The lightweight tag is not cryptographically signed; commit and byte digests are the current identity boundary."
+      ]
+    }
+  ]
+}

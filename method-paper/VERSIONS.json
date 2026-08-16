@@ -1,0 +1,48 @@
+{
+  "schema_version": "charting-loop/method-index/v2",
+  "normative_source": "method-paper/METHOD.md",
+  "versions": [
+    {
+      "version_id": "paper2-current-v2",
+      "status": "frozen",
+      "study_eligible": true,
+      "adoption_eligible": false,
+      "builder_eligible": false,
+      "source_commit": "c500c07a2138212e7ddc9ea77ff2a20c379c6492",
+      "path": "method-paper/METHOD.md",
+      "content_sha256": "sha256:ce9c94c12660c57a8dc34c98afd46c644b07214a2f9e7a9a494078fbe7be0905",
+      "scope_datum_path": "method-paper/SCOPE-DATUM.md",
+      "scope_datum_sha256": "sha256:c0764df57d20b5d66500ec75c8f8fcd5e0dd5c5029bd35783caca6a68133e307",
+      "derived_from": {
+        "theory_version_id": "zenodo-v1",
+        "source_commit": "cf5ac479e208a2401b9358527d58df48e22c0670",
+        "representation": "pdf",
+        "content_sha256": "sha256:f557af476441e814e4d86041969c18fde2299a6a47d28658bdeb8cec2d7296c1"
+      },
+      "claim_catalog": "catalog/CLAIMS.json",
+      "source_catalog": "catalog/SOURCES.json",
+      "evidence_index": "catalog/EVIDENCE-INDEX.json"
+    },
+    {
+      "version_id": "draft-v2",
+      "status": "frozen",
+      "study_eligible": false,
+      "adoption_eligible": false,
+      "builder_eligible": false,
+      "source_commit": "aea535453ebd75ee19bc09190a8e284925be0ae3",
+      "path": "method-paper/METHOD.md",
+      "content_sha256": "sha256:bc73c87a348eff6eeec9444e85e71a706c808827a6c11c9f810fd919be630fc7",
+      "scope_datum_path": "method-paper/SCOPE-DATUM.md",
+      "scope_datum_sha256": "sha256:973d0993193ec2598cacfeb3e708161f8fddade02448ea1ad5bc105a293cf91c",
+      "derived_from": {
+        "theory_version_id": "zenodo-v1",
+        "source_commit": "cf5ac479e208a2401b9358527d58df48e22c0670",
+        "representation": "pdf",
+        "content_sha256": "sha256:f557af476441e814e4d86041969c18fde2299a6a47d28658bdeb8cec2d7296c1"
+      },
+      "claim_catalog": "catalog/CLAIMS.json",
+      "source_catalog": "catalog/SOURCES.json",
+      "evidence_index": "catalog/EVIDENCE-INDEX.json"
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "schema_version": "charting-loop/exogenous-run/v2",
+  "template": true,
+  "run_id": "template-run",
+  "runner_id": "template-runner",
+  "study_ref": {
+    "study_id": "template-study",
+    "path": "studies/template-study/STUDY.json",
+    "sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "task_ref": {
+    "taskset_id": "template-taskset",
+    "taskset_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "task_id": "template-task",
+    "task_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+  },
+  "condition_id": "template-condition",
+  "status": "registered",
+  "trial": 0,
+  "seed": "template-seed",
+  "runtime": {
+    "executor_type": "ai-agent",
+    "provider": "template-provider",
+    "model": "template-model",
+    "runtime": "template-runtime",
+    "profile_sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "tools_sha256": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "network_access": "unknown",
+    "budget_sha256": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+    "stopping_rule_sha256": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+  },
+  "measurement_plan": {
+    "schema_version": "charting-loop/measurement-plan/v1",
+    "usage_receipt_schema": "charting-loop/usage-receipt/v1",
+    "package_cost_schema": "charting-loop/package-cost/v1",
+    "required_usage_stages": [
+      "construction",
+      "guided_execution",
+      "reentry_revalidation",
+      "retry"
+    ],
+    "raw_evidence_profile": "complete-digest-bound",
+    "independent_replay_required": true
+  },
+  "world_ref": {
+    "project_id": "charting-loop",
+    "run_id": "template-run",
+    "generation_id": "template-generation",
+    "repository_url": "https://example.invalid/participant",
+    "base_commit": "1111111111111111111111111111111111111111",
+    "environment_sha256": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+    "evidence_prefix": {
+      "stream_id": "template-raw-ledger",
+      "through_sequence": 0,
+      "prefix_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "admission": {
+        "receipt_id": "template-admission-receipt",
+        "admitted_root_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "rule_revision": "template-admission-rule-v1",
+        "rule_sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "projector": {
+        "schema_version": "charting-loop/world-projector/v1",
+        "algorithm_id": "template-world-projector",
+        "algorithm_version": "1",
+        "algorithm_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      }
+    },
+    "derived_state_sha256": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+  },
+  "subject": {
+    "system_condition": "corridor",
+    "repository_url": "https://example.invalid/participant",
+    "base_commit": "1111111111111111111111111111111111111111",
+    "artifact_commit": "2222222222222222222222222222222222222222",
+    "artifact_root": "runs/template-run/output",
+    "artifact_tree_sha256": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+    "branch_hint": null
+  },
+  "supersedes_run_id": null
+}

@@ -1,0 +1,19 @@
+{
+  "services": [
+    {
+      "capacity": 3,
+      "service": "api",
+      "status": "ready"
+    },
+    {
+      "capacity": 2,
+      "service": "scheduler",
+      "status": "blocked"
+    },
+    {
+      "capacity": 1,
+      "service": "worker",
+      "status": "ready"
+    }
+  ]
+}

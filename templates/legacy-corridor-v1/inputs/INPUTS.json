@@ -1,0 +1,31 @@
+{
+  "schema_version": "charting-loop/input-bundle/v1",
+  "bundle_id": "template-input-bundle",
+  "track": "reference",
+  "task_id": "reference-v1",
+  "knowledge_arm": "control-none",
+  "builder_view": {
+    "roots": ["inputs/files", "AGENTS.md"],
+    "tree_sha256": "sha256:d26ebf5066dbf3ef0f5bb5a4c6b95215af6a0ad5b7ee89a89f10bc37f23a4224",
+    "common_inputs_sha256": "sha256:d26ebf5066dbf3ef0f5bb5a4c6b95215af6a0ad5b7ee89a89f10bc37f23a4224",
+    "treatment_inputs_sha256": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "entries": [
+    {
+      "input_id": "reference-builder-brief",
+      "role": "builder-task",
+      "input_class": "common",
+      "path": "inputs/files/BUILDER-BRIEF.md",
+      "sha256": "sha256:f4a0a39a2b014a10519ae03357b358c2c79dee186cd13f7c616d2654f0a14087",
+      "visible_to_builder": true
+    },
+    {
+      "input_id": "runner-recording-notice",
+      "role": "instrumentation",
+      "input_class": "common",
+      "path": "AGENTS.md",
+      "sha256": "sha256:6fc24361f1a61e7e5078fc6ec475ce7751a252e765f52ed9b093cb5231aad33c",
+      "visible_to_builder": true
+    }
+  ]
+}

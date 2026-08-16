@@ -1,0 +1,38 @@
+{
+  "schema_version": "charting-loop/exogenous-taskset/v1",
+  "taskset_id": "tb21-cl021",
+  "benchmark": {
+    "dataset_id": "terminal-bench",
+    "release": "2.1",
+    "repository_url": "https://github.com/harbor-framework/terminal-bench-2-1",
+    "source_commit": "7131e4375048a0e408a8fb404b5f499d726b695b"
+  },
+  "tasks": [
+    {
+      "task_id": "cobol-modernization",
+      "input": {
+        "kind": "vendored",
+        "locator": "tasks/cobol-modernization/instruction.md",
+        "sha256": "sha256:a87074f1141b7345394cd88053d0debb0dc8f7de95308882c6538ee9a3b359da"
+      }
+    }
+  ],
+  "task_list_sha256": "sha256:5cdacd0b0571cf5729034fe1734929be5a0dfea81376117f9f83523073bf18ff",
+  "environment": {
+    "environment_id": "docker/linux-amd64/alexgshaw-cobol-modernization",
+    "image_sha256": "sha256:593ab9df3d83f771e927888b2d9436b380cdf7ec4d0af2a9f0802d541edebba0",
+    "data_sha256": "sha256:009180a7092583fc8143bb3ffc3957923aa0d61d0aac3a471f76eeb4aae54a88"
+  },
+  "evaluator": {
+    "scorer_id": "tb21-cgw-pilot/local_model_ablation.py",
+    "scorer_revision": "LOCAL-MODEL-ABLATION-20260813",
+    "scorer_sha256": "sha256:565df0602bb97cf754f2eab109a7b5e9436f7ae07a6e2cd39bba806ec44a5e3a",
+    "verifier_id": "terminal-bench/cobol-modernization/hidden-tests",
+    "verifier_revision": "7131e4375048a0e408a8fb404b5f499d726b695b",
+    "verifier_sha256": "sha256:009180a7092583fc8143bb3ffc3957923aa0d61d0aac3a471f76eeb4aae54a88"
+  },
+  "license": {
+    "identifier": "Apache-2.0",
+    "redistribution": "vendored"
+  }
+}

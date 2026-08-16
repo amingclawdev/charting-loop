@@ -1,0 +1,83 @@
+{
+  "schema_version": "charting-loop/method-claims/v1",
+  "method_version_id": "paper2-current-v2",
+  "claims": [
+    {
+      "claim_id": "claim-plane-control-separation",
+      "statement": "Rule and Fact input planes must remain distinct from the deterministic Guide control plane and from MethodRef knowledge inputs; effective Direction must resolve to a declared Rule.",
+      "origin": "method-decision",
+      "scope": "repository method and runtime projections",
+      "falsified_by": "a conforming runtime treats Guide as advisory source material, injects Direction without a declared Rule, or implicitly promotes a Fact or MethodRef to an authorizing Rule"
+    },
+    {
+      "claim_id": "claim-role-bound-position",
+      "statement": "Position is role-bound on one canonical world: role definition is a Rule, actor–role Assignment is an admitted authority- and liveness-bearing Fact, and consuming that Assignment requires live EvidentialWarranty and AuthorityWarranty.",
+      "origin": "method-decision",
+      "scope": "Position construction and Guide consumption",
+      "falsified_by": "a runtime treats a role label as an assignment, treats timeline presence as an admitted Fact, or consumes the assignment without both required live Warranties"
+    },
+    {
+      "claim_id": "claim-one-entrance",
+      "statement": "One Candidate has one semantic Entrance even when it has several interface projections.",
+      "origin": "theory-derived-method-decision",
+      "scope": "Candidate construction and traversal",
+      "falsified_by": "a certificate combines independent undeclared entrance identities"
+    },
+    {
+      "claim_id": "claim-exact-worldspan",
+      "statement": "A complete WorldRef binds project/run/generation, repository/base, environment, contiguous RAW prefix, admission Rule/receipt/root, projector, and derived state; a WorldSpan extends only that RAW prefix under the same generation rules.",
+      "origin": "theory-derived-method-decision",
+      "scope": "certifying traversal",
+      "falsified_by": "a valid certificate accepts an incomplete or branch-relative WorldRef, treats timeline presence as an admitted Fact, or crosses a base, admission-Rule, projector, project, run, or generation boundary"
+    },
+    {
+      "claim_id": "claim-orthogonal-warranties",
+      "statement": "Traversal receipt and path certificate remain orthogonal to the exactly two Warranty kinds, EvidentialWarranty and AuthorityWarranty; liveness is a Warranty state dimension, not a third kind.",
+      "origin": "method-decision",
+      "scope": "evidence and warranty surfaces",
+      "falsified_by": "one surface is automatically minted solely from another"
+    },
+    {
+      "claim_id": "claim-optional-authority",
+      "statement": "Authority logs are optional format-free exogenous reminders whose presence never gates participation, validation, baseline comparison, or Warranty issuance; absence means unknown/not_assessed rather than approved.",
+      "origin": "method-decision",
+      "scope": "minimal Candidate and ordinary traversal",
+      "falsified_by": "core Candidate or ordinary comparison validation requires an authority log, derives AuthorityWarranty from log presence, or treats absence as approval"
+    },
+    {
+      "claim_id": "claim-u-to-c",
+      "statement": "Repair re-enters U to scope-indexed C only through a new frozen Candidate, fresh traversal, PathCertificate, and live EvidentialWarranty without rewriting history; its actor–role Assignment also needs live AuthorityWarranty before consumption.",
+      "origin": "theory-derived-method-decision",
+      "scope": "repair and supersession",
+      "falsified_by": "constructing a Candidate is treated as C or evidence from two revisions is spliced into one certificate or warranty"
+    },
+    {
+      "claim_id": "claim-candidate-lifecycle",
+      "statement": "An open Candidate is a mutable version-identifiable proposal; only a frozen semantic closure is immutable and certifiable.",
+      "origin": "method-decision",
+      "scope": "Candidate construction",
+      "falsified_by": "an open proposal is certified or frozen semantic bytes change without a new revision"
+    },
+    {
+      "claim_id": "claim-composite-obligations",
+      "statement": "Physical mechanisms may combine P, D, and E responsibilities while their propositions and authority/warranty evidence remain separately checkable.",
+      "origin": "theory-derived-method-decision",
+      "scope": "implementation architecture and evidence",
+      "falsified_by": "a composite component makes one proof receipt automatically satisfy a distinct proposition"
+    },
+    {
+      "claim_id": "claim-conditional-probability-bridge",
+      "statement": "P, D, and E are conditioned on role/world/datum/history and may only be factorized as a conditional chain; run or scenario remains the primary clustered experimental unit.",
+      "origin": "theory-derived-method-decision",
+      "scope": "method-to-experiment bridge",
+      "falsified_by": "marginal rates are multiplied or decision events and roles are treated as independent experimental units"
+    },
+    {
+      "claim_id": "claim-failure-diagnostic-rubric",
+      "statement": "Paper-grounded diagnosis classifies the violated invariant as P, D, or E, records action-execution failure separately as X, and remains advisory rather than minting a warranty or estimator.",
+      "origin": "method-decision",
+      "scope": "manual and evaluator-assisted failure diagnosis",
+      "falsified_by": "a diagnosis classifies by file, module, actor, or message source instead of the violated invariant, or its receipt is treated as a warranty, authorization, estimator, or empirical result"
+    }
+  ]
+}

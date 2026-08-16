@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use this method or its experiment substrate, cite this software and the exact release commit."
+title: "Charting Loop: Corridor method and experiment substrate"
+type: software
+authors:
+  - name: "Charting Loop contributors"
+abstract: >-
+  A research-preview method, protocol, and validation substrate for constructing and
+  evaluating auditable task-conditioned Corridors in long-horizon agent work.
+license: Apache-2.0
+version: 0.1.0-research-preview
+keywords:
+  - agent evaluation
+  - long-horizon tasks
+  - independent QA
+  - reproducibility
+  - append-only evidence
+references:
+  - type: article
+    authors:
+      - family-names: "Zhang"
+        given-names: "Ying"
+    title: "The Charting Loop: A Four-Layer Probabilistic Theory of Uncharted-to-Charted Work in Agent Systems"
+    year: 2026
+    month: 8
+    version: "v1"
+    doi: "10.5281/zenodo.21844624"
+    url: "https://doi.org/10.5281/zenodo.21844624"
+    publisher:
+      name: "Zenodo"
+    license: "CC-BY-4.0"
+    scope: "Published theory source that this method and experiment substrate build on."

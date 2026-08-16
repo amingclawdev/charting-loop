@@ -1,0 +1,32 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.aming-claw/
+.worktrees/
+exogenous/local/
+demos/service-plan-corridor-e2e/local/
+demos/service-plan-corridor-e2e/runs/
+demos/service-plan-corridor-e2e/**/auth.json
+demos/service-plan-corridor-e2e/**/.codex/
+demos/service-plan-corridor-e2e/**/*.jsonl
+
+# Public-release restricted and generated material. Ignore rules are convenience only;
+# tools/public_release.py scans the exact staged tree and reachable Git objects.
+*.bundle
+*.pack
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+*.har
+*.log
+*.zip
+*.tar
+*.tgz
+*.gz
+*.7z
+**/trajectory.json
+**/trajectories/
+**/sessions/
+**/transcripts/
+release-sealed/

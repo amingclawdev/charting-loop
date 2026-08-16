@@ -1,0 +1,26 @@
+{
+  "schema_version": "charting-loop/evaluation-result/v1",
+  "corridor_id": "template-corridor",
+  "revision_id": "candidate-001",
+  "status": "not-run",
+  "assessment_log_path": null,
+  "assessment_log_sha256": null,
+  "first_traversal": {
+    "status": "not-attempted",
+    "frozen_revision": "candidate-001",
+    "frozen_corridor_sha256": "sha256:0d26dc5f47b89cf5214d8d23ec4071750d5d71c96e6a235c6ca02b4c0fb974ea",
+    "fresh": false,
+    "bypass_used": false,
+    "attempt_count": 0,
+    "trace_ref": null
+  },
+  "scenarios": {
+    "S1": {"status": "not-run", "classification_status": "not-assessed", "failure_factors": [], "subject_diagnosis_id": null, "evaluator_assessment_id": null, "evidence_refs": []},
+    "S2": {"status": "not-run", "classification_status": "not-assessed", "failure_factors": [], "subject_diagnosis_id": null, "evaluator_assessment_id": null, "evidence_refs": []},
+    "S3": {"status": "not-run", "classification_status": "not-assessed", "failure_factors": [], "subject_diagnosis_id": null, "evaluator_assessment_id": null, "evidence_refs": []},
+    "S4": {"status": "not-run", "classification_status": "not-assessed", "failure_factors": [], "subject_diagnosis_id": null, "evaluator_assessment_id": null, "evidence_refs": []},
+    "S5": {"status": "not-run", "classification_status": "not-assessed", "failure_factors": [], "subject_diagnosis_id": null, "evaluator_assessment_id": null, "evidence_refs": []},
+    "S6": {"status": "not-run", "classification_status": "not-assessed", "failure_factors": [], "subject_diagnosis_id": null, "evaluator_assessment_id": null, "evidence_refs": []}
+  },
+  "notes": "The checked-in skeleton has not been evaluated."
+}

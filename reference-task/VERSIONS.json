@@ -1,0 +1,39 @@
+{
+  "schema_version": "charting-loop/task-index/v1",
+  "tasks": [
+    {
+      "task_id": "reference-v1",
+      "builder_brief": {
+        "path": "reference-task/BUILDER-BRIEF.md",
+        "sha256": "sha256:f4a0a39a2b014a10519ae03357b358c2c79dee186cd13f7c616d2654f0a14087"
+      },
+      "common_instrumentation": [
+        {
+          "path": "templates/legacy-corridor-v1/AGENTS.md",
+          "sha256": "sha256:6fc24361f1a61e7e5078fc6ec475ce7751a252e765f52ed9b093cb5231aad33c"
+        }
+      ],
+      "subject_diagnosis_prompt": {
+        "path": "reference-task/SUBJECT-DIAGNOSIS-PROMPT.md",
+        "sha256": "sha256:d0361aba0f744d26a450d3d314f771d498c6b332a6134e31ffe67d9f99556947"
+      },
+      "evaluation_protocol": {
+        "tree_sha256": "sha256:f6c3a82a5b5138f8b630a413dc8764f3b714609bd3f82f5559ed49c87a9bb996",
+        "files": [
+          {
+            "path": "reference-task/TASK.md",
+            "sha256": "sha256:9744e1d413e444c5c98e5da7f272d162afd7ebf3f2f1cbfc835a8d50876f332d"
+          },
+          {
+            "path": "reference-task/RATIONALE.md",
+            "sha256": "sha256:d3d10e5e3f39fcfe5fedc88b9fe08250c446657376d24c7510b301f2c9e0c953"
+          },
+          {
+            "path": "reference-task/SUBJECT-DIAGNOSIS-PROMPT.md",
+            "sha256": "sha256:d0361aba0f744d26a450d3d314f771d498c6b332a6134e31ffe67d9f99556947"
+          }
+        ]
+      }
+    }
+  ]
+}

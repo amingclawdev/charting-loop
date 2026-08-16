@@ -1,0 +1,13 @@
+{
+  "inventory_version": "sealed-inventory-L1",
+  "services": [
+    {
+      "replicas": 3,
+      "service": "api"
+    },
+    {
+      "replicas": 1,
+      "service": "worker"
+    }
+  ]
+}

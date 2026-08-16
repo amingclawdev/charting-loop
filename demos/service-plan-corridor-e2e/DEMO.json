@@ -1,0 +1,101 @@
+{
+  "schema_version": "charting-loop/engineering-demo/v1",
+  "demo_id": "service-plan-corridor-e2e",
+  "classification": "engineering-e2e-smoke",
+  "evidence_strength": "synthetic-fixture",
+  "normative": false,
+  "benchmark_result": false,
+  "causal_claim_allowed": false,
+  "authority_log_status": "not_assessed",
+  "project_id": "charting-loop",
+  "run_id": "service-plan-engineering-demo",
+  "generation_id": "generation-1",
+  "subject": {
+    "repository_url": "https://github.com/amingclawdev/charting-loop-e2e-demo",
+    "base_commit": "bae2274dc6b4a41026670ae6ef6d1b0c09a85880",
+    "base_tree": "12cda11ad2afecb97b49712b6e317e8a000951f6",
+    "environment_sha256": "sha256:b2d824548cc691941bcfa88bbe4baa405f22d0aa5431dcd84ffe7b32c2435a99"
+  },
+  "environment": {
+    "python": "3.12",
+    "network": "none",
+    "docker": false,
+    "model": false
+  },
+  "task": {
+    "intent": "Compile the admitted service inventory into a canonical service plan.",
+    "checkpoint": "core-ready",
+    "stages": [
+      {
+        "id": "stage-1",
+        "instruction": "Build the pure inventory-to-plan transformation and emit the runner-owned core-ready checkpoint exactly once."
+      },
+      {
+        "id": "stage-2",
+        "instruction": "Consume the refreshed inventory, compile the final canonical plan, and preserve typed failure behavior."
+      }
+    ],
+    "acceptance": {
+      "ready_services_only": true,
+      "replicas_source": "capacity",
+      "sort_key": "service",
+      "output": "fixtures/expected-plan.json"
+    }
+  },
+  "task_sha256": "sha256:1cdd192ac5cc29d0caf79a50bd714cc51f793dd086f7a6dc4596a5e0f9120ce4",
+  "fixtures": {
+    "world_l0": {
+      "path": "fixtures/world-L0.json",
+      "content_sha256": "sha256:f33b1aac7d69b370a8e8ac0d8f0eaa345878d899b7a3d439e1c6f2afbed5f52d"
+    },
+    "world_l1": {
+      "path": "fixtures/world-L1.json",
+      "content_sha256": "sha256:79317fe71af954c4dcc7081fc5eb7fdc1912370c0f05080b36daa4663cec4891"
+    },
+    "expected_plan": {
+      "path": "fixtures/expected-plan.json",
+      "content_sha256": "sha256:f032a9368f3cb7aa6fe3b7c4fd1a30ef64ddab156eef22c413a5b30b1bc80aeb"
+    }
+  },
+  "projector": {
+    "id": "service-inventory-projector",
+    "version": "1",
+    "stream_id": "service-plan-context"
+  },
+  "projector_sha256": "sha256:b1955200c60e069b97ce5b6a49570d2559cc7e156c7a85eef5da3866712defb9",
+  "admission": {
+    "rule_id": "latest-inventory-fixture",
+    "rule_revision": "1"
+  },
+  "admission_rule_sha256": "sha256:3cc915c205530f34563e95ee5537de1a033c865e41af4e1129062a7ea516d2c7",
+  "context_event": {
+    "sequence": 1,
+    "event": "core-ready",
+    "from_world": "world-L0",
+    "to_world": "world-L1",
+    "fixture": "fixtures/world-L1.json"
+  },
+  "context_event_sha256": "sha256:67a6f1e58cb1ac8cecb8c318cf41b0e7e3f61cba8c55c434fb2ef6911372f09f",
+  "evaluator": {
+    "id": "public-service-plan-evaluator",
+    "version": "1",
+    "checks": [
+      "task_output_exact",
+      "checkpoint_exactly_once",
+      "typed_failure_preserves_output"
+    ]
+  },
+  "evaluator_sha256": "sha256:266012fb2d66b2fe7d874c599c68b58533603338b8e8c21591ca8b1da2227fd0",
+  "expected_runtime_evidence": "expected/RUNTIME-EVIDENCE.json",
+  "observed_docker_pair": {
+    "path": "examples/PAIR-RESULT.json",
+    "schema_version": "charting-loop/docker-engineering-pair/v1",
+    "content_sha256": "sha256:16c53bfc54d8231a9b1b087acc384359f6cdb02570488eae729f4d4dd5a849ad"
+  },
+  "known_limits": [
+    "The default run is a scripted deterministic engineering smoke, not an AI evaluation.",
+    "The public evaluator is not a hidden benchmark oracle.",
+    "The checked-in Docker pair is one fixed-order observation with known prompt and runner confounding.",
+    "Authority is not assessed and no method-effect, causal, security, or generalization claim is made."
+  ]
+}

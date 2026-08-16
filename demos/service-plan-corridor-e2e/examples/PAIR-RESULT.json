@@ -1,0 +1,137 @@
+{
+  "schema_version": "charting-loop/docker-engineering-pair/v1",
+  "demo_id": "service-plan-corridor-e2e",
+  "classification": "sanitized-engineering-observation",
+  "evidence_basis": "runner-reported-no-raw-proof",
+  "method_level_c_established": false,
+  "independent_verification_established": false,
+  "raw_evidence_published": false,
+  "benchmark_result": false,
+  "causal_claim_allowed": false,
+  "authority_warranty_state": "not_assessed",
+  "valid_pair": [
+    "control-r1",
+    "treatment-r2"
+  ],
+  "task": {
+    "repository_url": "https://github.com/amingclawdev/charting-loop-e2e-demo",
+    "base_commit": "bae2274dc6b4a41026670ae6ef6d1b0c09a85880",
+    "base_tree": "12cda11ad2afecb97b49712b6e317e8a000951f6"
+  },
+  "runtime": {
+    "execution_image": "sha256:b6055e2cf3e3b988027e257cced5c06115c3ad44c665b2cbf1364df605228554",
+    "context_image": "sha256:22e7ca163c587fb9fcc269d9b45f2145cb68e042bc673a7eabef1428f37bafc1",
+    "egress_proxy_image": "sha256:5e5ed76bfbe053267f92248cb068da711ea44893b5dd74d2649a9d2dd3eeb37b",
+    "evaluator_image": "sha256:651ba9471a12826bf7533b7574a9901cf0b8b422eebb52c5fefcc592c29741c5",
+    "permission_config_sha256": "sha256:7126d779553598d1a7e4239dc861fbf904ed0891ff9a0a90df1d6df7a8724c19",
+    "codex_cli": "0.147.0-alpha.6.5",
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "low",
+    "approval_policy": "never",
+    "service_tier": "not_explicitly_pinned",
+    "arm_order": [
+      "control-r1",
+      "treatment-r1-excluded-infra-failure",
+      "treatment-r2"
+    ]
+  },
+  "common_input_checks": {
+    "same_base_commit": true,
+    "same_base_tree": true,
+    "same_context_event_bytes": true,
+    "same_final_world_state": true,
+    "same_execution_image": true,
+    "same_model_and_reasoning": true,
+    "same_resource_limits": true,
+    "same_evaluator": true,
+    "same_final_plan_bytes": true,
+    "final_plan_sha256": "sha256:3ca99aa2d280420af27a5d4620ec00e585328a4aead532b16b2448e91f9e5978"
+  },
+  "arms": {
+    "control-r1": {
+      "condition": {
+        "system": "task-only",
+        "knowledge": "task-only"
+      },
+      "agent_exit": 0,
+      "checkpoint_count": 1,
+      "final_world_prefix": 1,
+      "task_score": {
+        "task_pass": true,
+        "checks": {
+          "public_tests": true,
+          "sealed_output": true,
+          "typed_failure": true
+        }
+      },
+      "workspace_diff_sha256": "sha256:4ba0f8ae25741edcc670b61d256310fa0f34d2fb89b688d9b6c24f9e1012a982"
+    },
+    "treatment-r2": {
+      "condition": {
+        "system": "corridor",
+        "knowledge": "task-only"
+      },
+      "agent_exit": 0,
+      "checkpoint_count": 1,
+      "final_world_prefix": 1,
+      "task_score": {
+        "task_pass": true,
+        "checks": {
+          "public_tests": true,
+          "sealed_output": true,
+          "typed_failure": true
+        }
+      },
+      "corridor_score": {
+        "classification": "runner-reported-plumbing-check",
+        "corridor_e2e_pass": true,
+        "checks": {
+          "world_transition": true,
+          "guide_sequence": true,
+          "candidate_reentry": true,
+          "deterministic_cardinality": true,
+          "path_certificates": true,
+          "warranty_transition": true,
+          "authority_optional": true
+        }
+      },
+      "corridor_evidence_sha256": "sha256:02682bfa44c3e498e49a159602a4d50fab0fefd9b19803ba026e47b1babe9b5a",
+      "workspace_diff_sha256": "sha256:1f8831c639a6a9719843c9cb811da63bc26407b135297b6f899ec744e9f58aa8"
+    }
+  },
+  "excluded_attempts": [
+    {
+      "id": "treatment-r1",
+      "classification": "runner-interface-infrastructure-failure",
+      "reason": "The initial command wrapper returned usage exit 2 before the runner-owned guide executable reached the context service.",
+      "workspace_unchanged": true,
+      "guide_consumption_count": 0,
+      "checkpoint_count": 0,
+      "included_in_pair": false
+    }
+  ],
+  "isolation_observations": {
+    "agent_rootfs_read_only": true,
+    "agent_uid_non_root": true,
+    "agent_capabilities_dropped": true,
+    "no_new_privileges": true,
+    "no_host_bind_mounts": true,
+    "no_docker_socket": true,
+    "agent_network_internal_only": true,
+    "workspace_contains_no_auth_or_trace_log": true,
+    "evaluator_network_none": true,
+    "evaluator_auth_absent": true,
+    "seccomp_unconfined": true,
+    "strong_hidden_evaluator_isolation": false
+  },
+  "limitations": [
+    "This is one fixed-order matched engineering pair, not a benchmark or an effect estimate.",
+    "The excluded treatment attempt consumed subscription state before treatment-r2.",
+    "Treatment-r2 used a repaired command wrapper and different prompt bytes, while the control encountered command failures; performance quantities are confounded and intentionally omitted.",
+    "The treatment changes a small Corridor system package, not method-paper knowledge, so component and paper effects are not identifiable.",
+    "The U-to-C construction records were scripted runner receipts; the AI consumed a runner-labeled projected Corridor state, not a method-level independently certified C.",
+    "The public evaluator is an engineering checker, not a strong hidden-test boundary.",
+    "The nested runtime required an unconfined seccomp profile, so strong container isolation is not claimed.",
+    "No claim is made about method effectiveness, drift probability, generalization, security, or real-world authority."
+  ]
+}
