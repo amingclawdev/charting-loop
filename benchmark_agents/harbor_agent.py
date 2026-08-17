@@ -45,7 +45,7 @@ from benchmark_agents.contract import (
 )
 
 
-AGENT_VERSION = "0.5.0"
+AGENT_VERSION = "0.5.1"
 METHOD_VERSION_ID = "charting-loop-method-v4"
 METHOD_SOURCE_COMMIT = "0d3ed5c357c906edcc697a83b3ce681c68cd353a"
 METHOD_CONTENT_SHA256 = (
@@ -64,6 +64,34 @@ PHASE_TIMEOUT_SECONDS = {
 }
 PHASE_TIMEOUT_TOTAL_SECONDS = sum(PHASE_TIMEOUT_SECONDS.values())
 PHASE_TOKEN_ENV = "CHARTING_LOOP_PHASE_TOKEN"
+
+
+def _codex_runtime_binding_command(
+    *,
+    nvm_node_root: str = "/root/.nvm/versions/node",
+    stable_bin_dir: str = "/usr/local/bin",
+) -> str:
+    """Bind an NVM-installed Codex CLI into a fresh-shell stable PATH."""
+
+    node_root = shlex.quote(nvm_node_root)
+    bin_dir = shlex.quote(stable_bin_dir)
+    fresh_path = shlex.quote(f"{stable_bin_dir}:/usr/bin:/bin")
+    return (
+        "set -eu; "
+        f"NVM_NODE_ROOT={node_root}; STABLE_BIN_DIR={bin_dir}; "
+        'CODEX_BIN="$(find "$NVM_NODE_ROOT" -path "*/bin/codex" '
+        '\\( -type f -o -type l \\) -print 2>/dev/null | sort -V | tail -n 1)"; '
+        'test -n "$CODEX_BIN" && test -e "$CODEX_BIN"; '
+        'NODE_BIN="${CODEX_BIN%/codex}/node"; test -x "$NODE_BIN"; '
+        'install -d -m 0755 "$STABLE_BIN_DIR"; '
+        'ln -sf "$NODE_BIN" "$STABLE_BIN_DIR/node"; '
+        'ln -sf "$CODEX_BIN" "$STABLE_BIN_DIR/codex"; '
+        f"PATH={fresh_path} sh -c "
+        + shlex.quote(
+            "command -v node >/dev/null && "
+            "command -v codex >/dev/null && codex --version"
+        )
+    )
 
 
 def _phase_quiescence_program(token: str, *, terminate: bool) -> str:
@@ -328,6 +356,10 @@ class ChartingLoopFullMethodAgent(Codex):
 
     async def setup(self, environment: BaseEnvironment) -> None:
         await super().setup(environment)
+        await self.exec_as_root(
+            environment,
+            command=_codex_runtime_binding_command(),
+        )
         if not self._method_source.is_file():
             raise FileNotFoundError(f"Frozen method source missing: {self._method_source}")
 

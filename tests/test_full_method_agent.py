@@ -116,6 +116,57 @@ def complete_assessment(
 
 
 class FullMethodContractTests(unittest.TestCase):
+    def test_codex_runtime_binding_is_visible_to_a_fresh_shell(self) -> None:
+        module = load_harbor_agent_with_stubs()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            nvm_root = root / "nvm/versions/node"
+            version_bin = nvm_root / "v22.17.0/bin"
+            stable_bin = root / "stable-bin"
+            version_bin.mkdir(parents=True)
+            node = version_bin / "node"
+            codex = version_bin / "codex"
+            node.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            codex.write_text("#!/bin/sh\necho codex-cli-test\n", encoding="utf-8")
+            node.chmod(0o755)
+            codex.chmod(0o755)
+
+            command = module._codex_runtime_binding_command(
+                nvm_node_root=str(nvm_root),
+                stable_bin_dir=str(stable_bin),
+            )
+            completed = subprocess.run(
+                ["sh", "-c", command],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            self.assertIn("codex-cli-test", completed.stdout)
+            self.assertEqual(node.resolve(), (stable_bin / "node").resolve())
+            self.assertEqual(codex.resolve(), (stable_bin / "codex").resolve())
+
+    def test_codex_runtime_binding_fails_closed_without_an_install(self) -> None:
+        module = load_harbor_agent_with_stubs()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            stable_bin = root / "stable-bin"
+            command = module._codex_runtime_binding_command(
+                nvm_node_root=str(root / "missing-nvm"),
+                stable_bin_dir=str(stable_bin),
+            )
+
+            completed = subprocess.run(
+                ["sh", "-c", command],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertNotEqual(0, completed.returncode)
+            self.assertFalse((stable_bin / "codex").exists())
+
     def test_protocol_and_runbook_fix_the_claim_and_visibility_boundaries(self) -> None:
         protocol = (
             REPOSITORY_ROOT

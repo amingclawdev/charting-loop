@@ -35,7 +35,7 @@ TASK_NAME = "ico-path-patch"
 TASK_FILTER = "terminal-bench/ico-path-patch"
 TASK_CACHE_DIGEST = "0115a4136189b48da79070f9b3004dc4e0dfc1a60725c5acebdd7f380d037d14"
 AGENT_IMPORT = "benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent"
-AGENT_VERSION = "0.5.0"
+AGENT_VERSION = "0.5.1"
 MODEL = "openai/gpt-5.6-sol"
 REASONING_EFFORT = "max"
 METHOD_VERSION_ID = "charting-loop-method-v4"
@@ -288,7 +288,7 @@ def _check_git_and_method(
         return _failed(
             "immutable_inputs",
             "Frozen method or agent bytes do not match the declared condition.",
-            "Restore the frozen v4 method bytes and Agent v0.5.0 before running.",
+            "Restore the frozen v4 method bytes and Agent v0.5.1 before running.",
             {"head": actual_head, "method_version_id": METHOD_VERSION_ID},
         )
     return _passed(
@@ -668,15 +668,26 @@ def _check_output_identity(config: DoctorConfig) -> CheckResult:
     )
 
 
-def _phase_harness(probe_b64: str, token: str) -> str:
+def _phase_harness(probe_b64: str, binding_b64: str, token: str) -> str:
     child = (
         "import signal,time;"
         "signal.signal(signal.SIGTERM,signal.SIG_IGN);"
         "time.sleep(120)"
     )
     return f"""import base64,json,os,subprocess,sys,time
+from pathlib import Path
 token={token!r}
 probe=base64.b64decode({probe_b64!r}).decode()
+binding=base64.b64decode({binding_b64!r}).decode()
+nvm_bin=Path("/tmp/charting-loop-doctor-nvm/versions/node/v22.17.0/bin")
+nvm_bin.mkdir(parents=True,exist_ok=True)
+(nvm_bin/"node").write_text("#!/bin/sh\\nexit 0\\n")
+(nvm_bin/"codex").write_text("#!/bin/sh\\necho codex-cli-doctor\\n")
+(nvm_bin/"node").chmod(0o755)
+(nvm_bin/"codex").chmod(0o755)
+bound=subprocess.run(["sh","-c",binding],text=True,capture_output=True,timeout=15)
+fresh=subprocess.run(["sh","-c","PATH=/tmp/charting-loop-doctor-bin:/usr/bin:/bin; command -v node >/dev/null && command -v codex >/dev/null && codex --version"],text=True,capture_output=True,timeout=15)
+codex_runtime_bound=bound.returncode==0 and fresh.returncode==0 and "codex-cli-doctor" in fresh.stdout
 pid=os.fork()
 if pid==0:
     os.setsid()
@@ -691,7 +702,7 @@ except ChildProcessError:
     pass
 data=json.loads(completed.stdout)
 observed=pid in data.get("initial_pids",[]) and pid in (data.get("term_signal_pids",[])+data.get("kill_signal_pids",[]))
-print(json.dumps({{"probe_returncode":completed.returncode,"child_observed":observed,"quiescent":data.get("quiescent") is True,"remaining_count":len(data.get("remaining_pids",[]))}},sort_keys=True))
+print(json.dumps({{"probe_returncode":completed.returncode,"child_observed":observed,"quiescent":data.get("quiescent") is True,"remaining_count":len(data.get("remaining_pids",[])),"codex_runtime_bound":codex_runtime_bound}},sort_keys=True))
 """
 
 
@@ -711,9 +722,15 @@ def _check_phase_isolation(
         )
     token = "doctor-" + uuid.uuid4().hex
     export_program = (
-        "import base64;"
-        "from benchmark_agents.harbor_agent import _phase_quiescence_program;"
-        f"print(base64.b64encode(_phase_quiescence_program({token!r},terminate=True).encode()).decode())"
+        "import base64,json;"
+        "from benchmark_agents.harbor_agent import "
+        "_codex_runtime_binding_command,_phase_quiescence_program;"
+        "payload={"
+        f"'probe_b64':base64.b64encode(_phase_quiescence_program({token!r},terminate=True).encode()).decode(),"
+        "'binding_b64':base64.b64encode(_codex_runtime_binding_command("
+        "nvm_node_root='/tmp/charting-loop-doctor-nvm/versions/node',"
+        "stable_bin_dir='/tmp/charting-loop-doctor-bin').encode()).decode()};"
+        "print(json.dumps(payload,sort_keys=True))"
     )
     exported = runner.run(
         [tools["harbor_python"], "-c", export_program],
@@ -727,14 +744,18 @@ def _check_phase_isolation(
             "Restore the committed Harbor adapter and rerun its unit tests.",
         )
     try:
-        base64.b64decode(exported.stdout.strip(), validate=True)
-    except (ValueError, TypeError):
+        exported_programs = _json(exported.stdout)
+        probe_b64 = exported_programs["probe_b64"]
+        binding_b64 = exported_programs["binding_b64"]
+        base64.b64decode(probe_b64, validate=True)
+        base64.b64decode(binding_b64, validate=True)
+    except (ValueError, KeyError, TypeError):
         return _failed(
             "phase_isolation",
-            "The CL-057 quiescence program export was invalid.",
+            "The CL-057/CL-061 runtime program export was invalid.",
             "Restore the committed Harbor adapter and rerun its unit tests.",
         )
-    harness = _phase_harness(exported.stdout.strip(), token)
+    harness = _phase_harness(probe_b64, binding_b64, token)
     exercised = runner.run(
         [tools["docker"], "run", "--rm", "python:3.12-slim", "python3", "-c", harness],
         cwd=config.repo_root,
@@ -750,18 +771,28 @@ def _check_phase_isolation(
         and result.get("child_observed") is True
         and result.get("quiescent") is True
         and result.get("remaining_count") == 0
+        and result.get("codex_runtime_bound") is True
     )
     if not passed:
         return _failed(
             "phase_isolation",
-            "The cancellation-resistant child cleanup self-test did not prove quiescence.",
-            "Do not start a paid run; repair CL-057 isolation and rerun its full tests.",
-            {"child_observed": result.get("child_observed") is True, "quiescent": False},
+            "The phase cleanup or fresh-shell Codex runtime self-test did not pass.",
+            "Do not start a paid run; repair CL-057 isolation or CL-061 runtime binding and rerun the full tests.",
+            {
+                "child_observed": result.get("child_observed") is True,
+                "quiescent": result.get("quiescent") is True,
+                "codex_runtime_bound": result.get("codex_runtime_bound") is True,
+            },
         )
     return _passed(
         "phase_isolation",
-        "The actual CL-057 probe killed a cancellation-resistant Linux child and proved quiescence.",
-        {"child_observed": True, "quiescent": True, "remaining_count": 0},
+        "The Linux self-test proved phase quiescence and fresh-shell Codex availability.",
+        {
+            "child_observed": True,
+            "quiescent": True,
+            "remaining_count": 0,
+            "codex_runtime_bound": True,
+        },
     )
 
 

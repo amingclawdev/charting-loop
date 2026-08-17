@@ -30,12 +30,14 @@ class FakeRunner:
         username_claimed: bool = True,
         resolved_task: str = TASK_FILTER,
         docker_quiescent: bool = True,
+        codex_runtime_bound: bool = True,
     ) -> None:
         self.job_name = job_name
         self.jobs_dir = jobs_dir
         self.username_claimed = username_claimed
         self.resolved_task = resolved_task
         self.docker_quiescent = docker_quiescent
+        self.codex_runtime_bound = codex_runtime_bound
         self.calls: list[list[str]] = []
 
     def run(self, args, *, cwd=None, env=None, timeout=60):
@@ -112,7 +114,14 @@ class FakeRunner:
                 )
             if "_phase_quiescence_program" in program:
                 return CommandResult(
-                    0, base64.b64encode(b"print('{}')").decode() + "\n"
+                    0,
+                    json.dumps(
+                        {
+                            "probe_b64": base64.b64encode(b"print('{}')").decode(),
+                            "binding_b64": base64.b64encode(b"true").decode(),
+                        }
+                    )
+                    + "\n",
                 )
         if executable == "fake-modal":
             if command[1:3] == ["profile", "current"]:
@@ -146,6 +155,7 @@ class FakeRunner:
                             "child_observed": self.docker_quiescent,
                             "quiescent": self.docker_quiescent,
                             "remaining_count": 0 if self.docker_quiescent else 1,
+                            "codex_runtime_bound": self.codex_runtime_bound,
                         }
                     ),
                 )
@@ -297,6 +307,18 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         )
         self.assertFalse(report["ready"])
         self.assertFalse(isolation["passed"])
+
+    def test_codex_runtime_binding_failure_blocks_readiness(self) -> None:
+        report, _ = self.run_fake(self.config(), codex_runtime_bound=False)
+
+        isolation = next(
+            check
+            for check in report["checks"]
+            if check["check_id"] == "phase_isolation"
+        )
+        self.assertFalse(report["ready"])
+        self.assertFalse(isolation["passed"])
+        self.assertFalse(isolation["details"]["codex_runtime_bound"])
 
     def test_report_scrubs_secrets_even_when_input_contains_one(self) -> None:
         secret = "sk-harbor-THIS-MUST-NOT-APPEAR"
