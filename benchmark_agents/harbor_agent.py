@@ -45,7 +45,7 @@ from benchmark_agents.contract import (
 )
 
 
-AGENT_VERSION = "0.5.1"
+AGENT_VERSION = "0.5.2"
 METHOD_VERSION_ID = "charting-loop-method-v4"
 METHOD_SOURCE_COMMIT = "0d3ed5c357c906edcc697a83b3ce681c68cd353a"
 METHOD_CONTENT_SHA256 = (
@@ -66,23 +66,43 @@ PHASE_TIMEOUT_TOTAL_SECONDS = sum(PHASE_TIMEOUT_SECONDS.values())
 PHASE_TOKEN_ENV = "CHARTING_LOOP_PHASE_TOKEN"
 
 
+def _codex_runtime_discovery_command() -> str:
+    """Resolve Codex and Node using the default agent user's runtime home."""
+
+    return (
+        "set -eu; "
+        'NVM_DIR="${NVM_DIR:-$HOME/.nvm}"; export NVM_DIR; '
+        'if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh"; fi; '
+        'NODE_BIN="$(command -v node)"; CODEX_BIN="$(command -v codex)"; '
+        'test -x "$NODE_BIN"; test -e "$CODEX_BIN"; '
+        'codex --version >/dev/null; '
+        'printf "%s\\n%s\\n" "$NODE_BIN" "$CODEX_BIN"'
+    )
+
+
+def _parse_codex_runtime_paths(stdout: str | None) -> tuple[str, str]:
+    paths = [line.strip() for line in (stdout or "").splitlines() if line.strip()]
+    if len(paths) != 2 or any(not path.startswith("/") for path in paths):
+        raise RuntimeError("Codex runtime discovery did not return two absolute paths")
+    return paths[0], paths[1]
+
+
 def _codex_runtime_binding_command(
     *,
-    nvm_node_root: str = "/root/.nvm/versions/node",
+    node_bin: str,
+    codex_bin: str,
     stable_bin_dir: str = "/usr/local/bin",
 ) -> str:
-    """Bind an NVM-installed Codex CLI into a fresh-shell stable PATH."""
+    """Bind discovered runtime paths into a fresh-shell stable PATH."""
 
-    node_root = shlex.quote(nvm_node_root)
+    source_node = shlex.quote(node_bin)
+    source_codex = shlex.quote(codex_bin)
     bin_dir = shlex.quote(stable_bin_dir)
     fresh_path = shlex.quote(f"{stable_bin_dir}:/usr/bin:/bin")
     return (
         "set -eu; "
-        f"NVM_NODE_ROOT={node_root}; STABLE_BIN_DIR={bin_dir}; "
-        'CODEX_BIN="$(find "$NVM_NODE_ROOT" -path "*/bin/codex" '
-        '\\( -type f -o -type l \\) -print 2>/dev/null | sort -V | tail -n 1)"; '
-        'test -n "$CODEX_BIN" && test -e "$CODEX_BIN"; '
-        'NODE_BIN="${CODEX_BIN%/codex}/node"; test -x "$NODE_BIN"; '
+        f"NODE_BIN={source_node}; CODEX_BIN={source_codex}; STABLE_BIN_DIR={bin_dir}; "
+        'test -x "$NODE_BIN"; test -e "$CODEX_BIN"; '
         'install -d -m 0755 "$STABLE_BIN_DIR"; '
         'ln -sf "$NODE_BIN" "$STABLE_BIN_DIR/node"; '
         'ln -sf "$CODEX_BIN" "$STABLE_BIN_DIR/codex"; '
@@ -356,9 +376,17 @@ class ChartingLoopFullMethodAgent(Codex):
 
     async def setup(self, environment: BaseEnvironment) -> None:
         await super().setup(environment)
+        discovered = await self.exec_as_agent(
+            environment,
+            command=_codex_runtime_discovery_command(),
+        )
+        node_bin, codex_bin = _parse_codex_runtime_paths(discovered.stdout)
         await self.exec_as_root(
             environment,
-            command=_codex_runtime_binding_command(),
+            command=_codex_runtime_binding_command(
+                node_bin=node_bin,
+                codex_bin=codex_bin,
+            ),
         )
         if not self._method_source.is_file():
             raise FileNotFoundError(f"Frozen method source missing: {self._method_source}")

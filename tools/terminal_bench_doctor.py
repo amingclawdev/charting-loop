@@ -35,7 +35,7 @@ TASK_NAME = "ico-path-patch"
 TASK_FILTER = "terminal-bench/ico-path-patch"
 TASK_CACHE_DIGEST = "0115a4136189b48da79070f9b3004dc4e0dfc1a60725c5acebdd7f380d037d14"
 AGENT_IMPORT = "benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent"
-AGENT_VERSION = "0.5.1"
+AGENT_VERSION = "0.5.2"
 MODEL = "openai/gpt-5.6-sol"
 REASONING_EFFORT = "max"
 METHOD_VERSION_ID = "charting-loop-method-v4"
@@ -288,7 +288,7 @@ def _check_git_and_method(
         return _failed(
             "immutable_inputs",
             "Frozen method or agent bytes do not match the declared condition.",
-            "Restore the frozen v4 method bytes and Agent v0.5.1 before running.",
+            "Restore the frozen v4 method bytes and Agent v0.5.2 before running.",
             {"head": actual_head, "method_version_id": METHOD_VERSION_ID},
         )
     return _passed(
@@ -668,7 +668,9 @@ def _check_output_identity(config: DoctorConfig) -> CheckResult:
     )
 
 
-def _phase_harness(probe_b64: str, binding_b64: str, token: str) -> str:
+def _phase_harness(
+    probe_b64: str, discovery_b64: str, binding_b64: str, token: str
+) -> str:
     child = (
         "import signal,time;"
         "signal.signal(signal.SIGTERM,signal.SIG_IGN);"
@@ -678,16 +680,22 @@ def _phase_harness(probe_b64: str, binding_b64: str, token: str) -> str:
 from pathlib import Path
 token={token!r}
 probe=base64.b64decode({probe_b64!r}).decode()
+discovery=base64.b64decode({discovery_b64!r}).decode()
 binding=base64.b64decode({binding_b64!r}).decode()
-nvm_bin=Path("/tmp/charting-loop-doctor-nvm/versions/node/v22.17.0/bin")
+runtime_home=Path("/tmp/charting-loop-doctor-home")
+nvm_bin=runtime_home/".nvm/versions/node/v22.17.0/bin"
 nvm_bin.mkdir(parents=True,exist_ok=True)
 (nvm_bin/"node").write_text("#!/bin/sh\\nexit 0\\n")
 (nvm_bin/"codex").write_text("#!/bin/sh\\necho codex-cli-doctor\\n")
 (nvm_bin/"node").chmod(0o755)
 (nvm_bin/"codex").chmod(0o755)
+(runtime_home/".nvm/nvm.sh").write_text(f'PATH="{{nvm_bin}}:$PATH"; export PATH\\n')
+discovered=subprocess.run(["sh","-c",discovery],text=True,capture_output=True,timeout=15,env={{**os.environ,"HOME":str(runtime_home),"PATH":"/usr/bin:/bin"}})
+discovered_paths=[line.strip() for line in discovered.stdout.splitlines() if line.strip()]
+runtime_discovered=discovered.returncode==0 and discovered_paths==[str(nvm_bin/"node"),str(nvm_bin/"codex")]
 bound=subprocess.run(["sh","-c",binding],text=True,capture_output=True,timeout=15)
 fresh=subprocess.run(["sh","-c","PATH=/tmp/charting-loop-doctor-bin:/usr/bin:/bin; command -v node >/dev/null && command -v codex >/dev/null && codex --version"],text=True,capture_output=True,timeout=15)
-codex_runtime_bound=bound.returncode==0 and fresh.returncode==0 and "codex-cli-doctor" in fresh.stdout
+codex_runtime_bound=runtime_discovered and bound.returncode==0 and fresh.returncode==0 and "codex-cli-doctor" in fresh.stdout
 pid=os.fork()
 if pid==0:
     os.setsid()
@@ -724,11 +732,13 @@ def _check_phase_isolation(
     export_program = (
         "import base64,json;"
         "from benchmark_agents.harbor_agent import "
-        "_codex_runtime_binding_command,_phase_quiescence_program;"
+        "_codex_runtime_binding_command,_codex_runtime_discovery_command,_phase_quiescence_program;"
         "payload={"
         f"'probe_b64':base64.b64encode(_phase_quiescence_program({token!r},terminate=True).encode()).decode(),"
+        "'discovery_b64':base64.b64encode(_codex_runtime_discovery_command().encode()).decode(),"
         "'binding_b64':base64.b64encode(_codex_runtime_binding_command("
-        "nvm_node_root='/tmp/charting-loop-doctor-nvm/versions/node',"
+        "node_bin='/tmp/charting-loop-doctor-home/.nvm/versions/node/v22.17.0/bin/node',"
+        "codex_bin='/tmp/charting-loop-doctor-home/.nvm/versions/node/v22.17.0/bin/codex',"
         "stable_bin_dir='/tmp/charting-loop-doctor-bin').encode()).decode()};"
         "print(json.dumps(payload,sort_keys=True))"
     )
@@ -746,8 +756,10 @@ def _check_phase_isolation(
     try:
         exported_programs = _json(exported.stdout)
         probe_b64 = exported_programs["probe_b64"]
+        discovery_b64 = exported_programs["discovery_b64"]
         binding_b64 = exported_programs["binding_b64"]
         base64.b64decode(probe_b64, validate=True)
+        base64.b64decode(discovery_b64, validate=True)
         base64.b64decode(binding_b64, validate=True)
     except (ValueError, KeyError, TypeError):
         return _failed(
@@ -755,7 +767,7 @@ def _check_phase_isolation(
             "The CL-057/CL-061 runtime program export was invalid.",
             "Restore the committed Harbor adapter and rerun its unit tests.",
         )
-    harness = _phase_harness(probe_b64, binding_b64, token)
+    harness = _phase_harness(probe_b64, discovery_b64, binding_b64, token)
     exercised = runner.run(
         [tools["docker"], "run", "--rm", "python:3.12-slim", "python3", "-c", harness],
         cwd=config.repo_root,

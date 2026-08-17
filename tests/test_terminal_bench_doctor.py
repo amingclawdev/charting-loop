@@ -118,6 +118,7 @@ class FakeRunner:
                     json.dumps(
                         {
                             "probe_b64": base64.b64encode(b"print('{}')").decode(),
+                            "discovery_b64": base64.b64encode(b"true").decode(),
                             "binding_b64": base64.b64encode(b"true").decode(),
                         }
                     )

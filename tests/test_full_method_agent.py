@@ -132,7 +132,8 @@ class FullMethodContractTests(unittest.TestCase):
             codex.chmod(0o755)
 
             command = module._codex_runtime_binding_command(
-                nvm_node_root=str(nvm_root),
+                node_bin=str(node),
+                codex_bin=str(codex),
                 stable_bin_dir=str(stable_bin),
             )
             completed = subprocess.run(
@@ -147,25 +148,52 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertEqual(node.resolve(), (stable_bin / "node").resolve())
             self.assertEqual(codex.resolve(), (stable_bin / "codex").resolve())
 
-    def test_codex_runtime_binding_fails_closed_without_an_install(self) -> None:
+    def test_codex_runtime_discovery_uses_the_agent_runtime_home(self) -> None:
         module = load_harbor_agent_with_stubs()
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            stable_bin = root / "stable-bin"
-            command = module._codex_runtime_binding_command(
-                nvm_node_root=str(root / "missing-nvm"),
-                stable_bin_dir=str(stable_bin),
+            version_bin = root / ".nvm/versions/node/v22.17.0/bin"
+            version_bin.mkdir(parents=True)
+            node = version_bin / "node"
+            codex = version_bin / "codex"
+            node.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            codex.write_text("#!/bin/sh\necho codex-cli-test\n", encoding="utf-8")
+            node.chmod(0o755)
+            codex.chmod(0o755)
+            (root / ".nvm/nvm.sh").write_text(
+                f'PATH="{version_bin}:$PATH"; export PATH\n',
+                encoding="utf-8",
             )
 
             completed = subprocess.run(
-                ["sh", "-c", command],
+                ["/bin/sh", "-c", module._codex_runtime_discovery_command()],
                 text=True,
                 capture_output=True,
                 check=False,
+                env={"HOME": str(root), "PATH": "/usr/bin:/bin"},
+            )
+
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            self.assertEqual(
+                (str(node), str(codex)),
+                module._parse_codex_runtime_paths(completed.stdout),
+            )
+
+    def test_codex_runtime_discovery_fails_closed_without_an_install(self) -> None:
+        module = load_harbor_agent_with_stubs()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            empty_bin = root / "empty-bin"
+            empty_bin.mkdir()
+            completed = subprocess.run(
+                ["/bin/sh", "-c", module._codex_runtime_discovery_command()],
+                text=True,
+                capture_output=True,
+                check=False,
+                env={"HOME": str(root), "PATH": str(empty_bin)},
             )
 
             self.assertNotEqual(0, completed.returncode)
-            self.assertFalse((stable_bin / "codex").exists())
 
     def test_protocol_and_runbook_fix_the_claim_and_visibility_boundaries(self) -> None:
         protocol = (

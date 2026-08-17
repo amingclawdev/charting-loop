@@ -17,7 +17,7 @@ This run is bound to `charting-loop-method-v4` at
 `sha256:d3a9da497c31f3bde46a31f37990236af51b9f677ae807d023582b27254c4ab0`,
 and SCOPE-DATUM digest
 `sha256:65c6a91120c15bec30278288a26ecc98bdf96cfb07fd490dc915408a78844327`.
-Agent v0.5.1 resolves this identity and rejects changed catalog or method bytes before
+Agent v0.5.2 resolves this identity and rejects changed catalog or method bytes before
 any paid model call.
 
 ```bash
@@ -69,7 +69,7 @@ HARBOR_PY="$HOME/.local/share/uv/tools/harbor/bin/python"
 export CHARTING_LOOP_MODAL_SPEND_LIMIT_USD='<the current cap shown in the Modal dashboard>'
 
 python3 tools/terminal_bench_doctor.py \
-  --job-name charting-loop-tb3-ico-path-patch-004 \
+  --job-name charting-loop-tb3-ico-path-patch-005 \
   --jobs-dir jobs \
   --modal-spend-limit-usd "$CHARTING_LOOP_MODAL_SPEND_LIMIT_USD" \
   --min-modal-headroom-usd 1.00 \
@@ -96,7 +96,7 @@ environment, or model call. It verifies all of the following before returning
 - Codex login, `~/.codex/auth.json`, `CODEX_FORCE_AUTH_JSON=1`, and the explicit
   Trusted Cyber Access attestation;
 - exactly the canonical task filter `terminal-bench/ico-path-patch`, one task, one
-  concurrent trial, Modal, Agent v0.5.1,
+  concurrent trial, Modal, Agent v0.5.2,
   `gpt-5.6-sol` at max effort, zero automatic retries, and private upload;
 - the cached task's x86-64 binary, which requires the Modal amd64 environment rather
   than a local arm64 execution substitute;
@@ -121,7 +121,7 @@ export PYTHONPATH="$CHARTING_LOOP_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export CODEX_FORCE_AUTH_JSON=1
 
 harbor run \
-  --job-name charting-loop-tb3-ico-path-patch-004 \
+  --job-name charting-loop-tb3-ico-path-patch-005 \
   -o jobs \
   -d terminal-bench/terminal-bench@3.0.0 \
   -i terminal-bench/ico-path-patch \
@@ -154,7 +154,15 @@ launch host. Its private Harbor upload also failed because the Hub write endpoin
 rejected the profile username even though the read-side doctor probe found one;
 that publication-identity discrepancy is separate from scoring and must be resolved
 before claiming an uploaded result. Never reuse or overwrite `003`; the next paid
-identity is `004`.
+identity was `004`.
+
+Job `charting-loop-tb3-ico-path-patch-004` is permanently retained as
+runtime-invalid. Harbor installed Codex successfully under the default agent user's
+runtime home, but Agent v0.5.1 then looked only under `/root/.nvm`; its fail-closed
+setup probe stopped before Builder, Worker, QA, verifier, or any paid model call.
+The unmodified local custody tree is
+`/private/tmp/charting-loop-tb3-results/charting-loop-tb3-ico-path-patch-004` on the
+launch host. Never reuse or overwrite `004`; the next paid identity is `005`.
 
 The default task time limit is part of the initial leaderboard condition. Do not
 silently raise `--agent-timeout-multiplier`; if a larger end-to-end budget is needed,
