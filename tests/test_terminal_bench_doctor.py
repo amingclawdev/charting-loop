@@ -13,6 +13,7 @@ from tools.terminal_bench_doctor import (
     CommandResult,
     PHASE_ISOLATION_COMMIT,
     TASK_CACHE_DIGEST,
+    TASK_FILTER,
     run_doctor,
 )
 
@@ -27,7 +28,7 @@ class FakeRunner:
         job_name: str,
         jobs_dir: Path,
         username_claimed: bool = True,
-        resolved_task: str = "ico-path-patch",
+        resolved_task: str = TASK_FILTER,
         docker_quiescent: bool = True,
     ) -> None:
         self.job_name = job_name
@@ -224,6 +225,7 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         self.assertTrue(report["ready"])
         self.assertFalse(report["paid_actions_started"])
         self.assertEqual(report["condition"]["task"], "ico-path-patch")
+        self.assertEqual(report["condition"]["task_filter"], TASK_FILTER)
         self.assertEqual(report["condition"]["max_retries"], 0)
         self.assertEqual(report["condition"]["upload_visibility"], "private")
         self.assertTrue(all(check["passed"] for check in report["checks"]))
@@ -238,7 +240,7 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         self.assertEqual(command[command.index("--max-retries") + 1], "0")
         self.assertIn("--private", command)
         self.assertIn("-i", command)
-        self.assertEqual(command[command.index("-i") + 1], "ico-path-patch")
+        self.assertEqual(command[command.index("-i") + 1], TASK_FILTER)
 
     def test_unclaimed_harbor_username_fails_closed(self) -> None:
         report, _ = self.run_fake(self.config(), username_claimed=False)

@@ -32,6 +32,7 @@ DATASET_CONTENT_SHA256 = (
     "sha256:a32a61879ea94eb9dc16fa1fbeb398759f0c07ca633d9d1f6aec760207036da3"
 )
 TASK_NAME = "ico-path-patch"
+TASK_FILTER = "terminal-bench/ico-path-patch"
 TASK_CACHE_DIGEST = "0115a4136189b48da79070f9b3004dc4e0dfc1a60725c5acebdd7f380d037d14"
 AGENT_IMPORT = "benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent"
 AGENT_VERSION = "0.5.0"
@@ -479,7 +480,7 @@ def _print_config_command(
         "-d",
         DATASET,
         "-i",
-        TASK_NAME,
+        TASK_FILTER,
         "--n-tasks",
         "1",
         "-e",
@@ -530,13 +531,14 @@ def _check_resolved_config(
             and len(data.get("datasets", [])) == 1
             and dataset.get("name") == DATASET_NAME
             and dataset.get("ref") == DATASET_REF
-            and dataset.get("task_names") == [TASK_NAME]
+            and dataset.get("task_names") == [TASK_FILTER]
             and dataset.get("n_tasks") == 1
         )
     except (ValueError, KeyError, IndexError, TypeError, OSError):
         exact = False
     policy = {
         "task": TASK_NAME,
+        "task_filter": TASK_FILTER,
         "n_tasks": 1,
         "concurrency": 1,
         "max_retries": 0,
@@ -809,6 +811,7 @@ def run_doctor(config: DoctorConfig, runner: Runner | None = None) -> dict[str, 
             "dataset": DATASET,
             "dataset_content_sha256": DATASET_CONTENT_SHA256,
             "task": TASK_NAME,
+            "task_filter": TASK_FILTER,
             "task_cache_digest": TASK_CACHE_DIGEST,
             "agent": AGENT_IMPORT,
             "agent_version": AGENT_VERSION,

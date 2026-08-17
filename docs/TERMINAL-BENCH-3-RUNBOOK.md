@@ -69,7 +69,7 @@ HARBOR_PY="$HOME/.local/share/uv/tools/harbor/bin/python"
 export CHARTING_LOOP_MODAL_SPEND_LIMIT_USD='<the current cap shown in the Modal dashboard>'
 
 python3 tools/terminal_bench_doctor.py \
-  --job-name charting-loop-tb3-ico-path-patch-002 \
+  --job-name charting-loop-tb3-ico-path-patch-003 \
   --jobs-dir jobs \
   --modal-spend-limit-usd "$CHARTING_LOOP_MODAL_SPEND_LIMIT_USD" \
   --min-modal-headroom-usd 1.00 \
@@ -95,7 +95,8 @@ environment, or model call. It verifies all of the following before returning
 - readable Modal billing plus sufficient headroom under the operator-declared cap;
 - Codex login, `~/.codex/auth.json`, `CODEX_FORCE_AUTH_JSON=1`, and the explicit
   Trusted Cyber Access attestation;
-- exactly `ico-path-patch`, one task, one concurrent trial, Modal, Agent v0.5.0,
+- exactly the canonical task filter `terminal-bench/ico-path-patch`, one task, one
+  concurrent trial, Modal, Agent v0.5.0,
   `gpt-5.6-sol` at max effort, zero automatic retries, and private upload;
 - the cached task's x86-64 binary, which requires the Modal amd64 environment rather
   than a local arm64 execution substitute;
@@ -118,10 +119,10 @@ export PYTHONPATH="$CHARTING_LOOP_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export CODEX_FORCE_AUTH_JSON=1
 
 harbor run \
-  --job-name charting-loop-tb3-ico-path-patch-002 \
+  --job-name charting-loop-tb3-ico-path-patch-003 \
   -o jobs \
   -d terminal-bench/terminal-bench@3.0.0 \
-  -i ico-path-patch \
+  -i terminal-bench/ico-path-patch \
   --n-tasks 1 \
   -e modal \
   -a benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent \
@@ -135,6 +136,11 @@ harbor run \
 Run this paid command only when the immediately preceding doctor report for the same
 job name says `ready: true`. The doctor does not authorize changing any flag between
 preflight and launch. If a condition changes, rerun the doctor.
+
+Job `charting-loop-tb3-ico-path-patch-002` is permanently retained as
+launcher-invalid: its short `-i ico-path-patch` filter matched no dataset member, so
+Harbor created no Job and started no Modal or model work. Never reuse or overwrite
+that identity; the corrected first paid attempt is `003`.
 
 The default task time limit is part of the initial leaderboard condition. Do not
 silently raise `--agent-timeout-multiplier`; if a larger end-to-end budget is needed,
