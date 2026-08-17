@@ -5,6 +5,11 @@ part of U → C. It lets a fresh Builder start from known-good evidence plumbing
 than rebuilding JSON parsing, hashing, manifests, scratch isolation, and command
 capture on every task.
 
+The kit has three deliberately separate execution surfaces: frozen task-specific
+`WORK_ITEMS.json`, frozen selected `CAPABILITIES.json`, and a runner-owned hash-linked
+Position timeline outside the Corridor. Current-row Guide and reminder views are
+deterministic projections over those surfaces; they do not create authority.
+
 It is not a Corridor for any particular task. It contains no Rule or Fact supplied by
 a benchmark, no domain validator, no candidate answer, no evaluator fixture, and no
 authority to mutate a target. It also creates no mandatory workflow, approval, or
@@ -16,14 +21,20 @@ choose to run.
 The frozen reusable layer is deliberately small:
 
 - strict `charting-loop/task-acceptance-ledger/v1` parsing and validation;
+- strict `charting-loop/task-work-backlog/v1` row, dependency, and join validation;
+- strict `charting-loop/capability-registry/v1` version, digest, contract,
+  applicability, and side-effect validation;
+- append-only `charting-loop/position-event/v1` observations plus deterministic
+  current-row, Guide, and reminder projections;
 - canonical JSON, content hashes, and deterministic source-tree manifests;
 - labeled inventories of the public task world;
 - atomic JSON/report writes;
 - isolated, shell-free argv execution with replayable stdout and stderr;
-- an honest starter that begins `incomplete` and `unresolved`.
+- generic read-only ELF inventory, changed-range comparison, and replay binding; and
+- an honest starter whose acceptance, work, and capability surfaces begin uncompiled.
 
 Each Builder must still compile the current task's acceptance items, Rule/Fact map,
-coupled constraints, domain checks, fixtures, and task adapter. Those bytes belong to
+coupled constraints, work rows, capability selections, domain checks, fixtures, and task adapter. Those bytes belong to
 the task-specific Corridor and must never be copied from an earlier benchmark task.
 
 The acceptance report keeps three questions separate. `coverage.status` and
@@ -42,6 +53,12 @@ From the repository root:
 python3 -m corridor_kit init /tmp/charting-loop/corridor
 python3 -m corridor_kit validate \
   /tmp/charting-loop/corridor/ACCEPTANCE.json --allow-draft
+python3 -m corridor_kit validate-capabilities \
+  /tmp/charting-loop/corridor/CAPABILITIES.json --allow-draft
+python3 -m corridor_kit validate-work \
+  /tmp/charting-loop/corridor/WORK_ITEMS.json \
+  --acceptance /tmp/charting-loop/corridor/ACCEPTANCE.json \
+  --capabilities /tmp/charting-loop/corridor/CAPABILITIES.json --allow-draft
 python3 -m corridor_kit survey \
   --root specification=/app/public/SPEC.md \
   --root source=/app/public/src \
@@ -49,6 +66,32 @@ python3 -m corridor_kit survey \
 python3 -m corridor_kit capture \
   --output /tmp/charting-loop/builder-scratch/runs/baseline \
   --cwd /app -- python3 -m public_package.tests
+```
+
+Inspect the reusable binary pack without selecting it for a task:
+
+```sh
+python3 -m corridor_kit capabilities builtins
+python3 -m corridor_kit binary inventory ./program
+python3 -m corridor_kit binary diff ./before ./after
+python3 -m corridor_kit binary replay --input program=./program -- ./check ./program
+```
+
+After the Builder compiles and the runner freezes all three task surfaces, the runner
+appends observations and both Worker and QA may read the same projections:
+
+```sh
+python3 -m corridor_kit timeline append /tmp/charting-loop-position/POSITION.jsonl \
+  --work /tmp/charting-loop/corridor/WORK_ITEMS.json \
+  --actor runner --event-type run_initialized --status observed
+python3 -m corridor_kit runtime guide \
+  --work /tmp/charting-loop/corridor/WORK_ITEMS.json \
+  --capabilities /tmp/charting-loop/corridor/CAPABILITIES.json \
+  --timeline /tmp/charting-loop-position/POSITION.jsonl
+python3 -m corridor_kit runtime reminders \
+  --work /tmp/charting-loop/corridor/WORK_ITEMS.json \
+  --capabilities /tmp/charting-loop/corridor/CAPABILITIES.json \
+  --timeline /tmp/charting-loop-position/POSITION.jsonl
 ```
 
 Draft validation exists only so the initial scaffold can state its incompleteness
@@ -60,6 +103,12 @@ The runner, not the Builder, freezes the resulting task-specific Corridor. Worke
 QA then receive the same frozen bytes and digest. Both independently re-read public
 task sources; QA audits Corridor evidence instead of assuming the Corridor proves
 itself.
+
+The bundled `corridor_kit.domain.binary` pack contains no benchmark identifier,
+opcode recipe, fixed offset, verifier knowledge, or candidate patch. Its descriptor
+digest identifies the declared contract, while the SDK tree digest binds its
+implementation bytes. Timeline row states remain RAW observations: they do not prove
+done-when conditions, authorize mutation, or suppress the external evaluator.
 
 `capture` invokes an argv with `shell=False`; metacharacters are data rather than an
 implicit shell program. It records argv and the working directory, so callers must not
@@ -99,8 +148,8 @@ A benchmark harness should verify those two identities, upload the package read-
 and tell Builder where it is. Changing any kit byte creates a new kit revision; do not
 learn domain rules from one benchmark and silently add them to the shared revision.
 
-The current package is intentionally independent of the Harbor adapter. Integration
-is a separate bounded change: upload the frozen kit before Builder starts, expose only
-its documented commands, and record its version and tree digest in the trial metadata.
-That separation prevents an unfinished adapter edit or a running paid trial from
-silently changing the reusable intervention.
+The Harbor adapter uploads the frozen kit before Builder starts, exposes only these
+documented commands, and records its version and tree digest in trial metadata. The
+Builder compiles task-specific rows and adapters; Worker and QA query the same frozen
+rows, capability identities, and runner timeline. Every reminder reports
+`advisory_only=true`, `authorizes_mutation=false`, and `blocking_gate=false`.

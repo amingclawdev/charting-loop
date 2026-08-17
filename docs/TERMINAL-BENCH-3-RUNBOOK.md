@@ -1,7 +1,7 @@
 # Terminal-Bench 3.0 full-method runbook
 
 This runbook launches the performance probe defined in
-`protocol/TASK-CONDITIONED-CORRIDOR-BENCHMARK-V3.md`. It does not run a treatment /
+`protocol/TASK-CONDITIONED-CORRIDOR-BENCHMARK-V4.md`. It does not run a treatment /
 control experiment. Every task dynamically builds its own Corridor; Worker and
 independent QA both read that exact frozen Corridor.
 
@@ -12,13 +12,19 @@ local checks, an authenticated Modal workspace, and a Codex login on the launch
 host. Never paste subscription, Harbor, Modal, or Codex tokens into a command,
 configuration committed to Git, task prompt, or result artifact.
 
-This run is bound to `charting-loop-method-v4` at
-`0d3ed5c357c906edcc697a83b3ce681c68cd353a`, METHOD digest
-`sha256:d3a9da497c31f3bde46a31f37990236af51b9f677ae807d023582b27254c4ab0`,
+This run is bound to `charting-loop-method-v5` at
+`8b0fd5e1c6102c6b4c44cf03612b93c450ddb6fd`, METHOD digest
+`sha256:1b8d375f835e1226682febeb2479ea018b4d27725f376128a31430d39a46975a`,
 and SCOPE-DATUM digest
-`sha256:65c6a91120c15bec30278288a26ecc98bdf96cfb07fd490dc915408a78844327`.
-Agent v0.5.2 resolves this identity and rejects changed catalog or method bytes before
+`sha256:6a9cfc8eb65d90a5deca463113e238b96c6b28af09c63b3b7ea537c2af2949f0`.
+Agent v0.6.0 resolves this identity and rejects changed catalog or method bytes before
 any paid model call.
+
+The agent computes the local `corridor_kit` source-tree digest, uploads that exact SDK
+read-only before Builder, verifies the remote digest, and records it in trial metadata.
+The SDK supplies task-neutral work rows, capability registry, Position timeline,
+advisory reminders, and a generic read-only binary pack. It contains no task-specific
+patch, offset, verifier fact, or stored answer.
 
 ```bash
 uv tool install --upgrade 'harbor[modal]'
@@ -57,7 +63,10 @@ export PYTHONPATH="$CHARTING_LOOP_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export CODEX_FORCE_AUTH_JSON=1
 
 python3 -m unittest tests.test_full_method_agent -v
+python3 -m unittest tests.test_corridor_kit -v
 python3 -m unittest discover -s tests -v
+
+python3 -m corridor_kit manifest corridor_kit
 
 python3 tools/corridor_registry.py validate-method \
   --method-index method-paper/VERSIONS.json
@@ -69,7 +78,7 @@ HARBOR_PY="$HOME/.local/share/uv/tools/harbor/bin/python"
 export CHARTING_LOOP_MODAL_SPEND_LIMIT_USD='<the current cap shown in the Modal dashboard>'
 
 python3 tools/terminal_bench_doctor.py \
-  --job-name charting-loop-tb3-ico-path-patch-005 \
+  --job-name charting-loop-tb3-ico-path-patch-006 \
   --jobs-dir jobs \
   --modal-spend-limit-usd "$CHARTING_LOOP_MODAL_SPEND_LIMIT_USD" \
   --min-modal-headroom-usd 1.00 \
@@ -96,7 +105,7 @@ environment, or model call. It verifies all of the following before returning
 - Codex login, `~/.codex/auth.json`, `CODEX_FORCE_AUTH_JSON=1`, and the explicit
   Trusted Cyber Access attestation;
 - exactly the canonical task filter `terminal-bench/ico-path-patch`, one task, one
-  concurrent trial, Modal, Agent v0.5.2,
+  concurrent trial, Modal, Agent v0.6.0,
   `gpt-5.6-sol` at max effort, zero automatic retries, and private upload;
 - the cached task's x86-64 binary, which requires the Modal amd64 environment rather
   than a local arm64 execution substitute;
@@ -121,7 +130,7 @@ export PYTHONPATH="$CHARTING_LOOP_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export CODEX_FORCE_AUTH_JSON=1
 
 harbor run \
-  --job-name charting-loop-tb3-ico-path-patch-005 \
+  --job-name charting-loop-tb3-ico-path-patch-006 \
   -o jobs \
   -d terminal-bench/terminal-bench@3.0.0 \
   -i terminal-bench/ico-path-patch \
@@ -162,7 +171,17 @@ runtime home, but Agent v0.5.1 then looked only under `/root/.nvm`; its fail-clo
 setup probe stopped before Builder, Worker, QA, verifier, or any paid model call.
 The unmodified local custody tree is
 `/private/tmp/charting-loop-tb3-results/charting-loop-tb3-ico-path-patch-004` on the
-launch host. Never reuse or overwrite `004`; the next paid identity is `005`.
+launch host. Never reuse or overwrite `004`; the next paid identity was `005`.
+
+Job `charting-loop-tb3-ico-path-patch-005` is permanently retained as a valid
+end-to-end method-v4 observation with official reward `0.0`. Builder completed in
+about 1115 seconds and produced a 27-item acceptance ledger, but definition closure
+and construction readiness remained unresolved. Worker exhausted its 900-second phase
+and QA exhausted its 450-second phase. This is method-performance evidence, not an
+account, launcher, or infrastructure invalidation. It motivated the generic work-row,
+capability, and reminder design but supplied no task bytes, offsets, opcodes, verifier
+material, transcript content, or repair to method v5 or the frozen SDK. Never reuse or
+overwrite `005`; the next paid identity is `006`.
 
 The default task time limit is part of the initial leaderboard condition. Do not
 silently raise `--agent-timeout-multiplier`; if a larger end-to-end budget is needed,
@@ -176,6 +195,15 @@ Acceptance checks for the smoke task:
   refer to that same digest/path.
 - `FREEZE.json` reports `acceptance_ledger.status=complete`, a non-empty exact
   acceptance-ID set, and no ledger errors before treating internal QA pass as valid.
+- `WORK_ITEMS.json` covers the exact acceptance-ID set, has no dependency cycle or
+  dangling capability ID, and gives every row scope and replayable done-when evidence.
+- `CAPABILITIES.json` identifies selected mechanics by version, digest, contracts,
+  applicability, and side effects; it contains no task answer or fixed patch.
+- metadata records the locally and remotely verified SDK tree digest, Position
+  timeline path, current-row projection, capability IDs, reminder count, and any
+  non-gating timeline evidence loss.
+- Worker and QA logs both query the same frozen work/capability paths and runner-owned
+  timeline; each treats reminders as advisory rather than mutation or grading Gates.
 - QA emits exactly one result for every expected acceptance ID, independently checks
   the original public task sources, and reports no unmapped or unresolved item before
   pass.
@@ -204,7 +232,7 @@ export PYTHONPATH="$CHARTING_LOOP_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export CODEX_FORCE_AUTH_JSON=1
 
 harbor run \
-  --job-name charting-loop-tb3-3.0.0-full-001 \
+  --job-name charting-loop-tb3-3.0.0-full-002 \
   -d terminal-bench/terminal-bench@3.0.0 \
   -e modal \
   -a benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent \
@@ -221,16 +249,18 @@ separate, cheaper, task-level study with equal budgets and frozen conditions.
 ## 5. Review before sharing
 
 Record the job id, Harbor version, dataset content hash, agent commit, model identity,
-reasoning effort, Modal environment, concurrency, wall time, aggregate cost/tokens,
-all task rewards, construction-fallback count, QA outcome counts, repair count, and
-any infrastructure errors or retries.
+reasoning effort, Modal environment, concurrency, wall time, SDK version/tree digest,
+work-row and capability validation counts, reminder/timeline evidence, aggregate
+cost/tokens, all task rewards, construction-fallback count, QA outcome counts, repair
+count, and any infrastructure errors or retries.
 
 Then make the upload public or submit it to the leaderboard only under the current
 Terminal-Bench/Harbor publication instructions. Do not call this a causal estimate.
 The strongest accurate sentence is:
 
 > This is the end-to-end score of a dynamically constructed, frozen-Corridor agent
-> whose Worker and independent QA both used the same task-conditioned Corridor.
+> whose Worker and independent QA both used the same task-conditioned Corridor,
+> frozen work rows and capabilities, and advisory runtime timeline.
 
 For causality, select a task prospectively and run a matched no-Corridor comparison.
 For method attribution, add a null Builder that gets the same task and “build a

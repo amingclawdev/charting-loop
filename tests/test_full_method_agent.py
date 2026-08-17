@@ -199,7 +199,7 @@ class FullMethodContractTests(unittest.TestCase):
         protocol = (
             REPOSITORY_ROOT
             / "protocol"
-            / "TASK-CONDITIONED-CORRIDOR-BENCHMARK-V3.md"
+            / "TASK-CONDITIONED-CORRIDOR-BENCHMARK-V4.md"
         ).read_text(encoding="utf-8")
         runbook = (
             REPOSITORY_ROOT / "docs" / "TERMINAL-BENCH-3-RUNBOOK.md"
@@ -208,22 +208,22 @@ class FullMethodContractTests(unittest.TestCase):
         for marker in (
             "terminal-bench/terminal-bench@3.0.0",
             "74 scored tasks",
-            "4 tasks require a GPU",
-            "Both Worker and QA receive the same absolute Corridor path",
+            "4 tasks require GPU-capable execution",
             "QA never suppresses, replaces, or",
             "short-circuits the benchmark grader",
-            "Do not ask the Builder to add a mandatory approval",
-            "linear unlock",
-            "authority\nlayer is Rule",
-            "A Gate does not become a Rule",
-            "declared chain",
-            "jointly satisfiable",
-            "leaderboard score is an end-to-end performance result",
+            "Do not ask Builder to construct a mandatory approval",
+            "linear-unlock",
+            "Rule remains the normative authority layer",
+            "whole-chain",
+            "leaderboard score is end-to-end performance",
             "ACCEPTANCE.json",
-            "Closing one repair witness never implies whole-task closure",
-            "charting-loop-method-v4",
-            "0d3ed5c357c906edcc697a83b3ce681c68cd353a",
-            "Any mutable-byte mismatch",
+            "WORK_ITEMS.json",
+            "CAPABILITIES.json",
+            "hash-linked append-only Position timeline",
+            "Reminder delivery and use are observable process facts, not Gates",
+            "rechecks the whole\n   ledger, not only the prior witness",
+            "charting-loop-method-v5",
+            "same-task rerun",
         ):
             self.assertIn(marker, protocol)
         for marker in (
@@ -237,7 +237,7 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertIn(marker, runbook)
         self.assertNotIn("--ae CODEX_FORCE_AUTH_JSON=1", runbook)
 
-    def test_agent_is_bound_to_the_exact_frozen_v4_method(self) -> None:
+    def test_agent_is_bound_to_the_exact_frozen_v5_method(self) -> None:
         index = json.loads(
             (REPOSITORY_ROOT / "method-paper" / "VERSIONS.json").read_text(
                 encoding="utf-8"
@@ -246,15 +246,15 @@ class FullMethodContractTests(unittest.TestCase):
         versions = [
             version
             for version in index["versions"]
-            if version["version_id"] == "charting-loop-method-v4"
+            if version["version_id"] == "charting-loop-method-v5"
         ]
         self.assertEqual(1, len(versions))
         version = versions[0]
         self.assertEqual("frozen", version["status"])
-        self.assertTrue(version["study_eligible"])
+        self.assertFalse(version["study_eligible"])
         self.assertFalse(version["adoption_eligible"])
         self.assertEqual(
-            "0d3ed5c357c906edcc697a83b3ce681c68cd353a",
+            "8b0fd5e1c6102c6b4c44cf03612b93c450ddb6fd",
             version["source_commit"],
         )
         for path_key, digest_key in (
@@ -269,7 +269,7 @@ class FullMethodContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         for value in (
-            "charting-loop-method-v4",
+            "charting-loop-method-v5",
             version["source_commit"],
             version["content_sha256"],
             version["scope_datum_sha256"],
@@ -294,6 +294,10 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertIn(contract.CORRIDOR_PATH, prompt)
             self.assertIn(contract.FREEZE_PATH, prompt)
             self.assertIn(digest, prompt)
+            self.assertIn(contract.WORK_PATH, prompt)
+            self.assertIn(contract.CAPABILITIES_PATH, prompt)
+            self.assertIn(contract.POSITION_PATH, prompt)
+            self.assertIn("python3 -m corridor_kit runtime guide", prompt)
         self.assertIn("independent QA", qa)
         self.assertIn("Do not mutate", qa)
         self.assertIn(contract.QA_PATH, qa)
@@ -316,6 +320,12 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn(contract.ACCEPTANCE_PATH, prompt)
         self.assertIn(contract.ACCEPTANCE_SCHEMA, prompt)
         self.assertIn("Decompose every normative", prompt)
+        self.assertIn(contract.SDK_PACKAGE_PATH, prompt)
+        self.assertIn(contract.WORK_PATH, prompt)
+        self.assertIn(contract.CAPABILITIES_PATH, prompt)
+        self.assertIn("python3 -m corridor_kit capabilities builtins", prompt)
+        self.assertIn("Dependencies must be acyclic", prompt)
+        self.assertIn("Reminders are advisory", prompt)
 
     def test_fail_requires_a_replayable_witness(self) -> None:
         digest = "sha256:" + "b" * 64
@@ -808,6 +818,13 @@ class FullMethodContractTests(unittest.TestCase):
             "CHARTING_LOOP_PHASE_TOKEN",
             "setsid sh -c",
             "Phase process quiescence could not be proven",
+            "regular_tree_manifest(self._sdk_source)",
+            "Corridor SDK upload digest mismatch",
+            "python3 -m corridor_kit validate-work",
+            "work_validation_ok",
+            "run_initialized",
+            "runtime_guide_projections",
+            "position_timeline_errors",
         ):
             self.assertIn(marker, source)
         self.assertNotIn("official verifier", source.lower())

@@ -26,12 +26,21 @@ from harbor.models.trajectories import Agent, FinalMetrics, Step, Trajectory
 from harbor.models.trial.paths import EnvironmentPaths
 from harbor.utils.trajectory_utils import format_trajectory_json
 
+from corridor_kit import KIT_VERSION, regular_tree_manifest
+
 from benchmark_agents.contract import (
+    ACCEPTANCE_PATH,
     CLOSURE_PATH,
+    CAPABILITIES_PATH,
     FREEZE_PATH,
     METHOD_PATH,
     QA_PATH,
+    POSITION_PATH,
+    POSITION_ROOT,
     RUNTIME_ROOT,
+    SDK_PACKAGE_PATH,
+    SDK_ROOT,
+    WORK_PATH,
     builder_prompt,
     closure_prompt,
     freeze_program,
@@ -45,14 +54,14 @@ from benchmark_agents.contract import (
 )
 
 
-AGENT_VERSION = "0.5.2"
-METHOD_VERSION_ID = "charting-loop-method-v4"
-METHOD_SOURCE_COMMIT = "0d3ed5c357c906edcc697a83b3ce681c68cd353a"
+AGENT_VERSION = "0.6.0"
+METHOD_VERSION_ID = "charting-loop-method-v5"
+METHOD_SOURCE_COMMIT = "8b0fd5e1c6102c6b4c44cf03612b93c450ddb6fd"
 METHOD_CONTENT_SHA256 = (
-    "sha256:d3a9da497c31f3bde46a31f37990236af51b9f677ae807d023582b27254c4ab0"
+    "sha256:1b8d375f835e1226682febeb2479ea018b4d27725f376128a31430d39a46975a"
 )
 METHOD_SCOPE_SHA256 = (
-    "sha256:65c6a91120c15bec30278288a26ecc98bdf96cfb07fd490dc915408a78844327"
+    "sha256:6a9cfc8eb65d90a5deca463113e238b96c6b28af09c63b3b7ea537c2af2949f0"
 )
 ROLE_ORDER = ("builder", "worker", "qa")
 PHASE_TIMEOUT_SECONDS = {
@@ -301,7 +310,7 @@ def _sha256(path: Path) -> str:
 
 
 def _resolve_frozen_method(repository_root: Path) -> Path:
-    """Resolve the exact v4 bytes or fail before a paid model call."""
+    """Resolve the exact v5 bytes or fail before a paid model call."""
 
     index_path = repository_root / "method-paper" / "VERSIONS.json"
     document = json.loads(index_path.read_text(encoding="utf-8"))
@@ -317,7 +326,7 @@ def _resolve_frozen_method(repository_root: Path) -> Path:
     version = matches[0]
     expected = {
         "status": "frozen",
-        "study_eligible": True,
+        "study_eligible": False,
         "adoption_eligible": False,
         "builder_eligible": False,
         "source_commit": METHOD_SOURCE_COMMIT,
@@ -336,9 +345,9 @@ def _resolve_frozen_method(repository_root: Path) -> Path:
     if not method_path.is_file() or not scope_path.is_file():
         raise FileNotFoundError("Frozen method or scope datum is missing")
     if _sha256(method_path) != METHOD_CONTENT_SHA256:
-        raise RuntimeError("Mutable METHOD.md bytes do not match the frozen v4 digest")
+        raise RuntimeError("Mutable METHOD.md bytes do not match the frozen v5 digest")
     if _sha256(scope_path) != METHOD_SCOPE_SHA256:
-        raise RuntimeError("Mutable SCOPE-DATUM.md bytes do not match the frozen v4 digest")
+        raise RuntimeError("Mutable SCOPE-DATUM.md bytes do not match the frozen v5 digest")
     return method_path
 
 
@@ -358,6 +367,16 @@ class ChartingLoopFullMethodAgent(Codex):
     def _method_source(self) -> Path:
         return _resolve_frozen_method(Path(__file__).resolve().parents[1])
 
+    @property
+    def _sdk_source(self) -> Path:
+        path = Path(__file__).resolve().parents[1] / "corridor_kit"
+        if not path.is_dir() or path.is_symlink():
+            raise FileNotFoundError(f"Corridor SDK source missing: {path}")
+        return path
+
+    def _sdk_manifest(self) -> dict[str, Any]:
+        return regular_tree_manifest(self._sdk_source)
+
     def _child_agent(self, role: str) -> Codex:
         child = _PhaseCodex(
             logs_dir=self.logs_dir / "phases" / role,
@@ -373,6 +392,140 @@ class ChartingLoopFullMethodAgent(Codex):
         child.session_id = f"{self.session_id or 'trial'}-{role}"
         child.context_id = self.context_id
         return child
+
+    async def _append_position_event(
+        self,
+        environment: BaseEnvironment,
+        *,
+        actor: str,
+        event_type: str,
+        status: str,
+        row_id: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Append one runner-held RAW observation and leave the ledger read-only."""
+
+        details_json = json.dumps(details or {}, sort_keys=True, separators=(",", ":"))
+        program = (
+            "import json; from pathlib import Path; "
+            "from corridor_kit.runtime import append_position_event; "
+            "event=append_position_event("
+            f"Path({POSITION_PATH!r}), actor={actor!r}, event_type={event_type!r}, "
+            f"status={status!r}, row_id={row_id!r}, details=json.loads({details_json!r})); "
+            "print(json.dumps(event, sort_keys=True))"
+        )
+        result = await self.exec_as_root(
+            environment,
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                f"python3 -c {shlex.quote(program)} && "
+                f"chmod 0444 {shlex.quote(POSITION_PATH)}"
+            ),
+        )
+        lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
+        if result.return_code != 0 or not lines:
+            raise RuntimeError("Position timeline append failed")
+        return json.loads(lines[-1])
+
+    async def _runtime_guide(self, environment: BaseEnvironment) -> dict[str, Any]:
+        """Read the frozen runtime projection without making it a phase gate."""
+
+        validation = await self.exec_as_root(
+            environment,
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                "python3 -m corridor_kit validate-work "
+                f"{shlex.quote(WORK_PATH)} "
+                f"--acceptance {shlex.quote(ACCEPTANCE_PATH)} "
+                f"--capabilities {shlex.quote(CAPABILITIES_PATH)}"
+            ),
+        )
+        try:
+            validation_report = json.loads(validation.stdout or "{}")
+        except (TypeError, json.JSONDecodeError):
+            validation_report = {}
+        result = await self.exec_as_root(
+            environment,
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                "python3 -m corridor_kit runtime guide "
+                f"--work {shlex.quote(WORK_PATH)} "
+                f"--capabilities {shlex.quote(CAPABILITIES_PATH)} "
+                f"--timeline {shlex.quote(POSITION_PATH)}"
+            ),
+        )
+        if result.return_code != 0 or not result.stdout:
+            return {
+                "available": False,
+                "status": "invalid_or_missing",
+                "current_row_id": None,
+            }
+        try:
+            guide = json.loads(result.stdout)
+        except (TypeError, json.JSONDecodeError):
+            return {
+                "available": False,
+                "status": "unreadable",
+                "current_row_id": None,
+            }
+        return {
+            "available": True,
+            "status": (
+                "compiled"
+                if validation.return_code == 0
+                and guide.get("work_state") == "compiled"
+                and guide.get("capability_state") == "compiled"
+                else "invalid_or_uncompiled"
+            ),
+            "work_validation_ok": validation.return_code == 0
+            and validation_report.get("ok") is True,
+            "work_validation_error_count": len(
+                validation_report.get("errors", [])
+                if isinstance(validation_report.get("errors"), list)
+                else []
+            ),
+            "work_state": guide.get("work_state"),
+            "capability_state": guide.get("capability_state"),
+            "current_row_id": guide.get("position", {}).get("current_row_id"),
+            "work_backlog_digest": guide.get("position", {}).get(
+                "work_backlog_digest"
+            ),
+            "timeline_head": guide.get("position", {}).get("timeline_head"),
+            "reminder_count": len(guide.get("reminders", [])),
+            "capability_ids": [
+                item.get("capability_id")
+                for item in guide.get("capabilities", [])
+                if isinstance(item, dict)
+            ],
+            "advisory_only": guide.get("advisory_only") is True,
+            "authorizes_mutation": guide.get("authorizes_mutation") is True,
+        }
+
+    async def _record_position_event(
+        self,
+        metadata: dict[str, Any],
+        environment: BaseEnvironment,
+        **event: Any,
+    ) -> None:
+        """Retain evidence loss without turning the advisory timeline into a gate."""
+
+        try:
+            appended = await self._append_position_event(environment, **event)
+        except Exception as exc:
+            metadata.setdefault("position_timeline_errors", []).append(
+                {
+                    "event_type": event.get("event_type"),
+                    "error_type": type(exc).__name__,
+                }
+            )
+        else:
+            metadata.setdefault("position_events", []).append(
+                {
+                    "event_id": appended["event_id"],
+                    "event_type": appended["event_type"],
+                    "event_hash": appended["event_hash"],
+                }
+            )
 
     async def setup(self, environment: BaseEnvironment) -> None:
         await super().setup(environment)
@@ -391,6 +544,12 @@ class ChartingLoopFullMethodAgent(Codex):
         if not self._method_source.is_file():
             raise FileNotFoundError(f"Frozen method source missing: {self._method_source}")
 
+        sdk_manifest = self._sdk_manifest()
+        self._sdk_identity = {
+            "kit_version": KIT_VERSION,
+            "tree_digest": sdk_manifest["tree_digest"],
+            "file_count": len(sdk_manifest["files"]),
+        }
         corridor_dir = str(PurePosixPath(RUNTIME_ROOT) / "corridor")
         scratch_dir = str(PurePosixPath(RUNTIME_ROOT) / "builder-scratch")
         method_dir = str(PurePosixPath(METHOD_PATH).parent)
@@ -400,13 +559,63 @@ class ChartingLoopFullMethodAgent(Codex):
             command=(
                 f"install -d -m 0755 {shlex.quote(RUNTIME_ROOT)} "
                 f"{shlex.quote(method_dir)} {shlex.quote(corridor_dir)} "
-                f"{shlex.quote(scratch_dir)}"
+                f"{shlex.quote(scratch_dir)} {shlex.quote(SDK_PACKAGE_PATH)} "
+                f"{shlex.quote(POSITION_ROOT)}"
             ),
         )
         await self._upload_agent_owned_file(
             environment,
             self._method_source,
             METHOD_PATH,
+        )
+        sdk_parents = sorted(
+            {
+                PurePosixPath(SDK_PACKAGE_PATH, item["path"]).parent.as_posix()
+                for item in sdk_manifest["files"]
+            }
+        )
+        if sdk_parents:
+            await self.exec_as_root(
+                environment,
+                command="install -d -m 0755 "
+                + " ".join(shlex.quote(path) for path in sdk_parents),
+            )
+        for item in sdk_manifest["files"]:
+            relative = Path(item["path"])
+            await self._upload_agent_owned_file(
+                environment,
+                self._sdk_source / relative,
+                PurePosixPath(SDK_PACKAGE_PATH, item["path"]).as_posix(),
+            )
+        remote_manifest = await self.exec_as_root(
+            environment,
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                f"python3 -m corridor_kit manifest {shlex.quote(SDK_PACKAGE_PATH)}"
+            ),
+        )
+        remote_lines = [
+            line for line in (remote_manifest.stdout or "").splitlines() if line.strip()
+        ]
+        if remote_manifest.return_code != 0 or not remote_lines:
+            raise RuntimeError("Corridor SDK remote manifest failed")
+        remote_identity = json.loads("\n".join(remote_lines))
+        if remote_identity.get("tree_digest") != sdk_manifest["tree_digest"]:
+            raise RuntimeError("Corridor SDK upload digest mismatch")
+        await self.exec_as_root(
+            environment,
+            command=(
+                f"chown -R 0:0 {shlex.quote(SDK_ROOT)} && "
+                f"find {shlex.quote(SDK_ROOT)} -type d -exec chmod 0555 {{}} + && "
+                f"find {shlex.quote(SDK_ROOT)} -type f -exec chmod 0444 {{}} +"
+            ),
+        )
+        await self._append_position_event(
+            environment,
+            actor="runner",
+            event_type="run_initialized",
+            status="observed",
+            details={"sdk_tree_digest": sdk_manifest["tree_digest"]},
         )
         await self.exec_as_root(
             environment,
@@ -418,7 +627,10 @@ class ChartingLoopFullMethodAgent(Codex):
                 f"chown {user} {shlex.quote(corridor_dir)} "
                 f"{shlex.quote(scratch_dir)} && "
                 f"chmod 0700 {shlex.quote(corridor_dir)} "
-                f"{shlex.quote(scratch_dir)}"
+                f"{shlex.quote(scratch_dir)} && "
+                f"chown -R 0:0 {shlex.quote(POSITION_ROOT)} && "
+                f"chmod 0555 {shlex.quote(POSITION_ROOT)} && "
+                f"chmod 0444 {shlex.quote(POSITION_PATH)}"
             ),
         )
 
@@ -764,11 +976,18 @@ class ChartingLoopFullMethodAgent(Codex):
             "method_source_commit": METHOD_SOURCE_COMMIT,
             "method_content_sha256": METHOD_CONTENT_SHA256,
             "method_scope_sha256": METHOD_SCOPE_SHA256,
+            "method_study_eligible": False,
+            "reportable_study": False,
             "roles": ["builder", "worker", "qa"],
             "phase_events": [],
             "phase_runs": [],
             "phase_timeout_seconds": dict(PHASE_TIMEOUT_SECONDS),
             "phase_timeout_total_seconds": PHASE_TIMEOUT_TOTAL_SECONDS,
+            "corridor_sdk": dict(getattr(self, "_sdk_identity", {})),
+            "position_timeline_path": POSITION_PATH,
+            "position_events": [],
+            "position_timeline_errors": [],
+            "runtime_guide_projections": [],
             "qa_is_advisory": True,
             "grading_owned_by_harbor": True,
         }
@@ -782,6 +1001,14 @@ class ChartingLoopFullMethodAgent(Codex):
             timeout_seconds=PHASE_TIMEOUT_SECONDS["builder"],
         )
         self._record_phase_outcome(metadata, builder_run, context)
+        await self._record_position_event(
+            metadata,
+            environment,
+            actor="runner",
+            event_type="builder_completed",
+            status=builder_run["status"],
+            details={"quiescent": bool(builder_run.get("quiescent"))},
+        )
 
         freeze = await self._freeze_corridor(environment)
         digest = str(freeze["corridor_digest"])
@@ -826,6 +1053,18 @@ class ChartingLoopFullMethodAgent(Codex):
             "unresolved_constraints", []
         )
         metadata["phase_events"].append("corridor_frozen")
+        await self._record_position_event(
+            metadata,
+            environment,
+            actor="runner",
+            event_type="corridor_frozen",
+            status=acceptance_ledger_status,
+            details={"corridor_digest": digest},
+        )
+        worker_guide = await self._runtime_guide(environment)
+        metadata["runtime_guide_projections"].append(
+            {"phase": "worker", **worker_guide}
+        )
 
         await self._verify_freeze(environment, expected_digest=digest)
         _, worker_run = await self._run_new_role(
@@ -835,11 +1074,23 @@ class ChartingLoopFullMethodAgent(Codex):
                 instruction,
                 digest,
                 construction_readiness_status=construction_readiness_status,
+                work_backlog_status=str(worker_guide["status"]),
+                current_row_id=worker_guide.get("current_row_id"),
             ),
             environment,
             timeout_seconds=PHASE_TIMEOUT_SECONDS["worker"],
         )
         self._record_phase_outcome(metadata, worker_run, context)
+        await self._record_position_event(
+            metadata,
+            environment,
+            actor="runner",
+            event_type="worker_completed",
+            status=worker_run["status"],
+            details={"quiescent": bool(worker_run.get("quiescent"))},
+        )
+        qa_guide = await self._runtime_guide(environment)
+        metadata["runtime_guide_projections"].append({"phase": "qa", **qa_guide})
 
         await self._verify_freeze(environment, expected_digest=digest)
         await self._open_qa_directory(environment)
@@ -855,6 +1106,8 @@ class ChartingLoopFullMethodAgent(Codex):
                     source_mapping_status=source_mapping_status,
                     definition_closure_status=definition_closure_status,
                     construction_readiness_status=construction_readiness_status,
+                    work_backlog_status=str(qa_guide["status"]),
+                    current_row_id=qa_guide.get("current_row_id"),
                 ),
                 environment,
                 timeout_seconds=PHASE_TIMEOUT_SECONDS["qa"],
@@ -862,6 +1115,14 @@ class ChartingLoopFullMethodAgent(Codex):
         finally:
             await self._seal_qa_directory(environment)
         self._record_phase_outcome(metadata, qa_run, context)
+        await self._record_position_event(
+            metadata,
+            environment,
+            actor="runner",
+            event_type="qa_completed",
+            status=qa_run["status"],
+            details={"quiescent": bool(qa_run.get("quiescent"))},
+        )
         _, decision = await self._read_assessment(
             environment,
             path=QA_PATH,
@@ -886,6 +1147,14 @@ class ChartingLoopFullMethodAgent(Codex):
                 timeout_seconds=PHASE_TIMEOUT_SECONDS["repair"],
             )
             self._record_phase_outcome(metadata, repair_run, context)
+            await self._record_position_event(
+                metadata,
+                environment,
+                actor="runner",
+                event_type="repair_completed",
+                status=repair_run["status"],
+                details={"quiescent": bool(repair_run.get("quiescent"))},
+            )
 
             await self._verify_freeze(environment, expected_digest=digest)
             await self._open_qa_directory(environment)
@@ -911,6 +1180,14 @@ class ChartingLoopFullMethodAgent(Codex):
             finally:
                 await self._seal_qa_directory(environment)
             self._record_phase_outcome(metadata, closure_run, context)
+            await self._record_position_event(
+                metadata,
+                environment,
+                actor="runner",
+                event_type="closure_completed",
+                status=closure_run["status"],
+                details={"quiescent": bool(closure_run.get("quiescent"))},
+            )
             _, closure = await self._read_assessment(
                 environment,
                 path=CLOSURE_PATH,

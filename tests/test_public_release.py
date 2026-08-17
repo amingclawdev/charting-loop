@@ -1233,6 +1233,60 @@ class PublicReleaseTests(unittest.TestCase):
         self.assertTrue(any("training_ingestion must remain not-inferred" in error for error in report.errors))
         self.assertTrue(any("public upstream oracle requires publication time" in error for error in report.errors))
 
+    def test_v5_work_rows_and_capability_pack_are_frozen_but_task_neutral(self) -> None:
+        versions = json.loads(
+            (REPOSITORY_ROOT / "method-paper" / "VERSIONS.json").read_text(
+                encoding="utf-8"
+            )
+        )["versions"]
+        v5 = [
+            item for item in versions if item["version_id"] == "charting-loop-method-v5"
+        ]
+        self.assertEqual(1, len(v5))
+        self.assertEqual("frozen", v5[0]["status"])
+        self.assertFalse(v5[0]["study_eligible"])
+        self.assertFalse(v5[0]["adoption_eligible"])
+        self.assertEqual(
+            "8b0fd5e1c6102c6b4c44cf03612b93c450ddb6fd",
+            v5[0]["source_commit"],
+        )
+        for path_key, digest_key in (
+            ("path", "content_sha256"),
+            ("scope_datum_path", "scope_datum_sha256"),
+        ):
+            data = (REPOSITORY_ROOT / v5[0][path_key]).read_bytes()
+            self.assertEqual(
+                v5[0][digest_key], "sha256:" + hashlib.sha256(data).hexdigest()
+            )
+
+        public_surface = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (
+                REPOSITORY_ROOT / "method-paper" / "METHOD.md",
+                REPOSITORY_ROOT
+                / "protocol"
+                / "TASK-CONDITIONED-CORRIDOR-BENCHMARK-V4.md",
+                *sorted((REPOSITORY_ROOT / "corridor_kit").rglob("*.py")),
+            )
+        )
+        for forbidden in (
+            "ico-path-patch",
+            "planner_service.py",
+            "WO-WIP-001",
+            "subscription_token",
+            "session_token",
+        ):
+            self.assertNotIn(forbidden, public_surface)
+        for marker in (
+            "task-work-backlog/v1",
+            "capability-registry/v1",
+            "position-event/v1",
+            "authorizes_mutation",
+            "advisory_only",
+            "blocking_gate",
+        ):
+            self.assertIn(marker, public_surface)
+
     def test_sealed_artifact_requires_provenance_and_source_ref(self) -> None:
         entry = release_entry()
         entry["sealed_artifacts"] = [

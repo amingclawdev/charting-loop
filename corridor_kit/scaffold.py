@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any
 
 from .acceptance import ACCEPTANCE_SCHEMA, validate_acceptance_ledger
+from .capabilities import starter_capability_registry, validate_capability_registry
 from .core import KIT_VERSION, CorridorKitError, atomic_write_bytes, atomic_write_json, sha256_json
+from .runtime import starter_work_backlog, validate_work_backlog
 
 
 SCAFFOLD_SCHEMA = "charting-loop/corridor-kit-scaffold/v1"
@@ -55,14 +57,23 @@ Before the Corridor is frozen, the Builder must:
    relations.
 2. Record interacting hard requirements in `construction_readiness`, then implement
    one replayable task adapter that evaluates those requirements together.
-3. Keep task observations and command output under builder scratch during construction;
+3. Compile `WORK_ITEMS.json` into bounded rows that cover every acceptance ID. Give
+   each row dependencies, scope, done-when conditions, selected capability IDs, and
+   advisory reminders. Compile `CAPABILITIES.json` with exact versions, digests,
+   input/output contracts, applicability signals, and side-effect declarations.
+4. Keep task observations and command output under builder scratch during construction;
    include only reusable task diagnostics, tests, and documentation in this directory.
-4. Run strict validation without draft mode. Incomplete or unresolved output is an
+5. Run strict validation without draft mode. Incomplete or unresolved output is an
    honest diagnostic, not permission to claim success.
 
 After runner-owned freezing, both Worker and QA receive these same bytes and the same
 digest. Each role independently checks the public task sources. QA treats Corridor
 output as evidence to audit, never as proof of its own completeness.
+
+The runner keeps the mutable Position timeline outside these frozen bytes. Runtime
+Guide and reminder views are deterministic projections over the frozen work rows,
+frozen capability registry, and that RAW timeline. They remain advisory and never
+authorize mutation or block the external evaluator.
 
 The generated `task_adapter.py` reports `unresolved` until the Builder replaces its
 task-specific functions. It never mutates the target by itself.
@@ -120,10 +131,22 @@ def _write_scaffold_tree(root: Path) -> None:
     (root / "fixtures").mkdir()
     (root / "evidence").mkdir()
     ledger = starter_acceptance_ledger()
+    work = starter_work_backlog()
+    capabilities = starter_capability_registry()
     report = validate_acceptance_ledger(ledger, allow_draft=True)
     if not report.ok:
         raise CorridorKitError(f"internal starter ledger is invalid: {report.errors}")
+    work_report = validate_work_backlog(work, allow_draft=True)
+    if not work_report.ok:
+        raise CorridorKitError(f"internal starter work backlog is invalid: {work_report.errors}")
+    capability_report = validate_capability_registry(capabilities, allow_draft=True)
+    if not capability_report.ok:
+        raise CorridorKitError(
+            f"internal starter capability registry is invalid: {capability_report.errors}"
+        )
     atomic_write_json(root / "ACCEPTANCE.json", ledger)
+    atomic_write_json(root / "WORK_ITEMS.json", work)
+    atomic_write_json(root / "CAPABILITIES.json", capabilities)
     atomic_write_bytes(root / "README.md", STARTER_README.encode("utf-8"))
     atomic_write_bytes(
         root / "task_adapter.py", STARTER_ADAPTER.encode("utf-8"), mode=0o755
@@ -136,6 +159,8 @@ def _write_scaffold_tree(root: Path) -> None:
     )
     identity_input = {
         "acceptance": ledger,
+        "work": work,
+        "capabilities": capabilities,
         "readme": STARTER_README,
         "adapter": STARTER_ADAPTER,
         "fixtures_readme": FIXTURES_README,
@@ -153,6 +178,8 @@ def _write_scaffold_tree(root: Path) -> None:
             "starter_digest": sha256_json(identity_input),
             "generated_files": [
                 "ACCEPTANCE.json",
+                "WORK_ITEMS.json",
+                "CAPABILITIES.json",
                 "README.md",
                 "task_adapter.py",
                 "fixtures/README.md",

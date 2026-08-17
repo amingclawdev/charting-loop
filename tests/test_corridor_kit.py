@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import struct
 import sys
 import tempfile
 import unittest
@@ -10,14 +11,29 @@ from pathlib import Path
 
 from corridor_kit import (
     ACCEPTANCE_SCHEMA,
+    CAPABILITY_SCHEMA,
+    WORK_BACKLOG_SCHEMA,
     CorridorKitError,
+    append_position_event,
     capture_command,
     create_scaffold,
     public_world_inventory,
     regular_tree_manifest,
+    runtime_guide,
+    sha256_json,
     validate_acceptance_file,
     validate_acceptance_ledger,
+    validate_capability_registry,
+    validate_work_backlog,
+    validate_work_files,
 )
+from corridor_kit.domain.binary import (
+    binary_diff,
+    binary_replay_record,
+    builtin_binary_registry,
+    elf_inventory,
+)
+from corridor_kit.runtime import load_position_timeline, project_position
 from corridor_kit.core import load_json
 
 
@@ -55,6 +71,54 @@ def valid_ledger() -> dict[str, object]:
                 "scope": {"kind": "whole-task"},
                 "rule": {"predicate": "second_requirement_holds"},
                 "relations": [],
+            },
+        ],
+    }
+
+
+def valid_capabilities() -> dict[str, object]:
+    return builtin_binary_registry()
+
+
+def valid_work_backlog() -> dict[str, object]:
+    return {
+        "schema_version": WORK_BACKLOG_SCHEMA,
+        "state": "compiled",
+        "acceptance_ledger_digest": sha256_json(valid_ledger()),
+        "rows": [
+            {
+                "row_id": "ROW-1",
+                "title": "Establish the second requirement",
+                "acceptance_ids": ["AC-2"],
+                "depends_on": [],
+                "scope": {"kind": "whole-task"},
+                "done_when": ["AC-2 has replayable evidence."],
+                "capability_ids": ["binary.elf-inventory"],
+                "reminders": [
+                    {
+                        "reminder_id": "REM-1",
+                        "when": "before_complete",
+                        "message": "Replay the read-only inventory before completing.",
+                        "acceptance_ids": ["AC-2"],
+                    }
+                ],
+            },
+            {
+                "row_id": "ROW-2",
+                "title": "Establish the first requirement",
+                "acceptance_ids": ["AC-1"],
+                "depends_on": ["ROW-1"],
+                "scope": {"kind": "whole-task"},
+                "done_when": ["AC-1 has replayable evidence."],
+                "capability_ids": ["binary.diff-ranges"],
+                "reminders": [
+                    {
+                        "reminder_id": "REM-2",
+                        "when": "before_mutation",
+                        "message": "Compare the exact before and candidate bytes.",
+                        "acceptance_ids": ["AC-1"],
+                    }
+                ],
             },
         ],
     }
@@ -173,6 +237,8 @@ class ScaffoldTests(unittest.TestCase):
             self.assertEqual(
                 (first / "KIT.json").read_bytes(), (second / "KIT.json").read_bytes()
             )
+            self.assertTrue((first / "WORK_ITEMS.json").is_file())
+            self.assertTrue((first / "CAPABILITIES.json").is_file())
             generated_text = "\n".join(
                 path.read_text(encoding="utf-8", errors="ignore")
                 for path in first.rglob("*")
@@ -266,7 +332,7 @@ class CoreMechanicsTests(unittest.TestCase):
     def test_runtime_code_has_no_private_or_benchmark_dependency(self) -> None:
         package = Path(__file__).resolve().parents[1] / "corridor_kit"
         source = "\n".join(
-            path.read_text(encoding="utf-8") for path in package.glob("*.py")
+            path.read_text(encoding="utf-8") for path in package.rglob("*.py")
         )
         self.assertNotIn("import aming_claw", source)
         self.assertNotIn("from aming_claw", source)
@@ -274,6 +340,167 @@ class CoreMechanicsTests(unittest.TestCase):
         self.assertNotIn("from harbor", source)
         self.assertNotIn("planner_service", source)
         self.assertNotIn("evalbench", source)
+
+
+class WorkRowsAndRuntimeTests(unittest.TestCase):
+    def test_joined_work_backlog_and_capability_registry_are_strict(self) -> None:
+        capabilities = valid_capabilities()
+        capability_report = validate_capability_registry(capabilities)
+        self.assertTrue(capability_report.ok, capability_report.errors)
+        self.assertEqual(CAPABILITY_SCHEMA, capabilities["schema_version"])
+        self.assertEqual(
+            {"binary.elf-inventory", "binary.diff-ranges", "binary.replay-record"},
+            set(capability_report.facts["capability_ids"]),
+        )
+
+        work = valid_work_backlog()
+        report = validate_work_backlog(
+            work,
+            acceptance_ids={"AC-1", "AC-2"},
+            capability_ids=set(capability_report.facts["capability_ids"]),
+        )
+        self.assertTrue(report.ok, report.errors)
+        self.assertEqual(["ROW-1", "ROW-2"], report.facts["row_ids"])
+        self.assertIs(report.facts["authorizes_mutation"], False)
+
+        work["rows"][0]["depends_on"] = ["ROW-2"]
+        report = validate_work_backlog(
+            work,
+            acceptance_ids={"AC-1", "AC-2"},
+            capability_ids=set(capability_report.facts["capability_ids"]),
+        )
+        self.assertIn("ROW_DEPENDENCY_CYCLE", {item["code"] for item in report.errors})
+
+    def test_file_join_rejects_dangling_capability_and_acceptance(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            ledger = valid_ledger()
+            capabilities = valid_capabilities()
+            work = valid_work_backlog()
+            (root / "ACCEPTANCE.json").write_text(json.dumps(ledger))
+            (root / "CAPABILITIES.json").write_text(json.dumps(capabilities))
+            (root / "WORK_ITEMS.json").write_text(json.dumps(work))
+            report = validate_work_files(
+                root / "WORK_ITEMS.json",
+                acceptance_path=root / "ACCEPTANCE.json",
+                capability_path=root / "CAPABILITIES.json",
+            )
+            self.assertTrue(report.ok, report.errors)
+            self.assertTrue(report.facts["task_ready"])
+
+            work["rows"][0]["capability_ids"] = ["binary.unknown"]
+            work["rows"][1]["acceptance_ids"] = ["AC-UNKNOWN"]
+            (root / "WORK_ITEMS.json").write_text(json.dumps(work))
+            report = validate_work_files(
+                root / "WORK_ITEMS.json",
+                acceptance_path=root / "ACCEPTANCE.json",
+                capability_path=root / "CAPABILITIES.json",
+            )
+            codes = {item["code"] for item in report.errors}
+            self.assertIn("UNKNOWN_CAPABILITY_ID", codes)
+            self.assertIn("UNKNOWN_ACCEPTANCE_ID", codes)
+            self.assertIn("UNBOUND_ACCEPTANCE_ID", codes)
+
+    def test_hash_linked_timeline_projects_one_advisory_current_guide(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            timeline = Path(raw) / "POSITION.jsonl"
+            work = valid_work_backlog()
+            capabilities = valid_capabilities()
+            first = append_position_event(
+                timeline,
+                actor="runner",
+                event_type="run_initialized",
+                status="observed",
+            )
+            started = append_position_event(
+                timeline,
+                actor="worker",
+                event_type="row_started",
+                status="in_progress",
+                row_id="ROW-1",
+            )
+            self.assertEqual(first["event_hash"], started["previous_event_hash"])
+            events = load_position_timeline(timeline)
+            current = project_position(work, events)
+            self.assertEqual("ROW-1", current["current_row_id"])
+
+            append_position_event(
+                timeline,
+                actor="runner",
+                event_type="row_completed",
+                status="done",
+                row_id="ROW-1",
+                details={"evidence_ref": "artifact:row-1"},
+            )
+            guide = runtime_guide(work, capabilities, load_position_timeline(timeline))
+            self.assertEqual("compiled", guide["work_state"])
+            self.assertEqual("compiled", guide["capability_state"])
+            self.assertEqual("ROW-2", guide["current_row"]["row_id"])
+            self.assertEqual(["binary.diff-ranges"], [item["capability_id"] for item in guide["capabilities"]])
+            self.assertIn("REM-2", {item["reminder_id"] for item in guide["reminders"]})
+            self.assertIs(guide["advisory_only"], True)
+            self.assertIs(guide["authorizes_mutation"], False)
+            self.assertIs(guide["blocking_gate"], False)
+
+            with self.assertRaises(CorridorKitError):
+                append_position_event(
+                    timeline,
+                    actor="worker",
+                    event_type="row_started",
+                    status="done",
+                    row_id="ROW-2",
+                )
+
+
+class BinaryCapabilityTests(unittest.TestCase):
+    @staticmethod
+    def _elf_bytes() -> bytes:
+        identity = b"\x7fELF" + bytes([2, 1, 1, 0]) + b"\0" * 8
+        header = struct.pack(
+            "<HHIQQQIHHHHHH",
+            2,
+            62,
+            1,
+            0x400000,
+            64,
+            0,
+            0,
+            64,
+            56,
+            0,
+            64,
+            0,
+            0,
+        )
+        return identity + header
+
+    def test_binary_pack_is_read_only_task_neutral_and_replayable(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            before = root / "before"
+            after = root / "after"
+            before.write_bytes(self._elf_bytes())
+            changed = bytearray(self._elf_bytes())
+            changed[-1] = 1
+            after.write_bytes(changed)
+
+            inventory = elf_inventory(before)
+            self.assertEqual("x86-64", inventory["machine"])
+            self.assertEqual(64, inventory["elf_class"])
+            self.assertEqual("none", inventory["side_effects"])
+
+            difference = binary_diff(before, after)
+            self.assertEqual(1, difference["changed_byte_count"])
+            self.assertEqual(
+                [{"start": 63, "end_exclusive": 64, "length": 1}],
+                difference["changed_ranges"],
+            )
+            replay = binary_replay_record(
+                ["./check", "./program"], {"program": before}
+            )
+            self.assertIs(replay["shell"], False)
+            self.assertEqual("not_executed", replay["side_effects"])
+            self.assertRegex(replay["replay_digest"], r"^sha256:[0-9a-f]{64}$")
 
 
 if __name__ == "__main__":

@@ -6,6 +6,13 @@ from .acceptance import (
     validate_acceptance_file,
     validate_acceptance_ledger,
 )
+from .capabilities import (
+    CAPABILITY_SCHEMA,
+    CapabilityReport,
+    starter_capability_registry,
+    validate_capability_file,
+    validate_capability_registry,
+)
 from .core import (
     KIT_VERSION,
     CorridorKitError,
@@ -18,12 +25,33 @@ from .core import (
     sha256_json,
 )
 from .scaffold import create_scaffold, starter_acceptance_ledger
+from .runtime import (
+    POSITION_EVENT_SCHEMA,
+    RUNTIME_GUIDE_SCHEMA,
+    WORK_BACKLOG_SCHEMA,
+    WorkBacklogReport,
+    append_position_event,
+    load_position_timeline,
+    load_runtime_guide,
+    project_position,
+    runtime_guide,
+    starter_work_backlog,
+    validate_work_backlog,
+    validate_work_files,
+)
 
 __all__ = [
     "ACCEPTANCE_SCHEMA",
+    "CAPABILITY_SCHEMA",
     "KIT_VERSION",
+    "POSITION_EVENT_SCHEMA",
+    "RUNTIME_GUIDE_SCHEMA",
+    "WORK_BACKLOG_SCHEMA",
     "AcceptanceReport",
+    "CapabilityReport",
     "CorridorKitError",
+    "WorkBacklogReport",
+    "append_position_event",
     "canonical_json_bytes",
     "capture_command",
     "create_scaffold",
@@ -33,6 +61,16 @@ __all__ = [
     "sha256_bytes",
     "sha256_json",
     "starter_acceptance_ledger",
+    "starter_capability_registry",
+    "starter_work_backlog",
+    "load_position_timeline",
+    "load_runtime_guide",
+    "project_position",
+    "runtime_guide",
     "validate_acceptance_file",
     "validate_acceptance_ledger",
+    "validate_capability_file",
+    "validate_capability_registry",
+    "validate_work_backlog",
+    "validate_work_files",
 ]

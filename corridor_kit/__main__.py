@@ -9,15 +9,29 @@ from pathlib import Path
 from typing import Any
 
 from .acceptance import validate_acceptance_file
+from .capabilities import validate_capability_file
 from .core import (
     KIT_VERSION,
     CorridorKitError,
     atomic_write_json,
     capture_command,
+    load_json,
     public_world_inventory,
     regular_tree_manifest,
 )
 from .scaffold import create_scaffold
+from .domain.binary import (
+    binary_diff,
+    binary_replay_record,
+    builtin_binary_registry,
+    elf_inventory,
+)
+from .runtime import (
+    append_position_event,
+    load_position_timeline,
+    load_runtime_guide,
+    validate_work_files,
+)
 
 
 def _emit(value: Any, output: Path | None = None) -> None:
@@ -40,6 +54,16 @@ def _labeled_roots(values: list[str]) -> dict[str, Path]:
     return roots
 
 
+def _json_object(raw: str, *, name: str) -> dict[str, Any]:
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise CorridorKitError(f"{name} must be valid JSON: {exc}") from exc
+    if not isinstance(value, dict):
+        raise CorridorKitError(f"{name} must be a JSON object")
+    return value
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m corridor_kit",
@@ -56,6 +80,29 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--allow-draft", action="store_true")
     validate.add_argument("--output", type=Path)
 
+    validate_work = commands.add_parser(
+        "validate-work", help="validate work rows against acceptance and capabilities"
+    )
+    validate_work.add_argument("work", type=Path)
+    validate_work.add_argument("--acceptance", required=True, type=Path)
+    validate_work.add_argument("--capabilities", required=True, type=Path)
+    validate_work.add_argument("--allow-draft", action="store_true")
+    validate_work.add_argument("--output", type=Path)
+
+    validate_capabilities = commands.add_parser(
+        "validate-capabilities", help="validate a capability registry"
+    )
+    validate_capabilities.add_argument("registry", type=Path)
+    validate_capabilities.add_argument("--allow-draft", action="store_true")
+    validate_capabilities.add_argument("--output", type=Path)
+
+    capability = commands.add_parser("capabilities", help="inspect frozen capability packs")
+    capability_commands = capability.add_subparsers(dest="capability_command", required=True)
+    capability_builtins = capability_commands.add_parser(
+        "builtins", help="emit the task-neutral binary capability registry"
+    )
+    capability_builtins.add_argument("--output", type=Path)
+
     manifest = commands.add_parser("manifest", help="hash a closed regular-file tree")
     manifest.add_argument("root", type=Path)
     manifest.add_argument("--output", type=Path)
@@ -71,6 +118,39 @@ def _parser() -> argparse.ArgumentParser:
     capture.add_argument("--cwd", type=Path)
     capture.add_argument("--timeout", type=float)
     capture.add_argument("argv", nargs=argparse.REMAINDER)
+
+    timeline = commands.add_parser("timeline", help="append or inspect RAW Position events")
+    timeline_commands = timeline.add_subparsers(dest="timeline_command", required=True)
+    timeline_append = timeline_commands.add_parser("append", help="append one hash-linked observation")
+    timeline_append.add_argument("timeline", type=Path)
+    timeline_append.add_argument("--work", required=True, type=Path)
+    timeline_append.add_argument("--actor", required=True)
+    timeline_append.add_argument("--event-type", required=True)
+    timeline_append.add_argument("--status", required=True)
+    timeline_append.add_argument("--row-id")
+    timeline_append.add_argument("--details-json", default="{}")
+    timeline_append.add_argument("--observed-at")
+    timeline_list = timeline_commands.add_parser("list", help="verify and list the complete chain")
+    timeline_list.add_argument("timeline", type=Path)
+
+    runtime = commands.add_parser("runtime", help="project current row, Guide, or reminders")
+    runtime_commands = runtime.add_subparsers(dest="runtime_command", required=True)
+    for command_name in ("current", "guide", "reminders"):
+        command = runtime_commands.add_parser(command_name)
+        command.add_argument("--work", required=True, type=Path)
+        command.add_argument("--capabilities", required=True, type=Path)
+        command.add_argument("--timeline", required=True, type=Path)
+
+    binary = commands.add_parser("binary", help="generic read-only binary capability pack")
+    binary_commands = binary.add_subparsers(dest="binary_command", required=True)
+    inventory = binary_commands.add_parser("inventory", help="inventory an ELF header")
+    inventory.add_argument("path", type=Path)
+    diff = binary_commands.add_parser("diff", help="report changed binary byte ranges")
+    diff.add_argument("before", type=Path)
+    diff.add_argument("after", type=Path)
+    replay = binary_commands.add_parser("replay", help="bind argv to labeled input identities")
+    replay.add_argument("--input", action="append", required=True, dest="inputs")
+    replay.add_argument("argv", nargs=argparse.REMAINDER)
     return parser
 
 
@@ -87,6 +167,24 @@ def main(argv: list[str] | None = None) -> int:
             ).as_dict()
             _emit(report, args.output)
             return 0 if report["ok"] else 1
+        if args.command == "validate-work":
+            report = validate_work_files(
+                args.work,
+                acceptance_path=args.acceptance,
+                capability_path=args.capabilities,
+                allow_draft=args.allow_draft,
+            ).as_dict()
+            _emit(report, args.output)
+            return 0 if report["ok"] else 1
+        if args.command == "validate-capabilities":
+            report = validate_capability_file(
+                args.registry, allow_draft=args.allow_draft
+            ).as_dict()
+            _emit(report, args.output)
+            return 0 if report["ok"] else 1
+        if args.command == "capabilities" and args.capability_command == "builtins":
+            _emit(builtin_binary_registry(), args.output)
+            return 0
         if args.command == "manifest":
             _emit(regular_tree_manifest(args.root), args.output)
             return 0
@@ -105,6 +203,57 @@ def main(argv: list[str] | None = None) -> int:
             )
             _emit(report)
             return 0 if report["status"] == "completed" and report["exit_code"] == 0 else 1
+        if args.command == "timeline" and args.timeline_command == "append":
+            work = load_json(args.work)
+            if args.row_id is not None:
+                known = {
+                    item.get("row_id")
+                    for item in work.get("rows", [])
+                    if isinstance(item, dict)
+                }
+                if args.row_id not in known:
+                    raise CorridorKitError(f"unknown work row: {args.row_id}")
+            event = append_position_event(
+                args.timeline,
+                actor=args.actor,
+                event_type=args.event_type,
+                status=args.status,
+                row_id=args.row_id,
+                details=_json_object(args.details_json, name="--details-json"),
+                observed_at=args.observed_at,
+            )
+            _emit(event)
+            return 0
+        if args.command == "timeline" and args.timeline_command == "list":
+            events = load_position_timeline(args.timeline)
+            _emit({"ok": True, "event_count": len(events), "events": events})
+            return 0
+        if args.command == "runtime":
+            guide = load_runtime_guide(args.work, args.capabilities, args.timeline)
+            if args.runtime_command == "guide":
+                _emit(guide)
+            elif args.runtime_command == "current":
+                _emit(guide["position"])
+            else:
+                _emit({
+                    "schema_version": "charting-loop/runtime-reminders/v1",
+                    "current_row_id": guide["position"]["current_row_id"],
+                    "reminders": guide["reminders"],
+                    "advisory_only": True,
+                    "authorizes_mutation": False,
+                })
+            return 0
+        if args.command == "binary":
+            if args.binary_command == "inventory":
+                _emit(elf_inventory(args.path))
+            elif args.binary_command == "diff":
+                _emit(binary_diff(args.before, args.after))
+            else:
+                command = list(args.argv)
+                if command and command[0] == "--":
+                    command = command[1:]
+                _emit(binary_replay_record(command, _labeled_roots(args.inputs)))
+            return 0
     except CorridorKitError as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True), file=sys.stderr)
         return 2

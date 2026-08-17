@@ -17,9 +17,15 @@ from typing import Any
 
 
 RUNTIME_ROOT = "/tmp/charting-loop"
+SDK_ROOT = "/opt/charting-loop-sdk"
+SDK_PACKAGE_PATH = f"{SDK_ROOT}/corridor_kit"
+POSITION_ROOT = "/tmp/charting-loop-position"
+POSITION_PATH = f"{POSITION_ROOT}/POSITION.jsonl"
 METHOD_PATH = f"{RUNTIME_ROOT}/method/METHOD.md"
 CORRIDOR_PATH = f"{RUNTIME_ROOT}/corridor"
 ACCEPTANCE_PATH = f"{CORRIDOR_PATH}/ACCEPTANCE.json"
+WORK_PATH = f"{CORRIDOR_PATH}/WORK_ITEMS.json"
+CAPABILITIES_PATH = f"{CORRIDOR_PATH}/CAPABILITIES.json"
 FREEZE_PATH = f"{RUNTIME_ROOT}/FREEZE.json"
 QA_PATH = f"{RUNTIME_ROOT}/qa/assessment.json"
 CLOSURE_PATH = f"{RUNTIME_ROOT}/qa/closure.json"
@@ -653,12 +659,73 @@ def builder_prompt(task_instruction: str) -> str:
         indent=2,
         ensure_ascii=False,
     )
+    work_template = json.dumps(
+        {
+            "schema_version": "charting-loop/task-work-backlog/v1",
+            "state": "compiled",
+            "acceptance_ledger_digest": "sha256:<canonical ACCEPTANCE.json digest>",
+            "rows": [
+                {
+                    "row_id": "ROW-...",
+                    "title": "bounded work outcome",
+                    "acceptance_ids": ["ACCEPT-..."],
+                    "depends_on": [],
+                    "scope": {"kind": "task-specific scope"},
+                    "done_when": ["replayable condition"],
+                    "capability_ids": ["selected.capability-id"],
+                    "reminders": [
+                        {
+                            "reminder_id": "REM-...",
+                            "when": "on_ready|on_enter|before_mutation|before_complete|on_blocked",
+                            "message": "advisory task reminder",
+                            "acceptance_ids": ["ACCEPT-..."],
+                        }
+                    ],
+                }
+            ],
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+    capability_template = json.dumps(
+        {
+            "schema_version": "charting-loop/capability-registry/v1",
+            "state": "compiled",
+            "registry_version": "1.0.0",
+            "capabilities": [
+                {
+                    "capability_id": "selected.capability-id",
+                    "version": "1.0.0",
+                    "digest": "sha256:<64 lowercase hex>",
+                    "summary": "bounded reusable operation",
+                    "entrypoint": "shell-free documented entrypoint",
+                    "input_contract": {"input": "declared input"},
+                    "output_contract": {"output": "declared output"},
+                    "side_effects": "none|read_only|mutating",
+                    "applicability": {
+                        "domains": ["declared domain"],
+                        "signals": ["public applicability signal"],
+                    },
+                }
+            ],
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
 
     return f"""You are the Builder for one fresh Terminal-Bench trial.
 
 Read the frozen method at {METHOD_PATH}. The official task is included below because
 this is a task-conditioned Corridor: without the goal and public task environment,
 you cannot compile the relevant constraints into a useful navigation aid.
+
+The runner uploaded a frozen task-neutral Corridor SDK read-only at
+{SDK_PACKAGE_PATH}. Initialize its honest starter under Builder scratch with
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit init <new-scratch-path>`, inspect
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit capabilities builtins`, and copy only
+selected task-neutral mechanics plus task-specific adapters into the Corridor. Do not
+rebuild generic hashing, work-row, timeline, ELF inventory, binary-diff, or replay
+plumbing when the frozen SDK already provides it.
 
 {_task_block(task_instruction)}
 
@@ -672,6 +739,17 @@ Create {ACCEPTANCE_PATH} using this exact field contract (replace example values
 never field names):
 
 {acceptance_template}
+
+Create {WORK_PATH} using this exact field contract. Bind every acceptance ID without
+leaving an item unbound:
+
+{work_template}
+
+Create {CAPABILITIES_PATH} using this exact field contract. Include only capabilities
+selected by a row. Reusable mechanics may never contain a task answer, fixed task
+offset, hidden verifier Fact, or outcome-derived repair:
+
+{capability_template}
 
 The top-level field is exactly `schema_version`, never `schema`. Every relation
 target field is exactly `target_id`, never `target_acceptance_id` or another alias.
@@ -699,6 +777,17 @@ constraints and objective together. Otherwise mark it `unresolved` and name ever
 missing proof in `unresolved_constraints`. Never recommend a candidate or claim
 whole-task readiness while a required coupled constraint or objective is unknown.
 
+Compile the acceptance graph into bounded work rows. Dependencies must be acyclic;
+every acceptance and capability ID must resolve; and each row needs explicit task
+scope and replayable done-when conditions. Reminders are advisory and must never
+become approval, pre-mutation, or workflow Gates. Before finishing, run:
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit validate {ACCEPTANCE_PATH}`
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit validate-capabilities {CAPABILITIES_PATH}`
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit validate-work {WORK_PATH} --acceptance {ACCEPTANCE_PATH} --capabilities {CAPABILITIES_PATH}`
+
 Build in bounded milestones: first write the exact acceptance ledger and a minimal
 README, then make the global replay check executable, then deepen diagnostics only
 if time remains. A partial but honest `unresolved` Corridor is preferable to an
@@ -720,6 +809,8 @@ def worker_prompt(
     corridor_digest_value: str,
     *,
     construction_readiness_status: str = "unknown",
+    work_backlog_status: str = "unknown",
+    current_row_id: str | None = None,
 ) -> str:
     """Prompt the execution role with the exact frozen Corridor identity."""
 
@@ -743,6 +834,16 @@ when readiness is not `ready`, or any required coupled feasibility/objective che
 returns unknown, do not trust a recommended candidate as globally valid. Complete
 the missing live reasoning yourself and require replayable evidence before mutation.
 
+The frozen work-backlog status is `{work_backlog_status}` and the runner's initial
+current-row projection is {json.dumps(current_row_id)}. When the work and capability
+files validate, query the same runner-owned Position timeline and advisory Guide with:
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit runtime guide --work {WORK_PATH} --capabilities {CAPABILITIES_PATH} --timeline {POSITION_PATH}`
+
+Use row acceptance bindings, dependencies, done-when conditions, bounded capabilities,
+and reminders to avoid losing place. Re-check live state: row events and reminders are
+RAW observations, not authority or proof of completion.
+
 Execute the task now. Do not wait for QA and do not create a gate around your work.
 The harness will invoke an independent QA role afterward.
 """
@@ -757,6 +858,8 @@ def qa_prompt(
     source_mapping_status: str = "unknown",
     definition_closure_status: str = "unknown",
     construction_readiness_status: str = "unknown",
+    work_backlog_status: str = "unknown",
+    current_row_id: str | None = None,
 ) -> str:
     """Prompt an independent QA session that can use the same frozen Corridor."""
 
@@ -768,6 +871,15 @@ You MUST read and may execute the same frozen, read-only Corridor at {CORRIDOR_P
 The freeze manifest is {FREEZE_PATH}; the expected digest is
 {corridor_digest_value}. Use the Corridor for global constraint checks and
 counterfactual validation, not merely as prose context.
+
+The frozen work-backlog status is `{work_backlog_status}` and the runner's current-row
+projection before QA is {json.dumps(current_row_id)}. Query the same read-only rows,
+capabilities, Position timeline, Guide, and reminders used by Worker with:
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit runtime guide --work {WORK_PATH} --capabilities {CAPABILITIES_PATH} --timeline {POSITION_PATH}`
+
+Audit row done-when evidence and replay applicable capabilities, but never treat a
+row state or reminder as sufficient acceptance evidence.
 
 Do not mutate the official task state, repair the result, or alter the Corridor.
 Diagnostic reads are allowed. Your only write is {QA_PATH}. Write one JSON object:
@@ -851,6 +963,9 @@ Apply only repairs justified by reproduced witnesses, then verify the complete t
 again against every stable acceptance ID in {ACCEPTANCE_PATH}; closing the reported
 witness alone is insufficient. This is the single permitted repair pass. Do not
 create a new gate.
+
+Re-query the shared advisory runtime Guide at {POSITION_PATH}; row state helps recover
+Position but does not authorize repair.
 """
 
 
@@ -883,6 +998,9 @@ construction-readiness statuses remain `{source_mapping_status}`,
 report those dimensions separately from assessment closure. A fail still requires a concrete
 acceptance-ID/constraint/evidence/replay witness. This closure is advisory and must
 not gate the official verifier.
+
+Re-query the same runtime Guide and Position timeline at {POSITION_PATH}; row progress
+and reminders remain RAW, advisory evidence rather than acceptance authority.
 """
 
 
