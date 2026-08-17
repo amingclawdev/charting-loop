@@ -17,7 +17,7 @@ This run is bound to `charting-loop-method-v4` at
 `sha256:d3a9da497c31f3bde46a31f37990236af51b9f677ae807d023582b27254c4ab0`,
 and SCOPE-DATUM digest
 `sha256:65c6a91120c15bec30278288a26ecc98bdf96cfb07fd490dc915408a78844327`.
-Agent v0.3.0 resolves this identity and rejects changed catalog or method bytes before
+Agent v0.5.0 resolves this identity and rejects changed catalog or method bytes before
 any paid model call.
 
 ```bash
@@ -47,7 +47,7 @@ Expected content hash:
 `sha256:a32a61879ea94eb9dc16fa1fbeb398759f0c07ca633d9d1f6aec760207036da3`.
 The package contains 74 tasks; 4 require GPU access, so the full run uses Modal.
 
-## 2. Local no-model validation
+## 2. Local no-model validation and mandatory doctor
 
 Run these from the Charting Loop repository root:
 
@@ -66,19 +66,46 @@ HARBOR_PY="$HOME/.local/share/uv/tools/harbor/bin/python"
 "$HARBOR_PY" -c \
   'from benchmark_agents.harbor_agent import ChartingLoopFullMethodAgent; print(ChartingLoopFullMethodAgent.import_path())'
 
-harbor run --print-config \
-  -d terminal-bench/terminal-bench@3.0.0 \
-  -e modal \
-  -a benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent \
-  -m openai/gpt-5.6-sol \
-  --ak reasoning_effort=max \
-  --n-tasks 1 \
-  -n 1
+export CHARTING_LOOP_MODAL_SPEND_LIMIT_USD='<the current cap shown in the Modal dashboard>'
+
+python3 tools/terminal_bench_doctor.py \
+  --job-name charting-loop-tb3-ico-path-patch-002 \
+  --jobs-dir jobs \
+  --modal-spend-limit-usd "$CHARTING_LOOP_MODAL_SPEND_LIMIT_USD" \
+  --min-modal-headroom-usd 1.00 \
+  --trusted-cyber-access-confirmed \
+  --json
 ```
 
-`--print-config` resolves configuration and exits. It does not start a task or call
-the model. Confirm that the printed agent path, model, `reasoning_effort`, auth-json
-flag, Modal environment, and dataset ref are exact.
+The spend limit is an operator attestation: copy the configured billing-cycle cap,
+not the amount already spent and not an invented larger number. Modal exposes current
+cycle charges to the CLI but does not expose that dashboard cap. The trusted-access
+flag similarly records that the operator completed Codex Trusted Cyber Access; the
+Codex CLI exposes login state but not that verification state.
+
+The doctor is fail-closed and non-paid. It only performs account/configuration reads,
+Harbor `--print-config`, local byte and output checks, and a Docker Linux self-test of
+the actual CL-057 timeout cleanup. It does **not** start a Harbor trial, Modal task
+environment, or model call. It verifies all of the following before returning
+`ready: true`:
+
+- clean committed Git and frozen method/agent identities;
+- Harbor 0.21+, the exact Terminal-Bench 3.0.0 content hash, login, and a claimed
+  GitHub username required by Harbor upload;
+- readable Modal billing plus sufficient headroom under the operator-declared cap;
+- Codex login, `~/.codex/auth.json`, `CODEX_FORCE_AUTH_JSON=1`, and the explicit
+  Trusted Cyber Access attestation;
+- exactly `ico-path-patch`, one task, one concurrent trial, Modal, Agent v0.5.0,
+  `gpt-5.6-sol` at max effort, zero automatic retries, and private upload;
+- the cached task's x86-64 binary, which requires the Modal amd64 environment rather
+  than a local arm64 execution substitute;
+- a previously unused job name and writable output parent; and
+- cleanup of a cancellation-resistant phase child with no process left behind.
+
+Exit 0 means the declared condition is ready. Exit 2 means at least one check failed;
+follow the per-check repair instruction and rerun the doctor. Exit 3 is a doctor
+internal error. A prior failed job is never resumed or overwritten: use the next
+unused job name, keep `--max-retries 0`, and retain the failed artifact as evidence.
 
 ## 3. One paid smoke task
 
@@ -91,16 +118,23 @@ export PYTHONPATH="$CHARTING_LOOP_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export CODEX_FORCE_AUTH_JSON=1
 
 harbor run \
-  --job-name charting-loop-tb3-smoke-001 \
+  --job-name charting-loop-tb3-ico-path-patch-002 \
+  -o jobs \
   -d terminal-bench/terminal-bench@3.0.0 \
+  -i ico-path-patch \
+  --n-tasks 1 \
   -e modal \
   -a benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent \
   -m openai/gpt-5.6-sol \
   --ak reasoning_effort=max \
-  --n-tasks 1 \
   -n 1 \
+  --max-retries 0 \
   --upload --private
 ```
+
+Run this paid command only when the immediately preceding doctor report for the same
+job name says `ready: true`. The doctor does not authorize changing any flag between
+preflight and launch. If a condition changes, rerun the doctor.
 
 The default task time limit is part of the initial leaderboard condition. Do not
 silently raise `--agent-timeout-multiplier`; if a larger end-to-end budget is needed,
