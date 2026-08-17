@@ -15,6 +15,7 @@ import asyncio
 import hashlib
 import json
 import shlex
+import uuid
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -44,7 +45,7 @@ from benchmark_agents.contract import (
 )
 
 
-AGENT_VERSION = "0.4.0"
+AGENT_VERSION = "0.5.0"
 METHOD_VERSION_ID = "charting-loop-method-v4"
 METHOD_SOURCE_COMMIT = "0d3ed5c357c906edcc697a83b3ce681c68cd353a"
 METHOD_CONTENT_SHA256 = (
@@ -62,6 +63,189 @@ PHASE_TIMEOUT_SECONDS = {
     "closure": 60,
 }
 PHASE_TIMEOUT_TOTAL_SECONDS = sum(PHASE_TIMEOUT_SECONDS.values())
+PHASE_TOKEN_ENV = "CHARTING_LOOP_PHASE_TOKEN"
+
+
+def _phase_quiescence_program(token: str, *, terminate: bool) -> str:
+    """Return a Linux /proc probe that only targets one phase token."""
+
+    return f"""
+import json
+import os
+import signal
+import time
+from pathlib import Path
+
+token = {token!r}
+needle = ({PHASE_TOKEN_ENV!r} + "=" + token).encode()
+
+def scan():
+    matches = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            fields = (entry / "environ").read_bytes().split(b"\\0")
+        except (FileNotFoundError, PermissionError, ProcessLookupError, OSError):
+            continue
+        if needle in fields:
+            matches.append(int(entry.name))
+    return sorted(matches)
+
+def signal_exact(pids, sig):
+    groups = set()
+    for pid in pids:
+        try:
+            groups.add(os.getpgid(pid))
+        except ProcessLookupError:
+            pass
+    for pgid in sorted(groups):
+        try:
+            os.killpg(pgid, sig)
+        except ProcessLookupError:
+            pass
+    for pid in pids:
+        try:
+            os.kill(pid, sig)
+        except ProcessLookupError:
+            pass
+
+initial = scan()
+term_pids = []
+kill_pids = []
+if {terminate!r} and initial:
+    term_pids = initial
+    signal_exact(term_pids, signal.SIGTERM)
+    for _ in range(20):
+        if not scan():
+            break
+        time.sleep(0.1)
+    remaining = scan()
+    if remaining:
+        kill_pids = remaining
+        signal_exact(kill_pids, signal.SIGKILL)
+        for _ in range(30):
+            if not scan():
+                break
+            time.sleep(0.1)
+
+remaining = scan()
+print(json.dumps({{
+    "schema_version": "charting-loop/phase-quiescence/v1",
+    "initial_pids": initial,
+    "term_signal_pids": term_pids,
+    "kill_signal_pids": kill_pids,
+    "remaining_pids": remaining,
+    "quiescent": not remaining,
+}}, sort_keys=True))
+""".strip()
+
+
+class _PhaseCodex(Codex):
+    """Codex child whose paid command has an owned remote process identity."""
+
+    def begin_phase(self, phase: str) -> None:
+        token = uuid.uuid4().hex
+        self._phase_label = phase
+        self._phase_token = token
+        self._phase_token_hash = "sha256:" + hashlib.sha256(token.encode()).hexdigest()
+        self._phase_identity_path = f"/tmp/charting-loop-phase-{token}.json"
+        self._last_phase_isolation: dict[str, Any] | None = None
+
+    @staticmethod
+    def _is_paid_codex_command(command: str) -> bool:
+        return (
+            "codex exec " in command
+            and "--dangerously-bypass-approvals-and-sandbox" in command
+            and "--json" in command
+        )
+
+    def _owned_command(self, command: str) -> str:
+        token = getattr(self, "_phase_token", "")
+        identity_path = getattr(self, "_phase_identity_path", "")
+        token_hash = getattr(self, "_phase_token_hash", "")
+        phase = getattr(self, "_phase_label", "")
+        if not token or not identity_path or not phase:
+            raise RuntimeError("Phase identity was not initialized before Codex launch")
+        identity = (
+            '{"schema_version":"charting-loop/phase-process/v1",'
+            f'"phase":{json.dumps(phase)},"token_hash":{json.dumps(token_hash)},'
+            '"pid":%s,"pgid":%s,"state":"running"}\\n'
+        )
+        return (
+            "command -v setsid >/dev/null 2>&1 || "
+            "{ echo 'setsid is required for phase isolation' >&2; exit 125; }; "
+            f"rm -f {shlex.quote(identity_path)}; "
+            f"export {PHASE_TOKEN_ENV}={shlex.quote(token)}; "
+            f"setsid sh -c {shlex.quote(command)} & phase_pid=$!; "
+            f"printf {shlex.quote(identity)} \"$phase_pid\" \"$phase_pid\" "
+            f"> {shlex.quote(identity_path)}; "
+            'wait "$phase_pid"; phase_status=$?; exit "$phase_status"'
+        )
+
+    async def ensure_phase_quiescent(
+        self,
+        environment: BaseEnvironment,
+        *,
+        terminate: bool = True,
+    ) -> dict[str, Any]:
+        token = getattr(self, "_phase_token", "")
+        token_hash = getattr(self, "_phase_token_hash", "")
+        phase = getattr(self, "_phase_label", "")
+        if not token:
+            return {
+                "schema_version": "charting-loop/phase-isolation/v1",
+                "phase": phase,
+                "token_hash": token_hash,
+                "quiescent": False,
+                "error": "phase_identity_missing",
+            }
+        result = await self.exec_as_root(
+            environment,
+            command=f"python3 -c {shlex.quote(_phase_quiescence_program(token, terminate=terminate))}",
+        )
+        lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
+        if not lines:
+            raise RuntimeError("Phase quiescence probe returned no result")
+        probe = json.loads(lines[-1])
+        isolation = {
+            "schema_version": "charting-loop/phase-isolation/v1",
+            "phase": phase,
+            "token_hash": token_hash,
+            "identity_path": getattr(self, "_phase_identity_path", ""),
+            **probe,
+        }
+        self._last_phase_isolation = isolation
+        return isolation
+
+    async def exec_as_agent(
+        self,
+        environment: BaseEnvironment,
+        command: str,
+        env: dict[str, str] | None = None,
+        cwd: str | None = None,
+        timeout_sec: int | None = None,
+    ) -> Any:
+        paid_command = self._is_paid_codex_command(command)
+        owned_command = self._owned_command(command) if paid_command else command
+        try:
+            return await super().exec_as_agent(
+                environment,
+                command=owned_command,
+                env=env,
+                cwd=cwd,
+                timeout_sec=timeout_sec,
+            )
+        except asyncio.CancelledError:
+            if paid_command:
+                cleanup = asyncio.create_task(
+                    self.ensure_phase_quiescent(environment, terminate=True)
+                )
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError:
+                    await cleanup
+            raise
 
 
 def _sha256(path: Path) -> str:
@@ -127,7 +311,7 @@ class ChartingLoopFullMethodAgent(Codex):
         return _resolve_frozen_method(Path(__file__).resolve().parents[1])
 
     def _child_agent(self, role: str) -> Codex:
-        child = Codex(
+        child = _PhaseCodex(
             logs_dir=self.logs_dir / "phases" / role,
             model_name=self.model_name,
             logger=self.logger,
@@ -241,26 +425,53 @@ class ChartingLoopFullMethodAgent(Codex):
             "timeout_seconds": timeout_seconds,
             "status": "completed",
             "archived": False,
+            "quiescent": False,
         }
+        cancelled: asyncio.CancelledError | None = None
+        begin_phase = getattr(agent, "begin_phase", None)
+        if begin_phase is None:
+            outcome["status"] = "isolation_failed"
+            outcome["isolation_error"] = "phase_agent_has_no_identity_boundary"
+            return phase_context, outcome
+        begin_phase(role)
         try:
             async with asyncio.timeout(timeout_seconds):
                 await self._reset_live_session(environment)
                 await agent.run(prompt, environment, phase_context)
         except TimeoutError:
             outcome["status"] = "timed_out"
+        except asyncio.CancelledError as exc:
+            outcome["status"] = "cancelled"
+            cancelled = exc
         except Exception as exc:
             outcome["status"] = "failed"
             outcome["error_type"] = type(exc).__name__
         finally:
             try:
-                await self._archive_role(
+                isolation = await agent.ensure_phase_quiescent(
                     environment,
-                    role,
-                    agent._OUTPUT_FILENAME,
+                    terminate=True,
                 )
-                outcome["archived"] = True
+                outcome["process_isolation"] = isolation
+                outcome["quiescent"] = bool(isolation.get("quiescent"))
             except Exception as exc:
-                outcome["archive_error_type"] = type(exc).__name__
+                outcome["isolation_error_type"] = type(exc).__name__
+                outcome["quiescent"] = False
+            if outcome["quiescent"]:
+                try:
+                    await self._archive_role(
+                        environment,
+                        role,
+                        agent._OUTPUT_FILENAME,
+                    )
+                    outcome["archived"] = True
+                except Exception as exc:
+                    outcome["archive_error_type"] = type(exc).__name__
+            else:
+                outcome["execution_status"] = outcome["status"]
+                outcome["status"] = "isolation_failed"
+        if cancelled is not None:
+            raise cancelled
         return phase_context, outcome
 
     async def _resume_role(
@@ -281,26 +492,53 @@ class ChartingLoopFullMethodAgent(Codex):
             "timeout_seconds": timeout_seconds,
             "status": "completed",
             "archived": False,
+            "quiescent": False,
         }
+        cancelled: asyncio.CancelledError | None = None
+        begin_phase = getattr(agent, "begin_phase", None)
+        if begin_phase is None:
+            outcome["status"] = "isolation_failed"
+            outcome["isolation_error"] = "phase_agent_has_no_identity_boundary"
+            return phase_context, outcome
+        begin_phase(phase)
         try:
             async with asyncio.timeout(timeout_seconds):
                 await self._restore_role(environment, role)
                 await agent.resume(prompt, environment, phase_context)
         except TimeoutError:
             outcome["status"] = "timed_out"
+        except asyncio.CancelledError as exc:
+            outcome["status"] = "cancelled"
+            cancelled = exc
         except Exception as exc:
             outcome["status"] = "failed"
             outcome["error_type"] = type(exc).__name__
         finally:
             try:
-                await self._archive_role(
+                isolation = await agent.ensure_phase_quiescent(
                     environment,
-                    role,
-                    agent._OUTPUT_FILENAME,
+                    terminate=True,
                 )
-                outcome["archived"] = True
+                outcome["process_isolation"] = isolation
+                outcome["quiescent"] = bool(isolation.get("quiescent"))
             except Exception as exc:
-                outcome["archive_error_type"] = type(exc).__name__
+                outcome["isolation_error_type"] = type(exc).__name__
+                outcome["quiescent"] = False
+            if outcome["quiescent"]:
+                try:
+                    await self._archive_role(
+                        environment,
+                        role,
+                        agent._OUTPUT_FILENAME,
+                    )
+                    outcome["archived"] = True
+                except Exception as exc:
+                    outcome["archive_error_type"] = type(exc).__name__
+            else:
+                outcome["execution_status"] = outcome["status"]
+                outcome["status"] = "isolation_failed"
+        if cancelled is not None:
+            raise cancelled
         return phase_context, outcome
 
     async def _freeze_corridor(self, environment: BaseEnvironment) -> dict[str, Any]:
@@ -430,6 +668,23 @@ class ChartingLoopFullMethodAgent(Codex):
             "repair_required": not errors and reported_outcome == "fail",
         }
 
+    @staticmethod
+    def _record_phase_outcome(
+        metadata: dict[str, Any],
+        outcome: dict[str, Any],
+        context: AgentContext,
+    ) -> None:
+        metadata["phase_runs"].append(outcome)
+        metadata["phase_events"].append(
+            f"{outcome['phase']}_{outcome['status']}"
+        )
+        context.metadata = metadata
+        if not outcome.get("quiescent"):
+            raise RuntimeError(
+                "Phase process quiescence could not be proven; "
+                f"refusing to continue after {outcome['phase']}"
+            )
+
     async def run(
         self,
         instruction: str,
@@ -457,6 +712,7 @@ class ChartingLoopFullMethodAgent(Codex):
             "qa_is_advisory": True,
             "grading_owned_by_harbor": True,
         }
+        context.metadata = metadata
 
         _, builder_run = await self._run_new_role(
             "builder",
@@ -465,8 +721,7 @@ class ChartingLoopFullMethodAgent(Codex):
             environment,
             timeout_seconds=PHASE_TIMEOUT_SECONDS["builder"],
         )
-        metadata["phase_runs"].append(builder_run)
-        metadata["phase_events"].append(f"builder_{builder_run['status']}")
+        self._record_phase_outcome(metadata, builder_run, context)
 
         freeze = await self._freeze_corridor(environment)
         digest = str(freeze["corridor_digest"])
@@ -524,8 +779,7 @@ class ChartingLoopFullMethodAgent(Codex):
             environment,
             timeout_seconds=PHASE_TIMEOUT_SECONDS["worker"],
         )
-        metadata["phase_runs"].append(worker_run)
-        metadata["phase_events"].append(f"worker_{worker_run['status']}")
+        self._record_phase_outcome(metadata, worker_run, context)
 
         await self._verify_freeze(environment, expected_digest=digest)
         await self._open_qa_directory(environment)
@@ -547,8 +801,7 @@ class ChartingLoopFullMethodAgent(Codex):
             )
         finally:
             await self._seal_qa_directory(environment)
-        metadata["phase_runs"].append(qa_run)
-        metadata["phase_events"].append(f"qa_{qa_run['status']}")
+        self._record_phase_outcome(metadata, qa_run, context)
         _, decision = await self._read_assessment(
             environment,
             path=QA_PATH,
@@ -572,8 +825,7 @@ class ChartingLoopFullMethodAgent(Codex):
                 phase="repair",
                 timeout_seconds=PHASE_TIMEOUT_SECONDS["repair"],
             )
-            metadata["phase_runs"].append(repair_run)
-            metadata["phase_events"].append(f"repair_{repair_run['status']}")
+            self._record_phase_outcome(metadata, repair_run, context)
 
             await self._verify_freeze(environment, expected_digest=digest)
             await self._open_qa_directory(environment)
@@ -598,8 +850,7 @@ class ChartingLoopFullMethodAgent(Codex):
                 )
             finally:
                 await self._seal_qa_directory(environment)
-            metadata["phase_runs"].append(closure_run)
-            metadata["phase_events"].append(f"closure_{closure_run['status']}")
+            self._record_phase_outcome(metadata, closure_run, context)
             _, closure = await self._read_assessment(
                 environment,
                 path=CLOSURE_PATH,

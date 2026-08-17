@@ -1,19 +1,81 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import importlib.util
 import json
 import os
 import stat
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from unittest import mock
 
 from benchmark_agents import contract
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_harbor_agent_with_stubs():
+    """Load the adapter orchestration without requiring Harbor in unit-test CI."""
+
+    modules = {
+        name: types.ModuleType(name)
+        for name in (
+            "harbor",
+            "harbor.agents",
+            "harbor.agents.installed",
+            "harbor.agents.installed.codex",
+            "harbor.environments",
+            "harbor.environments.base",
+            "harbor.models",
+            "harbor.models.agent",
+            "harbor.models.agent.context",
+            "harbor.models.trajectories",
+            "harbor.models.trial",
+            "harbor.models.trial.paths",
+            "harbor.utils",
+            "harbor.utils.trajectory_utils",
+        )
+    }
+
+    class StubCodex:
+        pass
+
+    class StubEnvironment:
+        pass
+
+    class StubAgentContext:
+        def __init__(self) -> None:
+            self.metadata = None
+
+    class StubEnvironmentPaths:
+        agent_dir = PurePosixPath("/logs/agent")
+
+    modules["harbor.agents.installed.codex"].Codex = StubCodex
+    modules["harbor.environments.base"].BaseEnvironment = StubEnvironment
+    modules["harbor.models.agent.context"].AgentContext = StubAgentContext
+    modules["harbor.models.trial.paths"].EnvironmentPaths = StubEnvironmentPaths
+    for name in ("Agent", "FinalMetrics", "Step", "Trajectory"):
+        setattr(modules["harbor.models.trajectories"], name, type(name, (), {}))
+    modules["harbor.utils.trajectory_utils"].format_trajectory_json = lambda value: value
+
+    module_name = "_charting_loop_harbor_agent_test_double"
+    path = REPOSITORY_ROOT / "benchmark_agents" / "harbor_agent.py"
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    with mock.patch.dict(sys.modules, modules):
+        sys.modules[module_name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.modules.pop(module_name, None)
+    return module
 
 
 def complete_assessment(
@@ -521,6 +583,134 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertEqual("incomplete", identity["definition_closure_status"])
             self.assertEqual([], identity["acceptance_ledger_errors"])
 
+    def test_phase_timeout_terminates_resistant_child_before_archive(self) -> None:
+        adapter = load_harbor_agent_with_stubs()
+        events: list[str] = []
+
+        class ResistantAgent:
+            _OUTPUT_FILENAME = "codex-worker.txt"
+
+            def begin_phase(self, phase: str) -> None:
+                events.append(f"begin:{phase}")
+                self.remote_alive = False
+
+            async def run(self, prompt, environment, context) -> None:
+                self.remote_alive = True
+                events.append("remote_started")
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    events.append("host_cancelled_remote_still_alive")
+                    raise
+
+            async def ensure_phase_quiescent(
+                self, environment, *, terminate: bool
+            ) -> dict[str, object]:
+                events.append("terminate_exact_remote_tree")
+                initial = [4242] if self.remote_alive else []
+                self.remote_alive = False
+                return {
+                    "initial_pids": initial,
+                    "remaining_pids": [],
+                    "quiescent": True,
+                }
+
+        async def scenario() -> dict[str, object]:
+            owner = object.__new__(adapter.ChartingLoopFullMethodAgent)
+
+            async def reset(environment) -> None:
+                events.append("reset")
+
+            async def archive(environment, role, output_filename) -> None:
+                events.append("archive")
+
+            owner._reset_live_session = reset
+            owner._archive_role = archive
+            _, outcome = await owner._run_new_role(
+                "worker",
+                ResistantAgent(),
+                "do the task",
+                object(),
+                timeout_seconds=0.01,
+            )
+            return outcome
+
+        outcome = asyncio.run(scenario())
+        self.assertEqual("timed_out", outcome["status"])
+        self.assertTrue(outcome["quiescent"])
+        self.assertTrue(outcome["archived"])
+        self.assertLess(
+            events.index("terminate_exact_remote_tree"), events.index("archive")
+        )
+        self.assertIn("host_cancelled_remote_still_alive", events)
+
+    def test_phase_cancellation_cleans_up_and_unproven_quiescence_fails_closed(
+        self,
+    ) -> None:
+        adapter = load_harbor_agent_with_stubs()
+
+        class CancelledAgent:
+            _OUTPUT_FILENAME = "codex-builder.txt"
+
+            def __init__(self) -> None:
+                self.started = asyncio.Event()
+                self.cleaned = False
+
+            def begin_phase(self, phase: str) -> None:
+                pass
+
+            async def run(self, prompt, environment, context) -> None:
+                self.started.set()
+                await asyncio.Event().wait()
+
+            async def ensure_phase_quiescent(
+                self, environment, *, terminate: bool
+            ) -> dict[str, object]:
+                self.cleaned = True
+                return {"remaining_pids": [], "quiescent": True}
+
+        async def cancellation_scenario() -> bool:
+            owner = object.__new__(adapter.ChartingLoopFullMethodAgent)
+            agent = CancelledAgent()
+
+            async def reset(environment) -> None:
+                pass
+
+            async def archive(environment, role, output_filename) -> None:
+                pass
+
+            owner._reset_live_session = reset
+            owner._archive_role = archive
+            task = asyncio.create_task(
+                owner._run_new_role(
+                    "builder",
+                    agent,
+                    "build",
+                    object(),
+                    timeout_seconds=30,
+                )
+            )
+            await agent.started.wait()
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            return agent.cleaned
+
+        self.assertTrue(asyncio.run(cancellation_scenario()))
+
+        context = adapter.AgentContext()
+        metadata = {"phase_runs": [], "phase_events": []}
+        with self.assertRaisesRegex(RuntimeError, "quiescence could not be proven"):
+            adapter.ChartingLoopFullMethodAgent._record_phase_outcome(
+                metadata,
+                {
+                    "phase": "worker",
+                    "status": "isolation_failed",
+                    "quiescent": False,
+                },
+                context,
+            )
+
     def test_harbor_adapter_preserves_role_and_verifier_boundaries(self) -> None:
         source = (REPOSITORY_ROOT / "benchmark_agents" / "harbor_agent.py").read_text(
             encoding="utf-8"
@@ -536,6 +726,9 @@ class FullMethodContractTests(unittest.TestCase):
             'self._resume_role(\n                    "qa",\n                    qa,',
             'decision["repair_required"]',
             "subagent_trajectories",
+            "CHARTING_LOOP_PHASE_TOKEN",
+            "setsid sh -c",
+            "Phase process quiescence could not be proven",
         ):
             self.assertIn(marker, source)
         self.assertNotIn("official verifier", source.lower())
