@@ -180,17 +180,17 @@ def validate_acceptance_ledger(
         report=report,
         location="$.coverage.ambiguous_clauses",
     )
-    if coverage_status == "complete" and (unmapped or ambiguous_clauses):
+    if coverage_status == "complete" and unmapped:
         report.error(
-            "COMPLETE_COVERAGE_HAS_GAPS",
+            "COMPLETE_COVERAGE_HAS_UNMAPPED_CLAUSES",
             "$.coverage",
-            "complete coverage cannot list unmapped or ambiguous clauses",
+            "complete source mapping cannot list unmapped clauses",
         )
-    if coverage_status == "incomplete" and not (unmapped or ambiguous_clauses):
+    if coverage_status == "incomplete" and not unmapped:
         report.error(
-            "INCOMPLETE_COVERAGE_NEEDS_GAP",
+            "INCOMPLETE_COVERAGE_NEEDS_UNMAPPED_CLAUSE",
             "$.coverage",
-            "incomplete coverage must describe at least one gap",
+            "incomplete source mapping must describe at least one unmapped clause",
         )
 
     items_value = ledger.get("items")
@@ -313,12 +313,12 @@ def validate_acceptance_ledger(
                 f"{location}.target_id",
                 f"{source_id!r} refers to unknown acceptance ID {target_id!r}",
             )
-    if coverage_status == "complete" and ambiguous_item_ids:
-        report.error(
-            "COMPLETE_COVERAGE_HAS_AMBIGUOUS_ITEM",
-            "$.items",
-            "complete coverage cannot contain an ambiguous item",
-        )
+    source_mapping_complete = bool(
+        coverage_status == "complete" and not unmapped
+    )
+    definition_closure_complete = bool(
+        not ambiguous_clauses and not ambiguous_item_ids
+    )
 
     readiness = _object(
         ledger.get("construction_readiness"),
@@ -386,7 +386,13 @@ def validate_acceptance_ledger(
             report.error(
                 "READY_REQUIRES_COMPLETE_COVERAGE",
                 "$.construction_readiness.status",
-                "construction cannot be ready while source coverage is incomplete",
+                "construction cannot be ready while source mapping is incomplete",
+            )
+        if not definition_closure_complete:
+            report.error(
+                "READY_REQUIRES_DEFINITION_CLOSURE",
+                "$.construction_readiness.status",
+                "construction cannot be ready while task definitions remain ambiguous",
             )
     elif readiness_status == "unresolved" and not unresolved_constraints:
         report.error(
@@ -398,6 +404,14 @@ def validate_acceptance_ledger(
     report.facts = {
         "schema_version": ledger.get("schema_version"),
         "coverage_status": coverage_status,
+        "source_mapping_status": (
+            "complete" if source_mapping_complete else "incomplete"
+        ),
+        "source_mapping_complete": source_mapping_complete,
+        "definition_closure_status": (
+            "complete" if definition_closure_complete else "incomplete"
+        ),
+        "definition_closure_complete": definition_closure_complete,
         "construction_readiness_status": readiness_status,
         "acceptance_ids": item_ids,
         "required_acceptance_ids": required_ids,
@@ -410,7 +424,8 @@ def validate_acceptance_ledger(
         "draft_allowed": allow_draft,
         "task_ready": bool(
             not report.errors
-            and coverage_status == "complete"
+            and source_mapping_complete
+            and definition_closure_complete
             and readiness_status == "ready"
             and item_ids
         ),

@@ -11,6 +11,7 @@ record.  All model calls occur inside the scored trial.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import shlex
@@ -43,7 +44,7 @@ from benchmark_agents.contract import (
 )
 
 
-AGENT_VERSION = "0.3.0"
+AGENT_VERSION = "0.4.0"
 METHOD_VERSION_ID = "charting-loop-method-v4"
 METHOD_SOURCE_COMMIT = "0d3ed5c357c906edcc697a83b3ce681c68cd353a"
 METHOD_CONTENT_SHA256 = (
@@ -53,6 +54,14 @@ METHOD_SCOPE_SHA256 = (
     "sha256:65c6a91120c15bec30278288a26ecc98bdf96cfb07fd490dc915408a78844327"
 )
 ROLE_ORDER = ("builder", "worker", "qa")
+PHASE_TIMEOUT_SECONDS = {
+    "builder": 1800,
+    "worker": 900,
+    "qa": 450,
+    "repair": 210,
+    "closure": 60,
+}
+PHASE_TIMEOUT_TOTAL_SECONDS = sum(PHASE_TIMEOUT_SECONDS.values())
 
 
 def _sha256(path: Path) -> str:
@@ -188,9 +197,9 @@ class ChartingLoopFullMethodAgent(Codex):
         command = (
             f"rm -rf {shlex.quote(role_dir.as_posix())} && "
             f"mkdir -p {shlex.quote(role_dir.as_posix())} && "
-            f"test -d {shlex.quote(sessions.as_posix())} && "
+            f"if test -d {shlex.quote(sessions.as_posix())}; then "
             f"cp -R {shlex.quote(sessions.as_posix())} "
-            f"{shlex.quote((role_dir / 'sessions').as_posix())} && "
+            f"{shlex.quote((role_dir / 'sessions').as_posix())}; fi && "
             f"if test -f {shlex.quote(output.as_posix())}; then "
             f"cp {shlex.quote(output.as_posix())} "
             f"{shlex.quote((role_dir / 'codex.txt').as_posix())}; fi"
@@ -221,16 +230,38 @@ class ChartingLoopFullMethodAgent(Codex):
         agent: Codex,
         prompt: str,
         environment: BaseEnvironment,
-    ) -> AgentContext:
-        await self._reset_live_session(environment)
+        *,
+        timeout_seconds: int,
+    ) -> tuple[AgentContext, dict[str, Any]]:
         phase_context = AgentContext()
-        await agent.run(prompt, environment, phase_context)
-        await self._archive_role(
-            environment,
-            role,
-            agent._OUTPUT_FILENAME,
-        )
-        return phase_context
+        outcome: dict[str, Any] = {
+            "phase": role,
+            "role": role,
+            "mode": "new",
+            "timeout_seconds": timeout_seconds,
+            "status": "completed",
+            "archived": False,
+        }
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                await self._reset_live_session(environment)
+                await agent.run(prompt, environment, phase_context)
+        except TimeoutError:
+            outcome["status"] = "timed_out"
+        except Exception as exc:
+            outcome["status"] = "failed"
+            outcome["error_type"] = type(exc).__name__
+        finally:
+            try:
+                await self._archive_role(
+                    environment,
+                    role,
+                    agent._OUTPUT_FILENAME,
+                )
+                outcome["archived"] = True
+            except Exception as exc:
+                outcome["archive_error_type"] = type(exc).__name__
+        return phase_context, outcome
 
     async def _resume_role(
         self,
@@ -238,16 +269,39 @@ class ChartingLoopFullMethodAgent(Codex):
         agent: Codex,
         prompt: str,
         environment: BaseEnvironment,
-    ) -> AgentContext:
-        await self._restore_role(environment, role)
+        *,
+        phase: str,
+        timeout_seconds: int,
+    ) -> tuple[AgentContext, dict[str, Any]]:
         phase_context = AgentContext()
-        await agent.resume(prompt, environment, phase_context)
-        await self._archive_role(
-            environment,
-            role,
-            agent._OUTPUT_FILENAME,
-        )
-        return phase_context
+        outcome: dict[str, Any] = {
+            "phase": phase,
+            "role": role,
+            "mode": "resume",
+            "timeout_seconds": timeout_seconds,
+            "status": "completed",
+            "archived": False,
+        }
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                await self._restore_role(environment, role)
+                await agent.resume(prompt, environment, phase_context)
+        except TimeoutError:
+            outcome["status"] = "timed_out"
+        except Exception as exc:
+            outcome["status"] = "failed"
+            outcome["error_type"] = type(exc).__name__
+        finally:
+            try:
+                await self._archive_role(
+                    environment,
+                    role,
+                    agent._OUTPUT_FILENAME,
+                )
+                outcome["archived"] = True
+            except Exception as exc:
+                outcome["archive_error_type"] = type(exc).__name__
+        return phase_context, outcome
 
     async def _freeze_corridor(self, environment: BaseEnvironment) -> dict[str, Any]:
         result = await self.exec_as_root(
@@ -329,6 +383,9 @@ class ChartingLoopFullMethodAgent(Codex):
         acceptance_ledger_status: str,
         expected_acceptance_ids: list[str],
         required_acceptance_ids: list[str],
+        source_mapping_status: str,
+        definition_closure_status: str,
+        construction_readiness_status: str,
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         result = await environment.exec(
             command=f"python3 -c {shlex.quote(remote_json_read_program(path))}",
@@ -358,6 +415,9 @@ class ChartingLoopFullMethodAgent(Codex):
             acceptance_ledger_status=acceptance_ledger_status,
             expected_acceptance_ids=expected_acceptance_ids,
             required_acceptance_ids=required_acceptance_ids,
+            source_mapping_status=source_mapping_status,
+            definition_closure_status=definition_closure_status,
+            construction_readiness_status=construction_readiness_status,
         )
         reported_outcome = (
             value.get("outcome") if isinstance(value, dict) else None
@@ -391,17 +451,22 @@ class ChartingLoopFullMethodAgent(Codex):
             "method_scope_sha256": METHOD_SCOPE_SHA256,
             "roles": ["builder", "worker", "qa"],
             "phase_events": [],
+            "phase_runs": [],
+            "phase_timeout_seconds": dict(PHASE_TIMEOUT_SECONDS),
+            "phase_timeout_total_seconds": PHASE_TIMEOUT_TOTAL_SECONDS,
             "qa_is_advisory": True,
             "grading_owned_by_harbor": True,
         }
 
-        await self._run_new_role(
+        _, builder_run = await self._run_new_role(
             "builder",
             builder,
             builder_prompt(instruction),
             environment,
+            timeout_seconds=PHASE_TIMEOUT_SECONDS["builder"],
         )
-        metadata["phase_events"].append("builder_constructed")
+        metadata["phase_runs"].append(builder_run)
+        metadata["phase_events"].append(f"builder_{builder_run['status']}")
 
         freeze = await self._freeze_corridor(environment)
         digest = str(freeze["corridor_digest"])
@@ -422,21 +487,50 @@ class ChartingLoopFullMethodAgent(Codex):
         metadata["acceptance_ledger_errors"] = freeze.get(
             "acceptance_ledger_errors", []
         )
+        source_mapping_status = str(
+            freeze.get("source_mapping_status", "unknown")
+        )
+        definition_closure_status = str(
+            freeze.get("definition_closure_status", "unknown")
+        )
+        metadata["source_mapping_status"] = source_mapping_status
+        metadata["definition_closure_status"] = definition_closure_status
+        metadata["unmapped_count"] = freeze.get("unmapped_count", 0)
+        metadata["ambiguous_count"] = freeze.get("ambiguous_count", 0)
+        metadata["ambiguous_acceptance_ids"] = freeze.get(
+            "ambiguous_acceptance_ids", []
+        )
+        construction_readiness_status = str(
+            freeze.get("construction_readiness_status", "unknown")
+        )
+        metadata["construction_readiness_status"] = construction_readiness_status
+        metadata["coupled_acceptance_ids"] = freeze.get(
+            "coupled_acceptance_ids", []
+        )
+        metadata["unresolved_constraints"] = freeze.get(
+            "unresolved_constraints", []
+        )
         metadata["phase_events"].append("corridor_frozen")
 
         await self._verify_freeze(environment, expected_digest=digest)
-        await self._run_new_role(
+        _, worker_run = await self._run_new_role(
             "worker",
             worker,
-            worker_prompt(instruction, digest),
+            worker_prompt(
+                instruction,
+                digest,
+                construction_readiness_status=construction_readiness_status,
+            ),
             environment,
+            timeout_seconds=PHASE_TIMEOUT_SECONDS["worker"],
         )
-        metadata["phase_events"].append("worker_executed")
+        metadata["phase_runs"].append(worker_run)
+        metadata["phase_events"].append(f"worker_{worker_run['status']}")
 
         await self._verify_freeze(environment, expected_digest=digest)
         await self._open_qa_directory(environment)
         try:
-            await self._run_new_role(
+            _, qa_run = await self._run_new_role(
                 "qa",
                 qa,
                 qa_prompt(
@@ -444,12 +538,17 @@ class ChartingLoopFullMethodAgent(Codex):
                     digest,
                     acceptance_ledger_status=acceptance_ledger_status,
                     expected_acceptance_ids=expected_acceptance_ids,
+                    source_mapping_status=source_mapping_status,
+                    definition_closure_status=definition_closure_status,
+                    construction_readiness_status=construction_readiness_status,
                 ),
                 environment,
+                timeout_seconds=PHASE_TIMEOUT_SECONDS["qa"],
             )
         finally:
             await self._seal_qa_directory(environment)
-        metadata["phase_events"].append("qa_audited")
+        metadata["phase_runs"].append(qa_run)
+        metadata["phase_events"].append(f"qa_{qa_run['status']}")
         _, decision = await self._read_assessment(
             environment,
             path=QA_PATH,
@@ -457,23 +556,29 @@ class ChartingLoopFullMethodAgent(Codex):
             acceptance_ledger_status=acceptance_ledger_status,
             expected_acceptance_ids=expected_acceptance_ids,
             required_acceptance_ids=required_acceptance_ids,
+            source_mapping_status=source_mapping_status,
+            definition_closure_status=definition_closure_status,
+            construction_readiness_status=construction_readiness_status,
         )
         metadata["qa_decision"] = decision
 
         if decision["repair_required"]:
             await self._verify_freeze(environment, expected_digest=digest)
-            await self._resume_role(
+            _, repair_run = await self._resume_role(
                 "worker",
                 worker,
                 repair_prompt(instruction, digest),
                 environment,
+                phase="repair",
+                timeout_seconds=PHASE_TIMEOUT_SECONDS["repair"],
             )
-            metadata["phase_events"].append("worker_repaired_once")
+            metadata["phase_runs"].append(repair_run)
+            metadata["phase_events"].append(f"repair_{repair_run['status']}")
 
             await self._verify_freeze(environment, expected_digest=digest)
             await self._open_qa_directory(environment)
             try:
-                await self._resume_role(
+                _, closure_run = await self._resume_role(
                     "qa",
                     qa,
                     closure_prompt(
@@ -481,12 +586,20 @@ class ChartingLoopFullMethodAgent(Codex):
                         digest,
                         acceptance_ledger_status=acceptance_ledger_status,
                         expected_acceptance_ids=expected_acceptance_ids,
+                        source_mapping_status=source_mapping_status,
+                        definition_closure_status=definition_closure_status,
+                        construction_readiness_status=(
+                            construction_readiness_status
+                        ),
                     ),
                     environment,
+                    phase="closure",
+                    timeout_seconds=PHASE_TIMEOUT_SECONDS["closure"],
                 )
             finally:
                 await self._seal_qa_directory(environment)
-            metadata["phase_events"].append("qa_closed_once")
+            metadata["phase_runs"].append(closure_run)
+            metadata["phase_events"].append(f"closure_{closure_run['status']}")
             _, closure = await self._read_assessment(
                 environment,
                 path=CLOSURE_PATH,
@@ -494,6 +607,9 @@ class ChartingLoopFullMethodAgent(Codex):
                 acceptance_ledger_status=acceptance_ledger_status,
                 expected_acceptance_ids=expected_acceptance_ids,
                 required_acceptance_ids=required_acceptance_ids,
+                source_mapping_status=source_mapping_status,
+                definition_closure_status=definition_closure_status,
+                construction_readiness_status=construction_readiness_status,
             )
             metadata["qa_closure"] = closure
 

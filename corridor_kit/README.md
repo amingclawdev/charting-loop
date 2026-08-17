@@ -26,6 +26,14 @@ Each Builder must still compile the current task's acceptance items, Rule/Fact m
 coupled constraints, domain checks, fixtures, and task adapter. Those bytes belong to
 the task-specific Corridor and must never be copied from an earlier benchmark task.
 
+The acceptance report keeps three questions separate. `coverage.status` and
+`source_mapping_status` say whether every public normative clause has a ledger
+location. `definition_closure_status` says whether mapped clauses and acceptance
+items are unambiguous. `construction_readiness_status` says whether the coupled
+requirements can be replayed together. A clause may therefore be mapped while its
+meaning remains explicitly ambiguous; that is complete source mapping but incomplete
+definition closure, and it cannot produce task readiness.
+
 ## Commands
 
 From the repository root:

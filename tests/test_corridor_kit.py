@@ -93,6 +93,50 @@ class AcceptanceLedgerTests(unittest.TestCase):
         self.assertIn("READY_REPLAY_ENTRYPOINT_REQUIRED", codes)
         self.assertIn("READY_REQUIRES_COMPLETE_COVERAGE", codes)
 
+    def test_mapped_ambiguity_is_not_an_unmapped_clause(self) -> None:
+        ledger = valid_ledger()
+        ledger["coverage"]["ambiguous_clauses"] = [
+            {
+                "source_ref": "specification#requirement-2",
+                "statement": "The second requirement uses an undefined threshold.",
+                "reason": "The public source does not define the threshold.",
+            }
+        ]
+        ledger["items"][1]["definition_state"] = "ambiguous"
+        ledger["construction_readiness"] = {
+            "status": "unresolved",
+            "coupled_acceptance_ids": ["AC-1", "AC-2"],
+            "replay_entrypoint": "",
+            "unresolved_constraints": ["AC-2 threshold is undefined"],
+        }
+
+        report = validate_acceptance_ledger(ledger)
+
+        self.assertTrue(report.ok, report.errors)
+        self.assertEqual("complete", report.facts["source_mapping_status"])
+        self.assertTrue(report.facts["source_mapping_complete"])
+        self.assertEqual("incomplete", report.facts["definition_closure_status"])
+        self.assertFalse(report.facts["definition_closure_complete"])
+        self.assertFalse(report.facts["task_ready"])
+
+    def test_ready_requires_definition_closure(self) -> None:
+        ledger = valid_ledger()
+        ledger["coverage"]["ambiguous_clauses"] = [
+            {
+                "source_ref": "instruction#requirement-1",
+                "statement": "The first requirement has two possible meanings.",
+                "reason": "The public wording is ambiguous.",
+            }
+        ]
+        ledger["items"][0]["definition_state"] = "ambiguous"
+
+        report = validate_acceptance_ledger(ledger)
+
+        self.assertIn(
+            "READY_REQUIRES_DEFINITION_CLOSURE",
+            {error["code"] for error in report.errors},
+        )
+
     def test_duplicate_json_keys_and_symlink_inputs_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)

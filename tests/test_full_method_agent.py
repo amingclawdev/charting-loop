@@ -27,7 +27,9 @@ def complete_assessment(
         "outcome": outcome,
         "summary": "The complete public acceptance map was assessed.",
         "corridor_digest": digest,
-        "coverage_complete": True,
+        "source_mapping_complete": True,
+        "definition_closure_complete": True,
+        "assessment_closure": "complete",
         "acceptance_results": [
             {
                 "acceptance_id": acceptance_id,
@@ -157,6 +159,10 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn(contract.ACCEPTANCE_PATH, worker)
         self.assertIn("ACCEPT-1", qa)
         self.assertIn("independently re-read", qa.lower())
+        self.assertIn('"source_mapping_complete"', qa)
+        self.assertIn('"definition_closure_complete"', qa)
+        self.assertIn('"assessment_closure"', qa)
+        self.assertNotIn('"coverage_complete"', qa)
 
     def test_builder_is_task_conditioned_but_must_not_build_a_gate(self) -> None:
         prompt = contract.builder_prompt("Find and repair the fault.")
@@ -270,7 +276,8 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("PASS_ACCEPTANCE_LEDGER_COMPLETE_REQUIRED", errors)
 
         assessment["outcome"] = "not_assessed"
-        assessment["coverage_complete"] = False
+        assessment["source_mapping_complete"] = False
+        assessment["assessment_closure"] = "incomplete"
         assessment["unmapped_requirements"] = ["public-spec.md#metrics"]
         self.assertEqual(
             [],
@@ -280,8 +287,60 @@ class FullMethodContractTests(unittest.TestCase):
                 acceptance_ledger_status="incomplete",
                 expected_acceptance_ids=["ACCEPT-1"],
                 required_acceptance_ids=["ACCEPT-1"],
+                source_mapping_status="incomplete",
             ),
         )
+
+    def test_witness_fail_survives_incomplete_definition_closure(self) -> None:
+        digest = "sha256:" + "e" * 64
+        assessment = complete_assessment(digest, outcome="fail")
+        assessment["definition_closure_complete"] = False
+        assessment["assessment_closure"] = "incomplete"
+        assessment["unresolved_relations"] = [
+            "ACCEPT-1 has an unresolved relation to the public threshold."
+        ]
+        assessment["acceptance_results"][0]["status"] = "fail"
+        assessment["witnesses"] = [
+            {
+                "acceptance_id": "ACCEPT-1",
+                "constraint": "The patched path must preserve the public ABI.",
+                "evidence": "The exported symbol is absent after the patch.",
+                "replay": "Inspect the exported symbol table.",
+            }
+        ]
+
+        self.assertEqual(
+            [],
+            contract.validate_qa_assessment(
+                assessment,
+                expected_corridor_digest=digest,
+                acceptance_ledger_status="incomplete",
+                expected_acceptance_ids=["ACCEPT-1"],
+                required_acceptance_ids=["ACCEPT-1"],
+                source_mapping_status="complete",
+                definition_closure_status="incomplete",
+                construction_readiness_status="unresolved",
+            ),
+        )
+
+    def test_qa_closure_dimensions_have_independent_contradictions(self) -> None:
+        digest = "sha256:" + "f" * 64
+        assessment = complete_assessment(digest, outcome="not_assessed")
+        assessment["unmapped_requirements"] = ["public-spec.md#missing"]
+        assessment["unresolved_relations"] = ["ACCEPT-1 overlaps ACCEPT-2"]
+        assessment["acceptance_results"][0]["status"] = "unknown"
+
+        errors = contract.validate_qa_assessment(
+            assessment,
+            expected_corridor_digest=digest,
+            acceptance_ledger_status="complete",
+            expected_acceptance_ids=["ACCEPT-1"],
+            required_acceptance_ids=["ACCEPT-1"],
+        )
+
+        self.assertIn("ASSESSMENT_SOURCE_MAPPING_CONTRADICTION", errors)
+        self.assertIn("ASSESSMENT_DEFINITION_CLOSURE_CONTRADICTION", errors)
+        self.assertIn("ASSESSMENT_CLOSURE_CONTRADICTION", errors)
 
     def test_qa_json_rejects_duplicate_keys_and_non_finite_numbers(self) -> None:
         with self.assertRaisesRegex(ValueError, "duplicate QA JSON key"):
@@ -365,6 +424,12 @@ class FullMethodContractTests(unittest.TestCase):
                     "unmapped_clauses": [],
                     "ambiguous_clauses": [],
                 },
+                "construction_readiness": {
+                    "status": "ready",
+                    "coupled_acceptance_ids": ["ACCEPT-1"],
+                    "replay_entrypoint": "python3 validate.py",
+                    "unresolved_constraints": [],
+                },
                 "items": [
                     {
                         "acceptance_id": "ACCEPT-1",
@@ -392,6 +457,68 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertEqual("complete", identity["acceptance_ledger_status"])
             self.assertEqual(["ACCEPT-1"], identity["acceptance_ids"])
             self.assertEqual(["ACCEPT-1"], identity["required_acceptance_ids"])
+            self.assertEqual([], identity["acceptance_ledger_errors"])
+            self.assertEqual("complete", identity["source_mapping_status"])
+            self.assertEqual("complete", identity["definition_closure_status"])
+            self.assertEqual("ready", identity["construction_readiness_status"])
+
+    def test_freezer_separates_mapping_from_definition_closure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "method").mkdir(parents=True)
+            corridor = root / "corridor"
+            corridor.mkdir()
+            (root / "method" / "METHOD.md").write_text(
+                "method\n", encoding="utf-8"
+            )
+            ledger = {
+                "schema_version": contract.ACCEPTANCE_SCHEMA,
+                "coverage": {
+                    "status": "complete",
+                    "unmapped_clauses": [],
+                    "ambiguous_clauses": [
+                        {
+                            "source_ref": "instruction.md#output",
+                            "statement": "Write the output using the public ABI.",
+                            "reason": "The ABI version is not stated.",
+                        }
+                    ],
+                },
+                "construction_readiness": {
+                    "status": "unresolved",
+                    "coupled_acceptance_ids": ["ACCEPT-1"],
+                    "replay_entrypoint": "",
+                    "unresolved_constraints": ["The ABI version is unknown."],
+                },
+                "items": [
+                    {
+                        "acceptance_id": "ACCEPT-1",
+                        "source_ref": "instruction.md#output",
+                        "statement": "Write the required output.",
+                        "required": True,
+                        "definition_state": "ambiguous",
+                        "scope": {"path": "/app/output.json"},
+                        "rule": {"kind": "file_exists"},
+                        "relations": [],
+                    }
+                ],
+            }
+            (corridor / "ACCEPTANCE.json").write_text(
+                json.dumps(ledger), encoding="utf-8"
+            )
+
+            completed = subprocess.run(
+                [sys.executable, "-c", contract.freeze_program(str(root))],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            identity = json.loads(completed.stdout)
+            self.assertEqual("incomplete", identity["acceptance_ledger_status"])
+            self.assertEqual("complete", identity["source_mapping_status"])
+            self.assertEqual("incomplete", identity["definition_closure_status"])
             self.assertEqual([], identity["acceptance_ledger_errors"])
 
     def test_harbor_adapter_preserves_role_and_verifier_boundaries(self) -> None:

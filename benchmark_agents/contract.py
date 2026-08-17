@@ -26,12 +26,14 @@ CLOSURE_PATH = f"{RUNTIME_ROOT}/qa/closure.json"
 
 FREEZE_SCHEMA = "charting-loop/frozen-task-corridor/v1"
 ACCEPTANCE_SCHEMA = "charting-loop/task-acceptance-ledger/v1"
-ASSESSMENT_SCHEMA = "charting-loop/corridor-qa-assessment/v2"
+ASSESSMENT_SCHEMA = "charting-loop/corridor-qa-assessment/v3"
 QA_OUTCOMES = frozenset({"pass", "fail", "blocked", "not_assessed"})
 ACCEPTANCE_APPLICABILITY = frozenset(
     {"applicable", "not_applicable", "unknown"}
 )
 ACCEPTANCE_STATES = frozenset({"pass", "fail", "unknown", "not_reached"})
+CONSTRUCTION_READINESS_STATES = frozenset({"ready", "unresolved"})
+ASSESSMENT_CLOSURE_STATES = frozenset({"complete", "incomplete"})
 SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 MAX_QA_JSON_BYTES = 256 * 1024
 
@@ -155,6 +157,12 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
                 "required_acceptance_ids": [],
                 "unmapped_count": 0,
                 "ambiguous_count": 0,
+                "ambiguous_acceptance_ids": [],
+                "source_mapping_status": "unknown",
+                "definition_closure_status": "unknown",
+                "construction_readiness_status": "unknown",
+                "coupled_acceptance_ids": [],
+                "unresolved_constraints": [],
                 "errors": [],
             }}
             if path.is_symlink() or not path.is_file():
@@ -196,6 +204,9 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
             if not isinstance(coverage, dict):
                 summary["errors"].append("ACCEPTANCE_COVERAGE_OBJECT_REQUIRED")
                 coverage = {{}}
+            coverage_status = coverage.get("status")
+            if coverage_status not in ("complete", "incomplete"):
+                summary["errors"].append("ACCEPTANCE_COVERAGE_STATUS")
             for field in ("unmapped_clauses", "ambiguous_clauses"):
                 values = coverage.get(field)
                 if not isinstance(values, list):
@@ -262,6 +273,8 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
                     summary["errors"].append(
                         f"ACCEPTANCE_DEFINITION_STATE:{{acceptance_id}}"
                     )
+                elif item.get("definition_state") == "ambiguous":
+                    summary["ambiguous_acceptance_ids"].append(acceptance_id)
                 for field in ("scope", "rule"):
                     value = item.get(field)
                     if not isinstance(value, dict) or not value:
@@ -304,12 +317,98 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
                         f"ACCEPTANCE_RELATION_UNKNOWN:{{source}}:{{target}}"
                     )
 
+            if coverage_status == "complete" and summary["unmapped_count"]:
+                summary["errors"].append(
+                    "ACCEPTANCE_COMPLETE_MAPPING_HAS_UNMAPPED_CLAUSES"
+                )
+            if coverage_status == "incomplete" and not summary["unmapped_count"]:
+                summary["errors"].append(
+                    "ACCEPTANCE_INCOMPLETE_MAPPING_NEEDS_UNMAPPED_CLAUSE"
+                )
+            summary["source_mapping_status"] = (
+                "complete"
+                if coverage_status == "complete" and not summary["unmapped_count"]
+                else "incomplete"
+            )
+            summary["definition_closure_status"] = (
+                "complete"
+                if not summary["ambiguous_count"]
+                and not summary["ambiguous_acceptance_ids"]
+                else "incomplete"
+            )
+
+            readiness = ledger.get("construction_readiness")
+            if not isinstance(readiness, dict):
+                summary["errors"].append(
+                    "ACCEPTANCE_CONSTRUCTION_READINESS_OBJECT_REQUIRED"
+                )
+                readiness = {{}}
+            readiness_status = readiness.get("status")
+            summary["construction_readiness_status"] = (
+                readiness_status if isinstance(readiness_status, str) else "unknown"
+            )
+            if readiness_status not in ("ready", "unresolved"):
+                summary["errors"].append(
+                    "ACCEPTANCE_CONSTRUCTION_READINESS_STATUS"
+                )
+            coupled_ids = readiness.get("coupled_acceptance_ids")
+            if not isinstance(coupled_ids, list) or any(
+                not isinstance(value, str) or not value.strip()
+                for value in coupled_ids
+            ):
+                summary["errors"].append(
+                    "ACCEPTANCE_COUPLED_IDS_LIST_REQUIRED"
+                )
+                coupled_ids = []
+            elif len(set(coupled_ids)) != len(coupled_ids):
+                summary["errors"].append("ACCEPTANCE_COUPLED_IDS_DUPLICATE")
+            summary["coupled_acceptance_ids"] = coupled_ids
+            for acceptance_id in coupled_ids:
+                if acceptance_id not in seen:
+                    summary["errors"].append(
+                        f"ACCEPTANCE_COUPLED_ID_UNKNOWN:{{acceptance_id}}"
+                    )
+            unresolved = readiness.get("unresolved_constraints")
+            if not isinstance(unresolved, list) or any(
+                not isinstance(value, str) or not value.strip()
+                for value in unresolved
+            ):
+                summary["errors"].append(
+                    "ACCEPTANCE_UNRESOLVED_CONSTRAINTS_LIST_REQUIRED"
+                )
+                unresolved = []
+            summary["unresolved_constraints"] = unresolved
+            replay_entrypoint = readiness.get("replay_entrypoint")
+            if readiness_status == "ready":
+                if unresolved:
+                    summary["errors"].append(
+                        "ACCEPTANCE_READY_WITH_UNRESOLVED_CONSTRAINTS"
+                    )
+                if coupled_ids and (
+                    not isinstance(replay_entrypoint, str)
+                    or not replay_entrypoint.strip()
+                ):
+                    summary["errors"].append(
+                        "ACCEPTANCE_COUPLED_REPLAY_ENTRYPOINT_REQUIRED"
+                    )
+                if summary["source_mapping_status"] != "complete":
+                    summary["errors"].append(
+                        "ACCEPTANCE_READY_REQUIRES_SOURCE_MAPPING"
+                    )
+                if summary["definition_closure_status"] != "complete":
+                    summary["errors"].append(
+                        "ACCEPTANCE_READY_REQUIRES_DEFINITION_CLOSURE"
+                    )
+            elif readiness_status == "unresolved" and not unresolved:
+                summary["errors"].append(
+                    "ACCEPTANCE_UNRESOLVED_REASON_REQUIRED"
+                )
+
             if summary["errors"]:
                 summary["status"] = "invalid"
             elif (
-                coverage.get("status") == "complete"
-                and not summary["unmapped_count"]
-                and not summary["ambiguous_count"]
+                summary["source_mapping_status"] == "complete"
+                and summary["definition_closure_status"] == "complete"
             ):
                 summary["status"] = "complete"
             else:
@@ -379,6 +478,20 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
             "acceptance_ids": acceptance["acceptance_ids"],
             "required_acceptance_ids": acceptance["required_acceptance_ids"],
             "acceptance_ledger_errors": acceptance["errors"],
+            "source_mapping_status": acceptance["source_mapping_status"],
+            "definition_closure_status": acceptance[
+                "definition_closure_status"
+            ],
+            "unmapped_count": acceptance["unmapped_count"],
+            "ambiguous_count": acceptance["ambiguous_count"],
+            "ambiguous_acceptance_ids": acceptance[
+                "ambiguous_acceptance_ids"
+            ],
+            "construction_readiness_status": acceptance[
+                "construction_readiness_status"
+            ],
+            "coupled_acceptance_ids": acceptance["coupled_acceptance_ids"],
+            "unresolved_constraints": acceptance["unresolved_constraints"],
             "file_count": len(files),
         }}, sort_keys=True))
         """
@@ -508,6 +621,39 @@ def _task_block(task_instruction: str) -> str:
 def builder_prompt(task_instruction: str) -> str:
     """Prompt the construction role with the method and official task goal."""
 
+    acceptance_template = json.dumps(
+        {
+            "schema_version": ACCEPTANCE_SCHEMA,
+            "coverage": {
+                "status": "complete|incomplete",
+                "unmapped_clauses": [],
+                "ambiguous_clauses": [],
+            },
+            "construction_readiness": {
+                "status": "ready|unresolved",
+                "coupled_acceptance_ids": ["ACCEPT-..."],
+                "replay_entrypoint": "./validate-or-plan ...",
+                "unresolved_constraints": [],
+            },
+            "items": [
+                {
+                    "acceptance_id": "ACCEPT-...",
+                    "source_ref": "public-source#locator",
+                    "statement": "one atomic normative requirement",
+                    "required": True,
+                    "definition_state": "defined|ambiguous",
+                    "scope": {"kind": "task-specific scope"},
+                    "rule": {"kind": "task-specific decision rule"},
+                    "relations": [
+                        {"type": "requires", "target_id": "ACCEPT-..."}
+                    ],
+                }
+            ],
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+
     return f"""You are the Builder for one fresh Terminal-Bench trial.
 
 Read the frozen method at {METHOD_PATH}. The official task is included below because
@@ -522,7 +668,14 @@ public task environment as needed, but do not carry out the official task or mut
 its target state. Do not read verifier/oracle material that the official task does
 not expose to ordinary agents.
 
-Create {ACCEPTANCE_PATH} using schema {ACCEPTANCE_SCHEMA}. Decompose every normative
+Create {ACCEPTANCE_PATH} using this exact field contract (replace example values,
+never field names):
+
+{acceptance_template}
+
+The top-level field is exactly `schema_version`, never `schema`. Every relation
+target field is exactly `target_id`, never `target_acceptance_id` or another alias.
+Decompose every normative
 clause in the public task instruction and public task specification into an atomic
 item with a stable `acceptance_id`, exact `source_ref`, normalized `statement`,
 `required` boolean, `definition_state` (`defined|ambiguous`), non-empty task
@@ -532,6 +685,24 @@ item with a stable `acceptance_id`, exact `source_ref`, normalized `statement`,
 `ambiguous_clauses`, each with source_ref, statement, and reason. Mark coverage
 complete only after re-reading the original public sources and mapping every
 normative clause. Do not invent precedence for overlap or conflict.
+
+`coverage.status` reports source-clause mapping only; it does not claim that a
+candidate solution is feasible or optimal. A mapped clause may remain explicitly
+ambiguous: keep it in `ambiguous_clauses`, mark its item `definition_state` as
+`ambiguous`, and still report source mapping complete when nothing is unmapped.
+Definition closure remains incomplete until those ambiguities are resolved. Use the separate
+`construction_readiness` object for that. If hard requirements interact (for
+example capacity, scheduling, inventory, identity, and priority/objective rules),
+list their IDs in `coupled_acceptance_ids`. Mark construction `ready` only when the
+Corridor has one replayable executable entrypoint that evaluates the coupled hard
+constraints and objective together. Otherwise mark it `unresolved` and name every
+missing proof in `unresolved_constraints`. Never recommend a candidate or claim
+whole-task readiness while a required coupled constraint or objective is unknown.
+
+Build in bounded milestones: first write the exact acceptance ledger and a minimal
+README, then make the global replay check executable, then deepen diagnostics only
+if time remains. A partial but honest `unresolved` Corridor is preferable to an
+invalid ledger or an unproved readiness claim.
 
 Experimental constraint: do not install a mandatory workflow gate, approval gate,
 or pre-mutation gate that can block the later Worker from continuing. A Corridor may
@@ -544,7 +715,12 @@ Corridor. When finished, report what you built; the harness will freeze the byte
 """
 
 
-def worker_prompt(task_instruction: str, corridor_digest_value: str) -> str:
+def worker_prompt(
+    task_instruction: str,
+    corridor_digest_value: str,
+    *,
+    construction_readiness_status: str = "unknown",
+) -> str:
     """Prompt the execution role with the exact frozen Corridor identity."""
 
     return f"""You are the Worker responsible for completing the official task.
@@ -561,7 +737,11 @@ and independently verify every mutation.
 Read the frozen task acceptance ledger at {ACCEPTANCE_PATH}. Use its stable
 acceptance IDs to plan and verify the whole task, not only the first reproduced
 failure. Re-check public source requirements when the ledger is ambiguous or
-incomplete.
+incomplete. The freeze manifest reports construction readiness
+`{construction_readiness_status}`. Source coverage is not solution qualification:
+when readiness is not `ready`, or any required coupled feasibility/objective check
+returns unknown, do not trust a recommended candidate as globally valid. Complete
+the missing live reasoning yourself and require replayable evidence before mutation.
 
 Execute the task now. Do not wait for QA and do not create a gate around your work.
 The harness will invoke an independent QA role afterward.
@@ -574,6 +754,9 @@ def qa_prompt(
     *,
     acceptance_ledger_status: str,
     expected_acceptance_ids: list[str],
+    source_mapping_status: str = "unknown",
+    definition_closure_status: str = "unknown",
+    construction_readiness_status: str = "unknown",
 ) -> str:
     """Prompt an independent QA session that can use the same frozen Corridor."""
 
@@ -594,7 +777,9 @@ Diagnostic reads are allowed. Your only write is {QA_PATH}. Write one JSON objec
   "outcome": "pass|fail|blocked|not_assessed",
   "summary": "concise human-readable conclusion",
   "corridor_digest": "{corridor_digest_value}",
-  "coverage_complete": true,
+  "source_mapping_complete": true,
+  "definition_closure_complete": true,
+  "assessment_closure": "complete|incomplete",
   "acceptance_results": [{{
     "acceptance_id": "...",
     "applicability": "applicable|not_applicable|unknown",
@@ -615,7 +800,17 @@ Diagnostic reads are allowed. Your only write is {QA_PATH}. Write one JSON objec
 
 The freeze manifest reports acceptance-ledger status
 `{acceptance_ledger_status}` and the expected acceptance IDs are
-{json.dumps(expected_acceptance_ids, ensure_ascii=False)}. Emit exactly one result
+{json.dumps(expected_acceptance_ids, ensure_ascii=False)}. Its source-mapping status
+is `{source_mapping_status}`, definition-closure status is
+`{definition_closure_status}`, and separate construction-readiness status is
+`{construction_readiness_status}`. `source_mapping_complete` means every public
+normative clause has a ledger location; it does not mean every mapped clause is
+unambiguous. `definition_closure_complete` means no required definition or relation
+remains ambiguous. `assessment_closure` means QA has reached a supported
+applicability and status for every expected item. Do not collapse these three
+claims. Source mapping is not proof of joint feasibility or objective optimality.
+If definition closure or readiness is unresolved, or a required coupled check
+remains unknown, you may not pass the task. Emit exactly one result
 for every expected ID. Independently re-read the original public task sources to
 look for omissions; the Corridor is a frozen map, not authority that its own map is
 complete. A pass is permitted only when the frozen ledger is complete, the expected
@@ -626,7 +821,15 @@ reached. Witness closure is not task closure.
 A fail verdict is valid only with at least one concrete witness tied to an
 acceptance ID whose constraint, observed evidence, and safe replay procedure are all
 non-empty. If complete task closure cannot be established, use blocked or
-not_assessed. QA is advisory: your verdict must never prevent the official verifier
+not_assessed.
+
+Persist evidence witness-first. As soon as you establish an invalid acceptance
+ledger, an unresolved required coupled check, or one concrete failure witness, write
+a schema-valid provisional assessment covering every expected ID. Write it to a
+temporary file in the QA directory and atomically rename it to {QA_PATH}; continue
+deepening the audit only after that durable checkpoint, and atomically replace it
+with richer evidence. Do not postpone the first valid assessment until the end of
+your session. QA is advisory: your verdict must never prevent the official verifier
 from running.
 """
 
@@ -657,6 +860,9 @@ def closure_prompt(
     *,
     acceptance_ledger_status: str,
     expected_acceptance_ids: list[str],
+    source_mapping_status: str = "unknown",
+    definition_closure_status: str = "unknown",
+    construction_readiness_status: str = "unknown",
 ) -> str:
     """Resume the same QA session to assess the one repair pass."""
 
@@ -671,7 +877,10 @@ Corridor. Re-evaluate every expected acceptance ID
 {json.dumps(expected_acceptance_ids, ensure_ascii=False)} and independently re-check
 the public source for omissions; closing the prior witness does not close the task.
 The frozen ledger status is `{acceptance_ledger_status}`. Write the same JSON
-schema to {CLOSURE_PATH}; a fail still requires a concrete
+schema to {CLOSURE_PATH}. Its frozen source-mapping, definition-closure, and
+construction-readiness statuses remain `{source_mapping_status}`,
+`{definition_closure_status}`, and `{construction_readiness_status}` respectively;
+report those dimensions separately from assessment closure. A fail still requires a concrete
 acceptance-ID/constraint/evidence/replay witness. This closure is advisory and must
 not gate the official verifier.
 """
@@ -684,6 +893,9 @@ def validate_qa_assessment(
     acceptance_ledger_status: str,
     expected_acceptance_ids: list[str],
     required_acceptance_ids: list[str],
+    source_mapping_status: str = "complete",
+    definition_closure_status: str = "complete",
+    construction_readiness_status: str = "ready",
 ) -> list[str]:
     """Validate the QA artifact and return stable error codes.
 
@@ -708,9 +920,15 @@ def validate_qa_assessment(
     elif not SHA256_RE.fullmatch(digest):
         errors.append("ASSESSMENT_CORRIDOR_DIGEST_FORMAT")
 
-    coverage_complete = value.get("coverage_complete")
-    if not isinstance(coverage_complete, bool):
-        errors.append("ASSESSMENT_COVERAGE_COMPLETE")
+    source_mapping_complete = value.get("source_mapping_complete")
+    if not isinstance(source_mapping_complete, bool):
+        errors.append("ASSESSMENT_SOURCE_MAPPING_COMPLETE")
+    definition_closure_complete = value.get("definition_closure_complete")
+    if not isinstance(definition_closure_complete, bool):
+        errors.append("ASSESSMENT_DEFINITION_CLOSURE_COMPLETE")
+    assessment_closure = value.get("assessment_closure")
+    if assessment_closure not in ASSESSMENT_CLOSURE_STATES:
+        errors.append("ASSESSMENT_CLOSURE")
 
     expected_ids = set(expected_acceptance_ids)
     if len(expected_ids) != len(expected_acceptance_ids):
@@ -766,15 +984,26 @@ def validate_qa_assessment(
         for index, item in enumerate(items):
             if not isinstance(item, str) or not item.strip():
                 errors.append(f"{code}_{index}")
-    if coverage_complete is True and any(
-        collection_values.get(field)
-        for field in ("unmapped_requirements", "unresolved_relations")
+    if source_mapping_complete is True and collection_values.get(
+        "unmapped_requirements"
     ):
-        errors.append("ASSESSMENT_COVERAGE_CONTRADICTION")
+        errors.append("ASSESSMENT_SOURCE_MAPPING_CONTRADICTION")
+    if definition_closure_complete is True and collection_values.get(
+        "unresolved_relations"
+    ):
+        errors.append("ASSESSMENT_DEFINITION_CLOSURE_CONTRADICTION")
+    if source_mapping_complete is True and source_mapping_status != "complete":
+        errors.append("ASSESSMENT_SOURCE_MAPPING_EXCEEDS_FROZEN_LEDGER")
+    if (
+        definition_closure_complete is True
+        and definition_closure_status != "complete"
+    ):
+        errors.append("ASSESSMENT_DEFINITION_CLOSURE_EXCEEDS_FROZEN_LEDGER")
 
     checks = value.get("checks")
     if not isinstance(checks, list):
         errors.append("ASSESSMENT_CHECKS")
+        checks = []
     else:
         for index, check in enumerate(checks):
             if not isinstance(check, dict):
@@ -786,6 +1015,21 @@ def validate_qa_assessment(
                 errors.append(f"ASSESSMENT_CHECK_STATUS_{index}")
             if not isinstance(check.get("evidence"), str):
                 errors.append(f"ASSESSMENT_CHECK_EVIDENCE_{index}")
+
+    if assessment_closure == "complete":
+        closure_unresolved = any(
+            result.get("applicability") == "unknown"
+            or (
+                result.get("applicability") == "applicable"
+                and result.get("status") in {"unknown", "not_reached"}
+            )
+            for result in results_by_id.values()
+        ) or any(
+            isinstance(check, dict) and check.get("status") == "unknown"
+            for check in checks
+        )
+        if closure_unresolved or actual_ids != expected_ids:
+            errors.append("ASSESSMENT_CLOSURE_CONTRADICTION")
 
     witnesses = value.get("witnesses")
     if not isinstance(witnesses, list):
@@ -825,12 +1069,22 @@ def validate_qa_assessment(
             errors.append("FAIL_WITNESS_ACCEPTANCE_MISMATCH")
 
     if outcome == "pass":
+        if construction_readiness_status != "ready":
+            errors.append("PASS_CONSTRUCTION_READINESS_REQUIRED")
         if acceptance_ledger_status != "complete":
             errors.append("PASS_ACCEPTANCE_LEDGER_COMPLETE_REQUIRED")
+        if source_mapping_status != "complete":
+            errors.append("PASS_FROZEN_SOURCE_MAPPING_REQUIRED")
+        if definition_closure_status != "complete":
+            errors.append("PASS_FROZEN_DEFINITION_CLOSURE_REQUIRED")
         if not expected_ids:
             errors.append("PASS_ACCEPTANCE_IDS_REQUIRED")
-        if coverage_complete is not True:
-            errors.append("PASS_COVERAGE_COMPLETE_REQUIRED")
+        if source_mapping_complete is not True:
+            errors.append("PASS_SOURCE_MAPPING_COMPLETE_REQUIRED")
+        if definition_closure_complete is not True:
+            errors.append("PASS_DEFINITION_CLOSURE_COMPLETE_REQUIRED")
+        if assessment_closure != "complete":
+            errors.append("PASS_ASSESSMENT_CLOSURE_REQUIRED")
         if value.get("unmapped_requirements") != []:
             errors.append("PASS_UNMAPPED_REQUIREMENTS_EMPTY_REQUIRED")
         if value.get("unresolved_relations") != []:
