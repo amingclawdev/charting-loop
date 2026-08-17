@@ -2,9 +2,12 @@
 
 This repository separates a draft corridor method from the empirical data used to test
 it. Current status: **public release live and replication-invitation ready**. Six
-sanitized arm summaries from three matched attempts on one benchmark task are published
-through immutable result branches and the machine release registry. Structural
-validation works, but no aggregate, causal, multi-task, benchmark-wide, production,
+sanitized arm summaries from three matched attempts on `production-planning` are
+published through immutable result branches and the machine release registry. A
+separate public-safe engineering result records a valid but non-passing
+`ico-path-patch` full-method smoke run. The public index therefore covers two distinct
+tasks, but only the first has a matched comparison. Structural validation works, but
+no aggregate, causal, multi-task-efficacy, benchmark-wide, production,
 semantic-correctness, leaderboard, or real-world-authority result has been established.
 
 ## Read the theory
@@ -30,10 +33,12 @@ Choose the page for your audience:
 - **Human result index:**
   [`docs/EXPERIMENT-RESULTS.md`](docs/EXPERIMENT-RESULTS.md) lists one row per distinct
   benchmark task and keeps repeated attempts grouped under that task.
-- **Human task result:**
-  [`docs/PRODUCTION-PLANNING-RESULT.md`](docs/PRODUCTION-PLANNING-RESULT.md) explains and
-  compares the completed and invalid attempts for the current task and gives immutable,
-  summary-only locators.
+- **Human task results:**
+  [`docs/PRODUCTION-PLANNING-RESULT.md`](docs/PRODUCTION-PLANNING-RESULT.md) explains the
+  matched-arm evidence, while
+  [`docs/ICO-PATH-PATCH-RESULT.md`](docs/ICO-PATH-PATCH-RESULT.md) records the separate
+  full-method smoke sequence, its 15/19 partial score, the protocol/SDK adjustments,
+  and its publication boundary.
 - **Post-hoc AI result analysis:**
   [`docs/AI-RESULT-ANALYSIS-RUNBOOK.md`](docs/AI-RESULT-ANALYSIS-RUNBOOK.md) contains the
   step-by-step case-analysis procedure and complete copy-ready prompts. It is a reading

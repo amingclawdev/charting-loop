@@ -256,6 +256,9 @@ class PublicReleaseTests(unittest.TestCase):
         task_result = (
             REPOSITORY_ROOT / "docs" / "PRODUCTION-PLANNING-RESULT.md"
         ).read_text(encoding="utf-8")
+        ico_result = (
+            REPOSITORY_ROOT / "docs" / "ICO-PATH-PATCH-RESULT.md"
+        ).read_text(encoding="utf-8")
         ai_analysis = (
             REPOSITORY_ROOT / "docs" / "AI-RESULT-ANALYSIS-RUNBOOK.md"
         ).read_text(encoding="utf-8")
@@ -267,6 +270,7 @@ class PublicReleaseTests(unittest.TestCase):
             "docs/REPLICATION-INVITATION.md",
             "docs/EXPERIMENT-RESULTS.md",
             "docs/PRODUCTION-PLANNING-RESULT.md",
+            "docs/ICO-PATH-PATCH-RESULT.md",
             "docs/AI-RESULT-ANALYSIS-RUNBOOK.md",
             "docs/AI-REPLICATION-RUNBOOK.md",
             "protocol/TASK-CONDITIONED-CORRIDOR-EXPERIMENT-V2.md",
@@ -276,7 +280,7 @@ class PublicReleaseTests(unittest.TestCase):
             self.assertIn(path, readme)
         for label in (
             "Human result index",
-            "Human task result",
+            "Human task results",
             "Post-hoc AI result analysis",
             "AI/operator experiment runbook",
         ):
@@ -285,7 +289,8 @@ class PublicReleaseTests(unittest.TestCase):
         readme_words = " ".join(readme.split())
         for marker in (
             "**public release live and replication-invitation ready**",
-            "Six sanitized arm summaries",
+            "Six sanitized arm summaries from three matched attempts",
+            "public-safe engineering result",
             "https://github.com/amingclawdev/charting-loop",
         ):
             self.assertIn(marker, readme_words)
@@ -322,30 +327,37 @@ class PublicReleaseTests(unittest.TestCase):
             "# Experiment results",
             "human index for public-safe experiment summaries",
             "organized by **distinct benchmark task**",
-            "Distinct benchmark tasks represented: **1**",
+            "Distinct benchmark tasks represented: **2**",
             "Counted completed matched pairs: **3**",
             "Preserved invalid predecessor attempts: **2**",
-            "**not multi-task evidence**",
+            "Four `production-planning` Treatment executions were observed at 20/20",
+            "Only three count",
+            "whole matched attempt infrastructure-invalid",
+            "not used in the effect pattern",
+            "**not multi-task efficacy evidence**",
             "## Result index",
-            "one distinct task",
+            "Each row is one distinct task",
             "[Open the task result](PRODUCTION-PLANNING-RESULT.md)",
+            "[Open the task result](ICO-PATH-PATCH-RESULT.md)",
             "[`AI result-analysis runbook`](AI-RESULT-ANALYSIS-RUNBOOK.md)",
         ):
             self.assertIn(marker, index_words)
         self.assertNotIn("human index for published experiment summaries", index_words)
         self.assertEqual(index.count("| `production-planning` |"), 1)
+        self.assertEqual(index.count("| `ico-path-patch` |"), 1)
 
         publication_markers = (
             "## Publication and participation status",
             "**Current status: the public result and causal-evidence release is live.**",
-            "| Current result artifacts | Six causal-evidence arm releases live |",
+            "| Current result artifacts | Six causal-evidence arm releases plus one engineering result |",
             "| Public release registry | Twelve validated append-only rows |",
             "six `public-v2` rows supersede them without deletion",
             "binds every branch to its commit, tree, manifest digest",
             "| Public remote and submission channel | Repository live; intake not opened |",
-            "| Official benchmark leaderboard | Not attempted |",
+            "| Official benchmark leaderboard | No accepted project entry |",
             "reader, runner, and sanitized result package is public",
-            "one-task descriptive release",
+            "index now contains two task pages",
+            "counted causal package still concerns one task",
             "not an open submission programme or an official leaderboard entry",
             "### Join the next multi-task study",
             "Select an unseen, distinct multi-step task",
@@ -505,7 +517,48 @@ class PublicReleaseTests(unittest.TestCase):
         # Human-facing pages contain explanation and navigation, not AI procedures or
         # copy blocks. Post-hoc analysis and prospective experiment execution also stay
         # in distinct runbooks.
-        for human_page in (index, task_result):
+        ico_words = " ".join(ico_result.split())
+        for marker in (
+            "# `ico-path-patch` engineering result",
+            "second distinct benchmark task represented",
+            "**15/19 verifier checks passed; official reward 0.0**",
+            "**valid method failure**",
+            "Best grader result: 10/19",
+            "https://github.com/harbor-framework/terminal-bench/issues/1453",
+            "original 90-minute setting",
+            "not a current eight-hour leaderboard maximum",
+            "charting-loop-tb3-ico-path-patch-008",
+            "Jobs `005`, `006`, and `008` are valid method observations",
+            "one absolute task deadline instead of fixed Builder/Worker/QA allocations",
+            "shared Corridor access for both Worker and QA",
+            "Job `008` completed in 4,684.975 seconds wall time",
+            "Builder used 1,495.443 seconds",
+            "Worker 1,945.286 seconds",
+            "QA 1,154.560 seconds",
+            "charting-loop-method-v7",
+            "sha256:1ce413d06b67d1f1b878c4159d5f4787acae03ae427d1626a2dfeb5f8f9a0695",
+            "task_ready` was false",
+            "effective outcome was `not_assessed`",
+            "two-task engineering coverage, not multi-task efficacy",
+            "Four Treatment executions were observed at 20/20",
+            "infrastructure-invalid pair and remains noncounting",
+        ):
+            self.assertIn(marker, ico_words)
+        for job_id in range(2, 9):
+            self.assertEqual(ico_result.count(f"| `00{job_id}` |"), 1)
+        for forbidden in (
+            "style_index",
+            "SetStep",
+            "AddStep",
+            "RemoveStep",
+            "patch_ico.py",
+            "/private/tmp",
+            "subscription_token",
+            "session_token",
+        ):
+            self.assertNotIn(forbidden, ico_result)
+
+        for human_page in (index, task_result, ico_result):
             self.assertNotIn("```text", human_page)
             self.assertNotIn("Copyable AI summary + audit prompt", human_page)
             self.assertNotIn("Do all three tasks.", human_page)

@@ -79,7 +79,7 @@ HARBOR_PY="$HOME/.local/share/uv/tools/harbor/bin/python"
 export CHARTING_LOOP_MODAL_SPEND_LIMIT_USD='<the current cap shown in the Modal dashboard>'
 
 python3 tools/terminal_bench_doctor.py \
-  --job-name charting-loop-tb3-ico-path-patch-008 \
+  --job-name charting-loop-tb3-ico-path-patch-009 \
   --jobs-dir jobs \
   --modal-spend-limit-usd "$CHARTING_LOOP_MODAL_SPEND_LIMIT_USD" \
   --min-modal-headroom-usd 1.00 \
@@ -135,7 +135,7 @@ export PYTHONPATH="$CHARTING_LOOP_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export CODEX_FORCE_AUTH_JSON=1
 
 harbor run \
-  --job-name charting-loop-tb3-ico-path-patch-008 \
+  --job-name charting-loop-tb3-ico-path-patch-009 \
   -o jobs \
   -d terminal-bench/terminal-bench@3.0.0 \
   -i terminal-bench/ico-path-patch \
@@ -211,6 +211,26 @@ verification; it does not delete, allowlist, or normalize post-freeze bytes. The
 private Harbor upload also encountered the previously observed profile-username
 write discrepancy, which is separate from execution validity. Never reuse or
 overwrite `007`; the next paid identity is `008`.
+
+Job `charting-loop-tb3-ico-path-patch-008` is permanently retained as a valid
+end-to-end method-v7 failure with official reward `0.0`: 15 of 19 verifier checks
+passed, one completed trial raised no exception, and Harbor performed no retry.
+Builder, Worker, and QA all completed under one total deadline in about 24m55s,
+32m25s, and 19m15s respectively. Both Worker and QA read the same frozen Corridor;
+the latest complete Worker submission was graded even though QA's contradictory
+closure made its effective outcome `not_assessed`. The remaining failure was an
+internal acceptance-boundary completeness miss while `task_ready` remained false,
+not a launcher, account, timeout, or verifier failure.
+
+The official maintainers had reported a best grader result of 10/19 under the original
+90-minute condition in
+[`harbor-framework/terminal-bench#1453`](https://github.com/harbor-framework/terminal-bench/issues/1453).
+They later changed all task limits to eight hours. Consequently 15/19 is useful
+same-condition diagnostic context, but it is still reward 0.0, not a current
+eight-hour leaderboard maximum, accepted submission, or rank. The private Harbor
+upload failed on profile identity after scoring; this is separate from task validity.
+Raw role logs, binaries, patch bytes, and exact failure witnesses remain sealed.
+Never reuse or overwrite `008`; the next paid identity is `009`.
 
 The default task time limit is part of the initial leaderboard condition. Do not
 silently raise `--agent-timeout-multiplier`; if a larger end-to-end budget is needed,
