@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import uuid
 from dataclasses import asdict, dataclass
 from decimal import Decimal, InvalidOperation
@@ -34,6 +35,10 @@ DATASET_CONTENT_SHA256 = (
 TASK_NAME = "ico-path-patch"
 TASK_FILTER = "terminal-bench/ico-path-patch"
 TASK_CACHE_DIGEST = "0115a4136189b48da79070f9b3004dc4e0dfc1a60725c5acebdd7f380d037d14"
+SESSION_WINDOW_TASK_NAME = "session-window-debug"
+SESSION_WINDOW_TASK_CACHE_DIGEST = (
+    "638c00fd438a0289ba75f6bc536861831f4a8eab2b85064064038e1bcc91cfbb"
+)
 AGENT_IMPORT = "benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent"
 AGENT_VERSION = "0.8.1"
 CORRIDOR_SDK_VERSION = "0.3.0"
@@ -49,6 +54,33 @@ METHOD_SCOPE_SHA256 = (
 )
 PHASE_ISOLATION_COMMIT = "9281e739f5bfa6ed78784c505f38831d8ff0f9e7"
 MIN_HARBOR_VERSION = (0, 21, 0)
+
+
+@dataclass(frozen=True)
+class TaskSpec:
+    name: str
+    cache_digest: str
+    agent_timeout_sec: float
+    requires_x86_64_binary: bool = False
+
+    @property
+    def task_filter(self) -> str:
+        return f"terminal-bench/{self.name}"
+
+
+TASK_SPECS = {
+    TASK_NAME: TaskSpec(
+        name=TASK_NAME,
+        cache_digest=TASK_CACHE_DIGEST,
+        agent_timeout_sec=5400.0,
+        requires_x86_64_binary=True,
+    ),
+    SESSION_WINDOW_TASK_NAME: TaskSpec(
+        name=SESSION_WINDOW_TASK_NAME,
+        cache_digest=SESSION_WINDOW_TASK_CACHE_DIGEST,
+        agent_timeout_sec=7200.0,
+    ),
+}
 
 _SECRET_PATTERNS = (
     re.compile(r"sk-harbor-[A-Za-z0-9_-]+", re.IGNORECASE),
@@ -108,6 +140,7 @@ class DoctorConfig:
     job_name: str
     jobs_dir: Path
     modal_spend_limit_usd: Decimal
+    task_name: str = TASK_NAME
     min_modal_headroom_usd: Decimal = Decimal("1.00")
     trusted_cyber_access_confirmed: bool = False
     expected_head: str | None = None
@@ -121,6 +154,14 @@ class DoctorConfig:
     docker_executable: str | None = None
     file_executable: str | None = None
     git_executable: str | None = None
+
+
+def _task_spec(config: DoctorConfig) -> TaskSpec | None:
+    return TASK_SPECS.get(config.task_name)
+
+
+def _task_filter(config: DoctorConfig) -> str:
+    return f"terminal-bench/{config.task_name}"
 
 
 def _scrub_text(value: str) -> str:
@@ -526,7 +567,7 @@ def _print_config_command(
         "-d",
         DATASET,
         "-i",
-        TASK_FILTER,
+        _task_filter(config),
         "--n-tasks",
         "1",
         "-e",
@@ -577,14 +618,15 @@ def _check_resolved_config(
             and len(data.get("datasets", [])) == 1
             and dataset.get("name") == DATASET_NAME
             and dataset.get("ref") == DATASET_REF
-            and dataset.get("task_names") == [TASK_FILTER]
+            and _task_spec(config) is not None
+            and dataset.get("task_names") == [_task_filter(config)]
             and dataset.get("n_tasks") == 1
         )
     except (ValueError, KeyError, IndexError, TypeError, OSError):
         exact = False
     policy = {
-        "task": TASK_NAME,
-        "task_filter": TASK_FILTER,
+        "task": config.task_name,
+        "task_filter": _task_filter(config),
         "n_tasks": 1,
         "concurrency": 1,
         "max_retries": 0,
@@ -608,31 +650,43 @@ def _check_resolved_config(
     )
 
 
-def _default_task_cache() -> Path:
+def _default_task_cache(config: DoctorConfig) -> Path | None:
+    spec = _task_spec(config)
+    if spec is None:
+        return None
     return (
         Path.home()
         / ".cache/harbor/tasks/packages/terminal-bench"
-        / TASK_NAME
-        / TASK_CACHE_DIGEST
+        / spec.name
+        / spec.cache_digest
     )
 
 
 def _check_task_architecture(
     config: DoctorConfig, runner: Runner, tools: Mapping[str, str]
 ) -> CheckResult:
-    root = config.task_cache_root or _default_task_cache()
+    spec = _task_spec(config)
+    if spec is None:
+        return _failed(
+            "task_architecture",
+            "The requested task has no pinned doctor identity.",
+            "Choose one of the doctor-supported canonical task names.",
+            {"task": config.task_name, "supported_tasks": sorted(TASK_SPECS)},
+        )
+    root = config.task_cache_root or _default_task_cache(config)
+    assert root is not None
     task_toml = root / "task.toml"
     dockerfile = root / "environment/Dockerfile"
     binary = root / "environment/ico/ico"
     try:
-        task_text = task_toml.read_text(encoding="utf-8")
+        task_data = tomllib.loads(task_toml.read_text(encoding="utf-8"))
         docker_text = dockerfile.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, tomllib.TOMLDecodeError):
         return _failed(
             "task_architecture",
             "The exact cached task bytes are unavailable.",
             "Run the doctor again after Harbor resolves the pinned task cache.",
-            {"task_cache_digest": TASK_CACHE_DIGEST},
+            {"task": spec.name, "task_cache_digest": spec.cache_digest},
         )
     digest_program = (
         "import sys;"
@@ -644,42 +698,57 @@ def _check_task_architecture(
         [tools["harbor_python"], "-c", digest_program, str(root)],
         cwd=config.repo_root,
     )
-    file_result = runner.run([tools["file"], str(binary)], cwd=config.repo_root)
+    file_result = (
+        runner.run([tools["file"], str(binary)], cwd=config.repo_root)
+        if spec.requires_x86_64_binary
+        else None
+    )
     cache_exact = (
         digest_result.returncode == 0
-        and digest_result.stdout.strip() == TASK_CACHE_DIGEST
+        and digest_result.stdout.strip() == spec.cache_digest
     )
+    task_section = task_data.get("task", {})
+    agent_section = task_data.get("agent", {})
+    environment_section = task_data.get("environment", {})
     task_ok = (
-        f'name = "terminal-bench/{TASK_NAME}"' in task_text
-        and "timeout_sec = 5400.0" in task_text
-        and "gpus = 0" in task_text
+        task_section.get("name") == spec.task_filter
+        and agent_section.get("timeout_sec") == spec.agent_timeout_sec
+        and environment_section.get("gpus", 0) == 0
     )
     image_ok = "FROM python:3.12-slim" in docker_text
-    amd64 = (
-        file_result.returncode == 0
+    amd64 = not spec.requires_x86_64_binary or (
+        file_result is not None
+        and file_result.returncode == 0
         and "ELF 64-bit" in file_result.stdout
         and "x86-64" in file_result.stdout
     )
     if not (cache_exact and task_ok and image_ok and amd64):
         return _failed(
             "task_architecture",
-            "The pinned task or its required amd64 binary identity is not exact.",
-            "Use Modal's amd64 environment for ico-path-patch; do not substitute a local arm64 run.",
+            "The pinned task cache or execution identity is not exact.",
+            "Restore the selected canonical task cache; use Modal amd64 when the task contains an x86-64 binary.",
             {
-                "task_cache_digest": TASK_CACHE_DIGEST,
+                "task": spec.name,
+                "task_filter": spec.task_filter,
+                "task_cache_digest": spec.cache_digest,
                 "task_tree_digest_exact": cache_exact,
                 "task_manifest_exact": task_ok,
                 "base_image_exact": image_ok,
-                "binary_is_x86_64": amd64,
+                "x86_64_binary_required": spec.requires_x86_64_binary,
+                "binary_is_x86_64": amd64 if spec.requires_x86_64_binary else None,
             },
         )
     return _passed(
         "task_architecture",
-        "The exact task cache requires an x86-64 Linux execution environment.",
+        "The exact selected task cache and execution identity are pinned.",
         {
-            "task_cache_digest": TASK_CACHE_DIGEST,
+            "task": spec.name,
+            "task_filter": spec.task_filter,
+            "task_cache_digest": spec.cache_digest,
             "task_tree_digest_exact": True,
-            "binary_architecture": "x86-64",
+            "binary_architecture": (
+                "x86-64" if spec.requires_x86_64_binary else "not_task_constrained"
+            ),
             "execution_environment": "modal-amd64",
         },
     )
@@ -924,9 +993,11 @@ def run_doctor(config: DoctorConfig, runner: Runner | None = None) -> dict[str, 
         "condition": {
             "dataset": DATASET,
             "dataset_content_sha256": DATASET_CONTENT_SHA256,
-            "task": TASK_NAME,
-            "task_filter": TASK_FILTER,
-            "task_cache_digest": TASK_CACHE_DIGEST,
+            "task": config.task_name,
+            "task_filter": _task_filter(config),
+            "task_cache_digest": (
+                _task_spec(config).cache_digest if _task_spec(config) else "unregistered"
+            ),
             "agent": AGENT_IMPORT,
             "agent_version": AGENT_VERSION,
             "model": MODEL,
@@ -958,6 +1029,12 @@ def _parser() -> argparse.ArgumentParser:
         "--repo-root", type=Path, default=Path(__file__).resolve().parents[1]
     )
     parser.add_argument("--job-name", required=True)
+    parser.add_argument(
+        "--task",
+        choices=sorted(TASK_SPECS),
+        default=TASK_NAME,
+        help="Pinned bare task name; the doctor constructs terminal-bench/<task>.",
+    )
     parser.add_argument("--jobs-dir", type=Path, default=Path("jobs"))
     parser.add_argument("--expected-head")
     parser.add_argument(
@@ -990,6 +1067,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         job_name=args.job_name,
         jobs_dir=jobs_dir,
         modal_spend_limit_usd=args.modal_spend_limit_usd,
+        task_name=args.task,
         min_modal_headroom_usd=args.min_modal_headroom_usd,
         trusted_cyber_access_confirmed=args.trusted_cyber_access_confirmed,
         expected_head=args.expected_head,

@@ -80,6 +80,7 @@ export CHARTING_LOOP_MODAL_SPEND_LIMIT_USD='<the current cap shown in the Modal 
 
 python3 tools/terminal_bench_doctor.py \
   --job-name charting-loop-tb3-ico-path-patch-009 \
+  --task ico-path-patch \
   --jobs-dir jobs \
   --modal-spend-limit-usd "$CHARTING_LOOP_MODAL_SPEND_LIMIT_USD" \
   --min-modal-headroom-usd 1.00 \
@@ -107,11 +108,11 @@ It verifies all of the following before returning `ready: true`:
 - readable Modal billing plus sufficient headroom under the operator-declared cap;
 - Codex login, `~/.codex/auth.json`, `CODEX_FORCE_AUTH_JSON=1`, and the explicit
   Trusted Cyber Access attestation;
-- exactly the canonical task filter `terminal-bench/ico-path-patch`, one task, one
-  concurrent trial, Modal, Agent v0.8.1,
+- exactly the canonical `terminal-bench/<task>` filter derived from the explicit
+  supported `--task` name, one task, one concurrent trial, Modal, Agent v0.8.1,
   `gpt-5.6-sol` at max effort, zero automatic retries, and private upload;
-- the cached task's x86-64 binary, which requires the Modal amd64 environment rather
-  than a local arm64 execution substitute;
+- the selected task's pinned cache digest and manifest; for `ico-path-patch`, also
+  the cached x86-64 binary that rules out a local arm64 execution substitute;
 - a previously unused job name and writable output parent; and
 - cleanup of a cancellation-resistant phase child with no process left behind; and
 - binding the installed NVM-local Codex CLI to a stable path and invoking
@@ -150,8 +151,63 @@ harbor run \
 ```
 
 Run this paid command only when the immediately preceding doctor report for the same
-job name says `ready: true`. The doctor does not authorize changing any flag between
-preflight and launch. If a condition changes, rerun the doctor.
+job name **and task** says `ready: true`. The doctor does not authorize changing any
+flag between preflight and launch. If a condition changes, rerun the doctor.
+
+### Third distinct-task transfer probe: `session-window-debug`
+
+This task was selected prospectively from the public Terminal-Bench 3.0 package at
+commit `2b0442c3c583b710ca8da14c8e601b99f2f1f244`, before inspecting any solution or
+verifier bytes. Its public metadata classifies it as Software / Systems, gives the
+agent 7,200 seconds, estimates eight expert hours, and requires no GPU. Its public
+instruction asks for a repair across coupled late-event, session-merge, watermark,
+and garbage-collection rules while treating `DESIGN.md` as authoritative. That makes
+it a useful cross-domain test of whether the task-neutral work-row, acceptance,
+capability, and timeline SDK transfers beyond binary and production-planning tasks.
+The source records are
+[`task.toml`](https://github.com/harbor-framework/terminal-bench/blob/2b0442c3c583b710ca8da14c8e601b99f2f1f244/tasks/session-window-debug/task.toml)
+and
+[`instruction.md`](https://github.com/harbor-framework/terminal-bench/blob/2b0442c3c583b710ca8da14c8e601b99f2f1f244/tasks/session-window-debug/instruction.md).
+
+The doctor pins cache digest
+`638c00fd438a0289ba75f6bc536861831f4a8eab2b85064064038e1bcc91cfbb`
+and constructs the full filter from the bare task name; a short or mismatched Harbor
+filter fails closed. Run the non-paid preflight first:
+
+```bash
+python3 tools/terminal_bench_doctor.py \
+  --job-name charting-loop-tb3-session-window-debug-001 \
+  --task session-window-debug \
+  --jobs-dir jobs \
+  --modal-spend-limit-usd "$CHARTING_LOOP_MODAL_SPEND_LIMIT_USD" \
+  --min-modal-headroom-usd 1.00 \
+  --trusted-cyber-access-confirmed \
+  --json
+```
+
+Only if that exact report is `ready: true`, launch one private, zero-retry trial:
+
+```bash
+harbor run \
+  --job-name charting-loop-tb3-session-window-debug-001 \
+  -o jobs \
+  -d terminal-bench/terminal-bench@3.0.0 \
+  -i terminal-bench/session-window-debug \
+  --n-tasks 1 \
+  -e modal \
+  -a benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent \
+  -m openai/gpt-5.6-sol \
+  --ak reasoning_effort=max \
+  -n 1 \
+  --max-retries 0 \
+  --upload --private
+```
+
+Do not add a task-specific SDK function, inspect solution/verifier/hidden-test bytes,
+retry a failed observation, or overwrite this job identity. Builder, Worker, and QA
+must share one frozen Corridor digest and the original 7,200-second total task
+deadline. Preserve the role logs, freeze and custody manifests, verifier output,
+timings, cost, and final classification for audit.
 
 Job `charting-loop-tb3-ico-path-patch-002` is permanently retained as
 launcher-invalid: its short `-i ico-path-patch` filter matched no dataset member, so

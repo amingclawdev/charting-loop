@@ -13,6 +13,8 @@ from tools.terminal_bench_doctor import (
     DoctorConfig,
     CommandResult,
     PHASE_ISOLATION_COMMIT,
+    SESSION_WINDOW_TASK_CACHE_DIGEST,
+    SESSION_WINDOW_TASK_NAME,
     TASK_CACHE_DIGEST,
     TASK_FILTER,
     run_doctor,
@@ -103,7 +105,7 @@ class FakeRunner:
         if executable == "fake-harbor-python":
             program = command[-1]
             if "Packager.compute_content_hash" in command[-2]:
-                return CommandResult(0, TASK_CACHE_DIGEST + "\n")
+                return CommandResult(0, Path(command[-1]).name + "\n")
             if "github_username_claimed" in program:
                 return CommandResult(
                     0,
@@ -221,6 +223,24 @@ class TerminalBenchDoctorTests(unittest.TestCase):
             "FROM python:3.12-slim\n", encoding="utf-8"
         )
         (self.task_cache / "environment/ico/ico").write_bytes(b"ELF fixture")
+        self.session_task_cache = self.root / SESSION_WINDOW_TASK_CACHE_DIGEST
+        (self.session_task_cache / "environment/app").mkdir(parents=True)
+        (self.session_task_cache / "task.toml").write_text(
+            "\n".join(
+                [
+                    "[task]",
+                    'name = "terminal-bench/session-window-debug"',
+                    "[agent]",
+                    "timeout_sec = 7200.0",
+                    "[environment]",
+                    "cpus = 2",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (self.session_task_cache / "environment/Dockerfile").write_text(
+            "FROM python:3.12-slim\n", encoding="utf-8"
+        )
         self.auth_path = self.root / "auth.json"
         self.auth_path.write_text("{}", encoding="utf-8")
 
@@ -230,16 +250,23 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         job_name: str = "doctor-test-001",
         spend_limit: str = "10.00",
         trusted: bool = True,
+        task_name: str = "ico-path-patch",
     ) -> DoctorConfig:
+        task_cache = (
+            self.session_task_cache
+            if task_name == SESSION_WINDOW_TASK_NAME
+            else self.task_cache
+        )
         return DoctorConfig(
             repo_root=REPO_ROOT,
             job_name=job_name,
             jobs_dir=self.jobs_dir,
             modal_spend_limit_usd=Decimal(spend_limit),
+            task_name=task_name,
             min_modal_headroom_usd=Decimal("1.00"),
             trusted_cyber_access_confirmed=trusted,
             force_auth_json="1",
-            task_cache_root=self.task_cache,
+            task_cache_root=task_cache,
             auth_path=self.auth_path,
             harbor_executable="fake-harbor",
             harbor_python="fake-harbor-python",
@@ -251,6 +278,9 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         )
 
     def run_fake(self, config: DoctorConfig, **runner_options):
+        runner_options.setdefault(
+            "resolved_task", f"terminal-bench/{config.task_name}"
+        )
         runner = FakeRunner(
             job_name=config.job_name,
             jobs_dir=config.jobs_dir,
@@ -283,6 +313,60 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         self.assertIn("--private", command)
         self.assertIn("-i", command)
         self.assertEqual(command[command.index("-i") + 1], TASK_FILTER)
+
+    def test_session_window_task_binds_exact_canonical_identity(self) -> None:
+        config = self.config(
+            job_name="session-window-doctor-001",
+            task_name=SESSION_WINDOW_TASK_NAME,
+        )
+
+        report, runner = self.run_fake(config)
+
+        self.assertTrue(report["ready"])
+        self.assertEqual(report["condition"]["task"], SESSION_WINDOW_TASK_NAME)
+        self.assertEqual(
+            report["condition"]["task_filter"],
+            "terminal-bench/session-window-debug",
+        )
+        self.assertEqual(
+            report["condition"]["task_cache_digest"],
+            SESSION_WINDOW_TASK_CACHE_DIGEST,
+        )
+        architecture = next(
+            check
+            for check in report["checks"]
+            if check["check_id"] == "task_architecture"
+        )
+        self.assertTrue(architecture["passed"])
+        self.assertEqual(
+            architecture["details"]["binary_architecture"], "not_task_constrained"
+        )
+        print_call = next(
+            call
+            for call in runner.calls
+            if call[:3] == ["fake-harbor", "run", "--print-config"]
+        )
+        self.assertEqual(
+            print_call[print_call.index("-i") + 1],
+            "terminal-bench/session-window-debug",
+        )
+
+    def test_session_window_short_filter_fails_closed(self) -> None:
+        config = self.config(task_name=SESSION_WINDOW_TASK_NAME)
+
+        report, _ = self.run_fake(config, resolved_task="session-window-debug")
+
+        self.assertFalse(report["ready"])
+        resolved = next(
+            check
+            for check in report["checks"]
+            if check["check_id"] == "resolved_run_config"
+        )
+        self.assertFalse(resolved["passed"])
+        self.assertEqual(
+            resolved["details"]["task_filter"],
+            "terminal-bench/session-window-debug",
+        )
 
     def test_unclaimed_harbor_username_fails_closed(self) -> None:
         report, _ = self.run_fake(self.config(), username_claimed=False)
