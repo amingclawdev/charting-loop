@@ -17,7 +17,7 @@ This run is bound to `charting-loop-method-v7` at
 `sha256:35590e6a3adddcfc5e210a52045c473d286fdbf256db8c47f951a754d7477fb6`,
 and SCOPE-DATUM digest
 `sha256:8e5daca8d7e880521b37fdf1ac63b0e7a919d4bab2446d4aca7e135689f11c35`.
-Agent v0.8.0 resolves this identity and rejects changed catalog or method bytes before
+Agent v0.8.1 resolves this identity and rejects changed catalog or method bytes before
 any paid model call.
 
 The agent computes the local `corridor_kit` source-tree digest, uploads that exact SDK
@@ -79,7 +79,7 @@ HARBOR_PY="$HOME/.local/share/uv/tools/harbor/bin/python"
 export CHARTING_LOOP_MODAL_SPEND_LIMIT_USD='<the current cap shown in the Modal dashboard>'
 
 python3 tools/terminal_bench_doctor.py \
-  --job-name charting-loop-tb3-ico-path-patch-007 \
+  --job-name charting-loop-tb3-ico-path-patch-008 \
   --jobs-dir jobs \
   --modal-spend-limit-usd "$CHARTING_LOOP_MODAL_SPEND_LIMIT_USD" \
   --min-modal-headroom-usd 1.00 \
@@ -96,8 +96,10 @@ Codex CLI exposes login state but not that verification state.
 The doctor is fail-closed and non-paid. It only performs account/configuration reads,
 Harbor `--print-config`, local byte and output checks, and a Docker Linux self-test of
 the actual CL-057 timeout cleanup. It does **not** start a Harbor trial, Modal task
-environment, or model call. It verifies all of the following before returning
-`ready: true`:
+environment, or model call. Its Linux self-test also imports a read-only frozen
+adapter as root under the exact phase environment and proves that neither
+`__pycache__` nor `.pyc` bytes appear and that the frozen tree remains byte-identical.
+It verifies all of the following before returning `ready: true`:
 
 - clean committed Git and frozen method/agent identities;
 - Harbor 0.21+, the exact Terminal-Bench 3.0.0 content hash, login, and a claimed
@@ -106,14 +108,16 @@ environment, or model call. It verifies all of the following before returning
 - Codex login, `~/.codex/auth.json`, `CODEX_FORCE_AUTH_JSON=1`, and the explicit
   Trusted Cyber Access attestation;
 - exactly the canonical task filter `terminal-bench/ico-path-patch`, one task, one
-  concurrent trial, Modal, Agent v0.8.0,
+  concurrent trial, Modal, Agent v0.8.1,
   `gpt-5.6-sol` at max effort, zero automatic retries, and private upload;
 - the cached task's x86-64 binary, which requires the Modal amd64 environment rather
   than a local arm64 execution substitute;
 - a previously unused job name and writable output parent; and
 - cleanup of a cancellation-resistant phase child with no process left behind; and
 - binding the installed NVM-local Codex CLI to a stable path and invoking
-  `codex --version` from a fresh Linux phase shell.
+  `codex --version` from a fresh Linux phase shell; and
+- suppression of descendant Python bytecode writes while a frozen Corridor adapter
+  is imported by a root-owned phase, without weakening the freeze digest check.
 
 Exit 0 means the declared condition is ready. Exit 2 means at least one check failed;
 follow the per-check repair instruction and rerun the doctor. Exit 3 is a doctor
@@ -131,7 +135,7 @@ export PYTHONPATH="$CHARTING_LOOP_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export CODEX_FORCE_AUTH_JSON=1
 
 harbor run \
-  --job-name charting-loop-tb3-ico-path-patch-007 \
+  --job-name charting-loop-tb3-ico-path-patch-008 \
   -o jobs \
   -d terminal-bench/terminal-bench@3.0.0 \
   -i terminal-bench/ico-path-patch \
@@ -193,6 +197,20 @@ motivated the task-neutral v6 rule of one total deadline plus monotonic Worker
 snapshots; no task answer, patch byte, offset, verifier fact, or transcript content
 was imported into v6. Never reuse or overwrite `006`; the next paid identity is
 `007`.
+
+Job `charting-loop-tb3-ico-path-patch-007` is permanently retained as
+runtime-invalid. Builder completed and froze a complete acceptance ledger, and
+Worker froze a complete candidate snapshot under submission custody. Before QA or
+the official verifier ran, however, the root-owned role process imported the frozen
+Python task adapter and created `__pycache__/task_adapter.cpython-312.pyc`. The strict
+manifest and Corridor digest verification correctly stopped the run on that
+unplanned byte. Consequently `verifier_result` is null: this is runtime evidence,
+not an official score or method-performance result. Agent v0.8.1 exports
+`PYTHONDONTWRITEBYTECODE=1` for every phase, while retaining the same strict freeze
+verification; it does not delete, allowlist, or normalize post-freeze bytes. The
+private Harbor upload also encountered the previously observed profile-username
+write discrepancy, which is separate from execution validity. Never reuse or
+overwrite `007`; the next paid identity is `008`.
 
 The default task time limit is part of the initial leaderboard condition. Do not
 silently raise `--agent-timeout-multiplier`; if a larger end-to-end budget is needed,

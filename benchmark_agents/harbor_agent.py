@@ -56,7 +56,7 @@ from benchmark_agents.contract import (
 )
 
 
-AGENT_VERSION = "0.8.0"
+AGENT_VERSION = "0.8.1"
 METHOD_VERSION_ID = "charting-loop-method-v7"
 METHOD_SOURCE_COMMIT = "c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d"
 METHOD_CONTENT_SHA256 = (
@@ -73,6 +73,7 @@ TASK_TIMEOUT_RE = re.compile(
     re.IGNORECASE,
 )
 PHASE_TOKEN_ENV = "CHARTING_LOOP_PHASE_TOKEN"
+PHASE_NO_BYTECODE_EXPORT = "export PYTHONDONTWRITEBYTECODE=1"
 
 
 def _task_timeout_seconds(instruction: str) -> int:
@@ -246,6 +247,7 @@ class _PhaseCodex(Codex):
             "{ echo 'setsid is required for phase isolation' >&2; exit 125; }; "
             f"rm -f {shlex.quote(identity_path)}; "
             f"export {PHASE_TOKEN_ENV}={shlex.quote(token)}; "
+            f"{PHASE_NO_BYTECODE_EXPORT}; "
             f"setsid sh -c {shlex.quote(command)} & phase_pid=$!; "
             f"printf {shlex.quote(identity)} \"$phase_pid\" \"$phase_pid\" "
             f"> {shlex.quote(identity_path)}; "

@@ -35,7 +35,7 @@ TASK_NAME = "ico-path-patch"
 TASK_FILTER = "terminal-bench/ico-path-patch"
 TASK_CACHE_DIGEST = "0115a4136189b48da79070f9b3004dc4e0dfc1a60725c5acebdd7f380d037d14"
 AGENT_IMPORT = "benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent"
-AGENT_VERSION = "0.8.0"
+AGENT_VERSION = "0.8.1"
 CORRIDOR_SDK_VERSION = "0.3.0"
 MODEL = "openai/gpt-5.6-sol"
 REASONING_EFFORT = "max"
@@ -715,19 +715,24 @@ def _check_output_identity(config: DoctorConfig) -> CheckResult:
 
 
 def _phase_harness(
-    probe_b64: str, discovery_b64: str, binding_b64: str, token: str
+    probe_b64: str,
+    discovery_b64: str,
+    binding_b64: str,
+    phase_env_b64: str,
+    token: str,
 ) -> str:
     child = (
         "import signal,time;"
         "signal.signal(signal.SIGTERM,signal.SIG_IGN);"
         "time.sleep(120)"
     )
-    return f"""import base64,json,os,subprocess,sys,time
+    return f"""import base64,hashlib,json,os,subprocess,sys,time
 from pathlib import Path
 token={token!r}
 probe=base64.b64decode({probe_b64!r}).decode()
 discovery=base64.b64decode({discovery_b64!r}).decode()
 binding=base64.b64decode({binding_b64!r}).decode()
+phase_env=base64.b64decode({phase_env_b64!r}).decode()
 runtime_home=Path("/tmp/charting-loop-doctor-home")
 nvm_bin=runtime_home/".nvm/versions/node/v22.17.0/bin"
 nvm_bin.mkdir(parents=True,exist_ok=True)
@@ -742,6 +747,17 @@ runtime_discovered=discovered.returncode==0 and discovered_paths==[str(nvm_bin/"
 bound=subprocess.run(["sh","-c",binding],text=True,capture_output=True,timeout=15)
 fresh=subprocess.run(["sh","-c","PATH=/tmp/charting-loop-doctor-bin:/usr/bin:/bin; command -v node >/dev/null && command -v codex >/dev/null && codex --version"],text=True,capture_output=True,timeout=15)
 codex_runtime_bound=runtime_discovered and bound.returncode==0 and fresh.returncode==0 and "codex-cli-doctor" in fresh.stdout
+frozen=Path("/tmp/charting-loop-doctor-corridor")
+frozen.mkdir(parents=True,exist_ok=True)
+(frozen/"task_adapter.py").write_text("VALUE = 1\\n")
+(frozen/"task_adapter.py").chmod(0o444)
+frozen.chmod(0o555)
+def frozen_tree():
+    return [(p.relative_to(frozen).as_posix(),hashlib.sha256(p.read_bytes()).hexdigest()) for p in sorted(frozen.rglob("*")) if p.is_file()]
+frozen_before=frozen_tree()
+adapter_import=subprocess.run(["sh","-c",phase_env+"; PYTHONPATH=/tmp/charting-loop-doctor-corridor python3 -c 'import task_adapter; assert task_adapter.VALUE == 1'"],text=True,capture_output=True,timeout=15)
+frozen_after=frozen_tree()
+frozen_corridor_unchanged=adapter_import.returncode==0 and frozen_before==frozen_after and not any(p.name=="__pycache__" or p.suffix==".pyc" for p in frozen.rglob("*"))
 pid=os.fork()
 if pid==0:
     os.setsid()
@@ -756,7 +772,7 @@ except ChildProcessError:
     pass
 data=json.loads(completed.stdout)
 observed=pid in data.get("initial_pids",[]) and pid in (data.get("term_signal_pids",[])+data.get("kill_signal_pids",[]))
-print(json.dumps({{"probe_returncode":completed.returncode,"child_observed":observed,"quiescent":data.get("quiescent") is True,"remaining_count":len(data.get("remaining_pids",[])),"codex_runtime_bound":codex_runtime_bound}},sort_keys=True))
+print(json.dumps({{"probe_returncode":completed.returncode,"child_observed":observed,"quiescent":data.get("quiescent") is True,"remaining_count":len(data.get("remaining_pids",[])),"codex_runtime_bound":codex_runtime_bound,"frozen_corridor_unchanged":frozen_corridor_unchanged}},sort_keys=True))
 """
 
 
@@ -778,14 +794,15 @@ def _check_phase_isolation(
     export_program = (
         "import base64,json;"
         "from benchmark_agents.harbor_agent import "
-        "_codex_runtime_binding_command,_codex_runtime_discovery_command,_phase_quiescence_program;"
+        "PHASE_NO_BYTECODE_EXPORT,_codex_runtime_binding_command,_codex_runtime_discovery_command,_phase_quiescence_program;"
         "payload={"
         f"'probe_b64':base64.b64encode(_phase_quiescence_program({token!r},terminate=True).encode()).decode(),"
         "'discovery_b64':base64.b64encode(_codex_runtime_discovery_command().encode()).decode(),"
         "'binding_b64':base64.b64encode(_codex_runtime_binding_command("
         "node_bin='/tmp/charting-loop-doctor-home/.nvm/versions/node/v22.17.0/bin/node',"
         "codex_bin='/tmp/charting-loop-doctor-home/.nvm/versions/node/v22.17.0/bin/codex',"
-        "stable_bin_dir='/tmp/charting-loop-doctor-bin').encode()).decode()};"
+        "stable_bin_dir='/tmp/charting-loop-doctor-bin').encode()).decode(),"
+        "'phase_env_b64':base64.b64encode(PHASE_NO_BYTECODE_EXPORT.encode()).decode()};"
         "print(json.dumps(payload,sort_keys=True))"
     )
     exported = runner.run(
@@ -804,16 +821,20 @@ def _check_phase_isolation(
         probe_b64 = exported_programs["probe_b64"]
         discovery_b64 = exported_programs["discovery_b64"]
         binding_b64 = exported_programs["binding_b64"]
+        phase_env_b64 = exported_programs["phase_env_b64"]
         base64.b64decode(probe_b64, validate=True)
         base64.b64decode(discovery_b64, validate=True)
         base64.b64decode(binding_b64, validate=True)
+        base64.b64decode(phase_env_b64, validate=True)
     except (ValueError, KeyError, TypeError):
         return _failed(
             "phase_isolation",
             "The CL-057/CL-061 runtime program export was invalid.",
             "Restore the committed Harbor adapter and rerun its unit tests.",
         )
-    harness = _phase_harness(probe_b64, discovery_b64, binding_b64, token)
+    harness = _phase_harness(
+        probe_b64, discovery_b64, binding_b64, phase_env_b64, token
+    )
     exercised = runner.run(
         [tools["docker"], "run", "--rm", "python:3.12-slim", "python3", "-c", harness],
         cwd=config.repo_root,
@@ -830,26 +851,30 @@ def _check_phase_isolation(
         and result.get("quiescent") is True
         and result.get("remaining_count") == 0
         and result.get("codex_runtime_bound") is True
+        and result.get("frozen_corridor_unchanged") is True
     )
     if not passed:
         return _failed(
             "phase_isolation",
-            "The phase cleanup or fresh-shell Codex runtime self-test did not pass.",
-            "Do not start a paid run; repair CL-057 isolation or CL-061 runtime binding and rerun the full tests.",
+            "The phase cleanup, fresh-shell Codex runtime, or frozen-Corridor bytecode self-test did not pass.",
+            "Do not start a paid run; repair phase isolation, runtime binding, or root-phase bytecode suppression and rerun the full tests.",
             {
                 "child_observed": result.get("child_observed") is True,
                 "quiescent": result.get("quiescent") is True,
                 "codex_runtime_bound": result.get("codex_runtime_bound") is True,
+                "frozen_corridor_unchanged": result.get("frozen_corridor_unchanged")
+                is True,
             },
         )
     return _passed(
         "phase_isolation",
-        "The Linux self-test proved phase quiescence and fresh-shell Codex availability.",
+        "The Linux self-test proved phase quiescence, fresh-shell Codex availability, and frozen-Corridor byte identity.",
         {
             "child_observed": True,
             "quiescent": True,
             "remaining_count": 0,
             "codex_runtime_bound": True,
+            "frozen_corridor_unchanged": True,
         },
     )
 

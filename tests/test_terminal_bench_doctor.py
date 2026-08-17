@@ -32,6 +32,7 @@ class FakeRunner:
         resolved_task: str = TASK_FILTER,
         docker_quiescent: bool = True,
         codex_runtime_bound: bool = True,
+        frozen_corridor_unchanged: bool = True,
     ) -> None:
         self.job_name = job_name
         self.jobs_dir = jobs_dir
@@ -39,6 +40,7 @@ class FakeRunner:
         self.resolved_task = resolved_task
         self.docker_quiescent = docker_quiescent
         self.codex_runtime_bound = codex_runtime_bound
+        self.frozen_corridor_unchanged = frozen_corridor_unchanged
         self.calls: list[list[str]] = []
 
     def run(self, args, *, cwd=None, env=None, timeout=60):
@@ -142,6 +144,9 @@ class FakeRunner:
                             "probe_b64": base64.b64encode(b"print('{}')").decode(),
                             "discovery_b64": base64.b64encode(b"true").decode(),
                             "binding_b64": base64.b64encode(b"true").decode(),
+                            "phase_env_b64": base64.b64encode(
+                                b"export PYTHONDONTWRITEBYTECODE=1"
+                            ).decode(),
                         }
                     )
                     + "\n",
@@ -179,6 +184,7 @@ class FakeRunner:
                             "quiescent": self.docker_quiescent,
                             "remaining_count": 0 if self.docker_quiescent else 1,
                             "codex_runtime_bound": self.codex_runtime_bound,
+                            "frozen_corridor_unchanged": self.frozen_corridor_unchanged,
                         }
                     ),
                 )
@@ -345,6 +351,20 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         self.assertFalse(report["ready"])
         self.assertFalse(isolation["passed"])
         self.assertFalse(isolation["details"]["codex_runtime_bound"])
+
+    def test_frozen_corridor_bytecode_mutation_blocks_readiness(self) -> None:
+        report, _ = self.run_fake(
+            self.config(), frozen_corridor_unchanged=False
+        )
+
+        isolation = next(
+            check
+            for check in report["checks"]
+            if check["check_id"] == "phase_isolation"
+        )
+        self.assertFalse(report["ready"])
+        self.assertFalse(isolation["passed"])
+        self.assertFalse(isolation["details"]["frozen_corridor_unchanged"])
 
     def test_report_scrubs_secrets_even_when_input_contains_one(self) -> None:
         secret = "sk-harbor-THIS-MUST-NOT-APPEAR"

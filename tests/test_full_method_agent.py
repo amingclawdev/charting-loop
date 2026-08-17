@@ -584,6 +584,42 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertEqual(0, verified.returncode, verified.stderr)
             self.assertTrue(json.loads(verified.stdout)["ok"])
 
+    def test_freeze_verification_rejects_python_cache_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "method").mkdir(parents=True)
+            corridor = root / "corridor"
+            corridor.mkdir()
+            (root / "method" / "METHOD.md").write_text(
+                "method\n", encoding="utf-8"
+            )
+            (corridor / "task_adapter.py").write_text(
+                "VALUE = 1\n", encoding="utf-8"
+            )
+            frozen = subprocess.run(
+                [sys.executable, "-c", contract.freeze_program(str(root))],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, frozen.returncode, frozen.stderr)
+
+            os.chmod(corridor, 0o755)
+            cache = corridor / "__pycache__"
+            cache.mkdir()
+            (cache / "task_adapter.cpython-312.pyc").write_bytes(b"changed")
+            verified = subprocess.run(
+                [sys.executable, "-c", contract.verify_freeze_program(str(root))],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(2, verified.returncode, verified.stderr)
+            probe = json.loads(verified.stdout)
+            self.assertFalse(probe["ok"])
+            self.assertIn("manifest_file_mismatch", probe["violations"])
+            self.assertIn("corridor_digest_mismatch", probe["violations"])
+
     def test_freezer_records_complete_acceptance_ledger(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -759,6 +795,22 @@ class FullMethodContractTests(unittest.TestCase):
             events.index("terminate_exact_remote_tree"), events.index("archive")
         )
         self.assertIn("host_cancelled_remote_still_alive", events)
+
+    def test_owned_phase_disables_descendant_python_bytecode_writes(self) -> None:
+        adapter = load_harbor_agent_with_stubs()
+        agent = object.__new__(adapter._PhaseCodex)
+        agent._phase_label = "worker"
+        agent._phase_token = "phase-token"
+        agent._phase_token_hash = "sha256:" + "a" * 64
+        agent._phase_identity_path = "/tmp/phase-identity.json"
+
+        command = agent._owned_command(
+            "codex exec --dangerously-bypass-approvals-and-sandbox --json -- task"
+        )
+
+        bytecode_export = "export PYTHONDONTWRITEBYTECODE=1;"
+        self.assertIn(bytecode_export, command)
+        self.assertLess(command.index(bytecode_export), command.index("setsid sh -c"))
 
     def test_phase_cancellation_cleans_up_and_unproven_quiescence_fails_closed(
         self,
