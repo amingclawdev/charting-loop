@@ -27,12 +27,12 @@ distinguish method attribution from the general benefit of building a tool first
   `sha256:a32a61879ea94eb9dc16fa1fbeb398759f0c07ca633d9d1f6aec760207036da3`.
 - Population: 74 scored tasks in 7 domains; 4 tasks require GPU-capable execution.
 - Agent: `benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent`.
-- Method: `charting-loop-method-v5` at
-  `8b0fd5e1c6102c6b4c44cf03612b93c450ddb6fd`.
+- Method: `charting-loop-method-v6` at
+  `3bf463f013e68f157028f85e0e80c7608091a851`.
 - Method digest:
-  `sha256:1b8d375f835e1226682febeb2479ea018b4d27725f376128a31430d39a46975a`.
+  `sha256:ff951939a1573acbf70efe9054f54fac6e5ba51ddabe74d531aac7dca373c28c`.
 - Scope-datum digest:
-  `sha256:6a9cfc8eb65d90a5deca463113e238b96c6b28af09c63b3b7ea537c2af2949f0`.
+  `sha256:16255fbe9f46502cbe9841a0e2338dfcb81cf0fcfb43f1d5713c752aaee71537`.
 - SDK: `corridor_kit`, resolved by `KIT_VERSION` plus the canonical source-tree digest
   recorded in each trial before Builder starts.
 
@@ -43,7 +43,7 @@ identity. Any byte change creates a new condition.
 
 | Role | Receives | May write | Cannot claim |
 |---|---|---|---|
-| Runner | frozen identities, task environment, role outputs | freeze manifest, Position timeline, run metadata | task correctness |
+| Runner | frozen identities, one task deadline, task environment, role outputs | freeze manifests, Position timeline, run metadata, restoration of the latest complete Worker snapshot | task correctness |
 | Builder | method, official goal and public task world, frozen SDK | Builder scratch and task Corridor before freeze | final task execution or evaluator PASS |
 | Worker | official task, live state, frozen Corridor, frozen SDK, runner timeline | official task state | that row/reminder status proves acceptance |
 | Independent QA | official task, post-Worker state, same Corridor/SDK/timeline | QA assessment only | mutation authority or grading authority |
@@ -109,29 +109,56 @@ block execution. Reminder delivery and use are observable process facts, not Gat
 Missing timeline evidence is reported as evidence loss and never suppresses Harbor
 grading.
 
+## One task deadline and monotonic submission custody
+
+The official task time limit is one end-to-end deadline. Builder, Worker, QA, repair,
+and closure are logical handoffs inside that same clock, not separately budgeted
+stages. A small finalization reserve may be held inside the total so the runner can
+stop the active process, verify custody, restore the last complete Worker submission,
+and return to Harbor. It is not extra task time.
+
+Worker freezes the first complete, scorable official task state as soon as it exists
+and freezes every later verified improvement as a new immutable version. QA freezes
+its assessment separately; a QA artifact cannot replace, invalidate, or delete a
+Worker submission. When the remaining time is insufficient for another complete
+transition, the runner stops the exact active role, restores the latest verified
+Worker snapshot atomically, and returns that state for official grading. If no
+complete Worker snapshot exists, the run reports that fact and returns the live task
+state without fabricating one.
+
+Submission freezing is custody, not a Gate, correctness certificate, acceptance
+decision, or authority grant. It never makes an incomplete state correct and never
+permits work after the task deadline.
+
 ## Per-task sequence
 
 1. The doctor verifies clean committed source, exact dataset/method/agent identities,
    Modal and Codex readiness, sufficient operator-attested spend headroom, and the
    unused job identity.
-2. The runner hashes and uploads the frozen SDK, verifies the remote tree digest, and
-   initializes the Position timeline.
+2. The runner derives the one official task deadline, reserves only bounded
+   finalization time inside it, hashes and uploads the frozen SDK, verifies the remote
+   tree digest, initializes the Position timeline, and creates the agent-owned
+   submission store.
 3. A fresh Builder receives method, task goal, public environment, and SDK. It builds
    only the current task Corridor and does not execute the final task.
 4. The runner freezes the Corridor, records acceptance/work/capability status, and
    projects the initial current row and reminders.
 5. A fresh Worker reads the Corridor and runtime Guide, executes the official task,
-   and independently verifies all mutations against the acceptance ledger.
-6. A distinct QA session reads and may execute the same frozen Corridor and
+   independently verifies all mutations against the acceptance ledger, and freezes
+   its first complete official task state plus every verified improvement.
+6. If time remains, a distinct QA session reads and may execute the same frozen Corridor and
    capabilities, reads the same timeline/Guide, independently re-reads public sources,
-   and writes one result for every expected acceptance ID.
+   writes one result for every expected acceptance ID, and freezes that assessment
+   separately from Worker state.
 7. QA `pass`, `blocked`, and `not_assessed` are advisory. A `fail` triggers the one
    frozen repair allowance only when it contains a concrete acceptance-ID witness with
    constraint, observation, and safe replay.
-8. The same Worker may perform one bounded repair; the same QA then rechecks the whole
-   ledger, not only the prior witness.
-9. The agent returns unconditionally to Harbor. QA never suppresses, replaces, or
-   short-circuits the benchmark grader.
+8. If time remains, the same Worker may perform one bounded repair and freezes a new
+   Worker version only after the repaired official state is complete; the same QA may
+   then recheck the whole ledger, not only the prior witness.
+9. Before returning unconditionally to Harbor, the runner restores the latest
+   verified complete Worker snapshot. QA never suppresses or replaces the Worker
+   submission and never short-circuits the benchmark grader.
 
 Every Builder, Worker, QA, repair, and closure model call belongs to the scored agent
 cost. Complete role trajectories and runtime identities are retained once in the
@@ -153,8 +180,9 @@ rule and is not this benchmark procedure.
 ## Interpretation and contamination
 
 Report aggregate score, every task outcome, Builder construction status, work/capability
-validation status, Worker/QA timeout, QA outcome, repair count, SDK digest, cost, and
-infrastructure errors. Do not hide null, negative, blocked, or invalid cases.
+validation status, total deadline, remaining time at each handoff, submission and
+fallback status, QA outcome, repair count, SDK digest, cost, and infrastructure
+errors. Do not hide null, negative, blocked, or invalid cases.
 
 The strongest accurate description is:
 

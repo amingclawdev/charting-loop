@@ -12,19 +12,20 @@ local checks, an authenticated Modal workspace, and a Codex login on the launch
 host. Never paste subscription, Harbor, Modal, or Codex tokens into a command,
 configuration committed to Git, task prompt, or result artifact.
 
-This run is bound to `charting-loop-method-v5` at
-`8b0fd5e1c6102c6b4c44cf03612b93c450ddb6fd`, METHOD digest
-`sha256:1b8d375f835e1226682febeb2479ea018b4d27725f376128a31430d39a46975a`,
+This run is bound to `charting-loop-method-v6` at
+`3bf463f013e68f157028f85e0e80c7608091a851`, METHOD digest
+`sha256:ff951939a1573acbf70efe9054f54fac6e5ba51ddabe74d531aac7dca373c28c`,
 and SCOPE-DATUM digest
-`sha256:6a9cfc8eb65d90a5deca463113e238b96c6b28af09c63b3b7ea537c2af2949f0`.
-Agent v0.6.0 resolves this identity and rejects changed catalog or method bytes before
+`sha256:16255fbe9f46502cbe9841a0e2338dfcb81cf0fcfb43f1d5713c752aaee71537`.
+Agent v0.7.0 resolves this identity and rejects changed catalog or method bytes before
 any paid model call.
 
 The agent computes the local `corridor_kit` source-tree digest, uploads that exact SDK
 read-only before Builder, verifies the remote digest, and records it in trial metadata.
 The SDK supplies task-neutral work rows, capability registry, Position timeline,
-advisory reminders, and a generic read-only binary pack. It contains no task-specific
-patch, offset, verifier fact, or stored answer.
+advisory reminders, immutable Worker/QA submission custody, and a generic read-only
+binary pack. It contains no task-specific patch, offset, verifier fact, or stored
+answer.
 
 ```bash
 uv tool install --upgrade 'harbor[modal]'
@@ -78,7 +79,7 @@ HARBOR_PY="$HOME/.local/share/uv/tools/harbor/bin/python"
 export CHARTING_LOOP_MODAL_SPEND_LIMIT_USD='<the current cap shown in the Modal dashboard>'
 
 python3 tools/terminal_bench_doctor.py \
-  --job-name charting-loop-tb3-ico-path-patch-006 \
+  --job-name charting-loop-tb3-ico-path-patch-007 \
   --jobs-dir jobs \
   --modal-spend-limit-usd "$CHARTING_LOOP_MODAL_SPEND_LIMIT_USD" \
   --min-modal-headroom-usd 1.00 \
@@ -105,7 +106,7 @@ environment, or model call. It verifies all of the following before returning
 - Codex login, `~/.codex/auth.json`, `CODEX_FORCE_AUTH_JSON=1`, and the explicit
   Trusted Cyber Access attestation;
 - exactly the canonical task filter `terminal-bench/ico-path-patch`, one task, one
-  concurrent trial, Modal, Agent v0.6.0,
+  concurrent trial, Modal, Agent v0.7.0,
   `gpt-5.6-sol` at max effort, zero automatic retries, and private upload;
 - the cached task's x86-64 binary, which requires the Modal amd64 environment rather
   than a local arm64 execution substitute;
@@ -130,7 +131,7 @@ export PYTHONPATH="$CHARTING_LOOP_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export CODEX_FORCE_AUTH_JSON=1
 
 harbor run \
-  --job-name charting-loop-tb3-ico-path-patch-006 \
+  --job-name charting-loop-tb3-ico-path-patch-007 \
   -o jobs \
   -d terminal-bench/terminal-bench@3.0.0 \
   -i terminal-bench/ico-path-patch \
@@ -183,9 +184,25 @@ capability, and reminder design but supplied no task bytes, offsets, opcodes, ve
 material, transcript content, or repair to method v5 or the frozen SDK. Never reuse or
 overwrite `005`; the next paid identity is `006`.
 
+Job `charting-loop-tb3-ico-path-patch-006` is permanently retained as a valid
+end-to-end method-v5 observation with official reward `0.0`. The fixed per-phase
+allocation stopped Worker before a complete official deliverable was placed under
+submission custody; downstream QA time could not recover that lost state. This is a
+method/runner performance failure, not an account or infrastructure invalidation. It
+motivated the task-neutral v6 rule of one total deadline plus monotonic Worker
+snapshots; no task answer, patch byte, offset, verifier fact, or transcript content
+was imported into v6. Never reuse or overwrite `006`; the next paid identity is
+`007`.
+
 The default task time limit is part of the initial leaderboard condition. Do not
 silently raise `--agent-timeout-multiplier`; if a larger end-to-end budget is needed,
 declare and label it as a separate condition.
+
+The task's advertised time limit is the only execution budget. Builder, Worker, QA,
+repair, and closure do not receive independent hard allocations. A bounded
+finalization reserve remains inside the total deadline solely to stop the current
+process, verify custody, restore the latest complete Worker snapshot, and return to
+Harbor.
 
 Acceptance checks for the smoke task:
 
@@ -204,6 +221,14 @@ Acceptance checks for the smoke task:
   non-gating timeline evidence loss.
 - Worker and QA logs both query the same frozen work/capability paths and runner-owned
   timeline; each treats reminders as advisory rather than mutation or grading Gates.
+- orchestration metadata records one absolute task deadline and remaining time at
+  every role handoff, and contains no independent per-phase budget allocation.
+- Worker freezes its first complete, scorable official task state and every later
+  verified improvement as immutable, digest-bound versions; QA freezes assessments in
+  a separate role namespace.
+- before grading, the runner verifies and restores the latest complete Worker snapshot
+  atomically. If no Worker snapshot exists, metadata says so explicitly and does not
+  invent one.
 - QA emits exactly one result for every expected acceptance ID, independently checks
   the original public task sources, and reports no unmapped or unresolved item before
   pass.

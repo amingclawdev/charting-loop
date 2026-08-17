@@ -221,8 +221,8 @@ class FullMethodContractTests(unittest.TestCase):
             "terminal-bench/terminal-bench@3.0.0",
             "74 scored tasks",
             "4 tasks require GPU-capable execution",
-            "QA never suppresses, replaces, or",
-            "short-circuits the benchmark grader",
+            "QA never suppresses or replaces the Worker",
+            "never short-circuits the benchmark grader",
             "Do not ask Builder to construct a mandatory approval",
             "linear-unlock",
             "Rule remains the normative authority layer",
@@ -233,8 +233,10 @@ class FullMethodContractTests(unittest.TestCase):
             "CAPABILITIES.json",
             "hash-linked append-only Position timeline",
             "Reminder delivery and use are observable process facts, not Gates",
-            "rechecks the whole\n   ledger, not only the prior witness",
-            "charting-loop-method-v5",
+            "restores the latest\n   verified complete Worker snapshot",
+            "charting-loop-method-v6",
+            "one end-to-end deadline",
+            "not a Gate",
             "same-task rerun",
         ):
             self.assertIn(marker, protocol)
@@ -249,7 +251,7 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertIn(marker, runbook)
         self.assertNotIn("--ae CODEX_FORCE_AUTH_JSON=1", runbook)
 
-    def test_agent_is_bound_to_the_exact_frozen_v5_method(self) -> None:
+    def test_agent_is_bound_to_the_exact_frozen_v6_method(self) -> None:
         index = json.loads(
             (REPOSITORY_ROOT / "method-paper" / "VERSIONS.json").read_text(
                 encoding="utf-8"
@@ -258,7 +260,7 @@ class FullMethodContractTests(unittest.TestCase):
         versions = [
             version
             for version in index["versions"]
-            if version["version_id"] == "charting-loop-method-v5"
+            if version["version_id"] == "charting-loop-method-v6"
         ]
         self.assertEqual(1, len(versions))
         version = versions[0]
@@ -266,7 +268,7 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertTrue(version["study_eligible"])
         self.assertFalse(version["adoption_eligible"])
         self.assertEqual(
-            "8b0fd5e1c6102c6b4c44cf03612b93c450ddb6fd",
+            "3bf463f013e68f157028f85e0e80c7608091a851",
             version["source_commit"],
         )
         for path_key, digest_key in (
@@ -281,7 +283,7 @@ class FullMethodContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         for value in (
-            "charting-loop-method-v5",
+            "charting-loop-method-v6",
             version["source_commit"],
             version["content_sha256"],
             version["scope_datum_sha256"],

@@ -1,0 +1,118 @@
+{
+  "schema_version": "charting-loop/method-claims/v1",
+  "method_version_id": "charting-loop-method-v6",
+  "claims": [
+    {
+      "claim_id": "claim-plane-control-separation",
+      "statement": "Rule and Fact input planes remain distinct from the deterministic Guide control plane and from MethodRef knowledge inputs; effective Direction resolves to declared Rule authority.",
+      "origin": "method-decision",
+      "scope": "method and conforming projections",
+      "falsified_by": "a conforming projection treats Guide, Fact, or MethodRef material as independent authorizing Rule authority"
+    },
+    {
+      "claim_id": "claim-task-acceptance-ledger",
+      "statement": "Direction for a task-conditioned Candidate contains a source-complete atomic acceptance ledger with explicit scope, decision Rules, typed relations, and separate definition, applicability, coverage, and assessment states.",
+      "origin": "method-decision",
+      "scope": "task-conditioned Corridor construction and QA",
+      "falsified_by": "a conforming Candidate silently drops a public normative clause, invents precedence, or collapses ledger definition, applicability, coverage, and assessment into one status"
+    },
+    {
+      "claim_id": "claim-work-backlog-projection",
+      "statement": "A declared task work backlog is an immutable, acyclic execution projection whose stable rows bind the complete acceptance-ID set to dependencies, task scope, done-when conditions, selected capability IDs, and advisory reminders without creating authority.",
+      "origin": "method-decision",
+      "scope": "task-conditioned Corridor construction and execution",
+      "falsified_by": "a conforming backlog contains dangling or cyclic rows, omits an acceptance item, changes success semantics, or treats row state as permission or proof of acceptance"
+    },
+    {
+      "claim_id": "claim-reusable-capability-boundary",
+      "statement": "Reusable capability modules bind exact mechanics, contracts, applicability, side effects, version, and digest while excluding task answers and post-outcome learning; reportable experiments freeze the capability pack before scored task exposure.",
+      "origin": "method-decision",
+      "scope": "reusable domain mechanics and construction experiments",
+      "falsified_by": "a reusable module embeds task-specific solution data, hides mutating effects, changes after task exposure, or is identified only by a mutable name or branch"
+    },
+    {
+      "claim_id": "claim-runtime-row-guide-reminders",
+      "statement": "A runner-held hash-linked Position timeline projects the same current row, bounded capabilities, and replayable advisory reminders for Worker and QA; the projection cannot rewrite frozen Rules, synthesize completion evidence, authorize mutation, or block external evaluation.",
+      "origin": "method-decision",
+      "scope": "task runtime, Worker, and independent QA",
+      "falsified_by": "Worker and QA receive different row projections, reminders become undeclared Gates, or timeline events silently rewrite frozen acceptance, work, or capability definitions"
+    },
+    {
+      "claim_id": "claim-total-deadline-monotonic-submission",
+      "statement": "A bounded single-task experiment uses one total deadline across logical role handoffs and monotonically preserves complete Worker submissions; QA assessments are separate, and the newest verified Worker revision is restored before external scoring.",
+      "origin": "method-decision",
+      "scope": "bounded task execution, repair, QA, and external scoring handoff",
+      "falsified_by": "a phase-local hard cutoff discards a complete submission, incomplete later work replaces the newest complete Worker revision, QA suppresses fallback or scoring, or restore expands Worker authority"
+    },
+    {
+      "claim_id": "claim-rule-authority-and-gate-coherence",
+      "statement": "Rule is the normative authority layer; Contract is only a versioned Rule-closure container or binding, and any declared Gate, Guide, and Entrance share one coherent Rule closure, Fact root, role/scope, world, warranties, and verdict.",
+      "origin": "method-decision",
+      "scope": "Rule transitions and optional Gate projections",
+      "falsified_by": "a conforming Gate invents authority, evaluates an orphan predicate, repairs a conflict locally, or creates a downstream evidence demand that no earlier legal transition can satisfy"
+    },
+    {
+      "claim_id": "claim-architecture-neutral-projection",
+      "statement": "Method objects are semantic roles and proof obligations rather than mandatory services, agents, modules, files, schema fields, or deployment topology; conformance is semantic and evidential equivalence.",
+      "origin": "method-decision",
+      "scope": "all implementations and profiles",
+      "falsified_by": "conformance requires copying a named source system, module layout, service boundary, or field vocabulary despite an equivalent canonical projection"
+    },
+    {
+      "claim_id": "claim-experiment-and-governed-profiles",
+      "statement": "Construction experiments preserve incomplete closure as observable nonblocking outcomes, whereas a separately declared long-lived-system profile may enforce Gates only after Rule authority, conformance, and whole-chain coherence are established.",
+      "origin": "method-decision",
+      "scope": "experimental intervention design and stable governed systems",
+      "falsified_by": "a construction experiment silently adds blocking Gates or a governed-system Gate is treated as valid without its declared Rule and satisfiable chain"
+    },
+    {
+      "claim_id": "claim-linear-unlock",
+      "statement": "An authorized no-PASS bypass may linearly expose downstream Gate defects while preserving one diagnostic root, but a bypass never establishes PASS or C.",
+      "origin": "method-decision",
+      "scope": "recovery in the long-lived governed-system profile",
+      "falsified_by": "a bypass is reported as proof of conformance or current C, or dependent downstream bypasses lose their shared diagnostic root"
+    },
+    {
+      "claim_id": "claim-corridor-assisted-independent-qa",
+      "statement": "Independent QA receives the same frozen Corridor as the executor, independently re-reads public task sources, accounts for every acceptance ID, and requires a replayable witness for a concrete failure.",
+      "origin": "method-decision",
+      "scope": "task-conditioned Independent QA",
+      "falsified_by": "QA assesses a different Corridor, treats witness repair as whole-task closure, reports fail without a replayable acceptance witness, or reports pass with incomplete source coverage"
+    },
+    {
+      "claim_id": "claim-one-entrance-exact-world",
+      "statement": "A Candidate has one bounded semantic Entrance and exact profile-declared world identity even when both have several physical projections.",
+      "origin": "theory-derived-method-decision",
+      "scope": "Candidate construction and traversal",
+      "falsified_by": "a certificate combines undeclared entrance identities or relies on an ambient, mutable, or moving-target world reference"
+    },
+    {
+      "claim_id": "claim-u-to-c",
+      "statement": "Repair re-enters U to scope-indexed C only through a new frozen Candidate, fresh traversal, PathCertificate, and live EvidentialWarranty without rewriting history.",
+      "origin": "theory-derived-method-decision",
+      "scope": "repair, supersession, and current consumability",
+      "falsified_by": "constructing or bypassing a Candidate is treated as C, or evidence from separate revisions is spliced into one certificate or warranty"
+    },
+    {
+      "claim_id": "claim-orthogonal-evidence",
+      "statement": "TraversalReceipt, PathCertificate, Independent QA, and the exactly two Warranty kinds remain distinct evidence propositions; none is minted solely from another.",
+      "origin": "method-decision",
+      "scope": "evidence and warranty surfaces",
+      "falsified_by": "one evidence surface automatically establishes another, or a score, log, or QA verdict is promoted to a certificate, Warranty, authority, or C"
+    },
+    {
+      "claim_id": "claim-conditional-probability-bridge",
+      "statement": "P, D, and E are conditioned on role, world, datum, and history and may only be factorized as a conditional chain; run or scenario remains the primary clustered experimental unit.",
+      "origin": "theory-derived-method-decision",
+      "scope": "method-to-experiment bridge",
+      "falsified_by": "marginal rates are multiplied or decision events and roles are treated as independent experimental units"
+    },
+    {
+      "claim_id": "claim-failure-diagnostic-rubric",
+      "statement": "Method-grounded diagnosis classifies the violated invariant as P, D, or E, records authorized-action execution failure separately as X, and remains advisory rather than minting authority, warranty, or an empirical result.",
+      "origin": "method-decision",
+      "scope": "manual and evaluator-assisted failure diagnosis",
+      "falsified_by": "diagnosis classifies only by the component that surfaced a failure or is treated as authorization, warranty, estimator, or causal evidence"
+    }
+  ]
+}

@@ -128,6 +128,7 @@ class FakeRunner:
                                 "domain/binary.py",
                                 "runtime.py",
                                 "scaffold.py",
+                                "submission.py",
                             ],
                         }
                     )
