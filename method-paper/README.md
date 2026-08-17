@@ -37,6 +37,12 @@ The v6 total-deadline/submission-custody package is
 `sha256:ff951939a1573acbf70efe9054f54fac6e5ba51ddabe74d531aac7dca373c28c`
 and SCOPE-DATUM digest
 `sha256:16255fbe9f46502cbe9841a0e2338dfcb81cf0fcfb43f1d5713c752aaee71537`.
+The v7 cooperative-role and exact-restore package is
+`charting-loop-method-v7`, frozen at
+`c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d`, with METHOD digest
+`sha256:35590e6a3adddcfc5e210a52045c473d286fdbf256db8c47f951a754d7477fb6`
+and SCOPE-DATUM digest
+`sha256:8e5daca8d7e880521b37fdf1ac63b0e7a919d4bab2446d4aca7e135689f11c35`.
 All frozen study packages are `study_eligible=true`, `adoption_eligible=false`, and
 `builder_eligible=false`; a study must name one exact version and may not request
 “current” or “latest.” The prior `draft-v2` package remains non-study-eligible audit

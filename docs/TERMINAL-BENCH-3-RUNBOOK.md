@@ -12,12 +12,12 @@ local checks, an authenticated Modal workspace, and a Codex login on the launch
 host. Never paste subscription, Harbor, Modal, or Codex tokens into a command,
 configuration committed to Git, task prompt, or result artifact.
 
-This run is bound to `charting-loop-method-v6` at
-`3bf463f013e68f157028f85e0e80c7608091a851`, METHOD digest
-`sha256:ff951939a1573acbf70efe9054f54fac6e5ba51ddabe74d531aac7dca373c28c`,
+This run is bound to `charting-loop-method-v7` at
+`c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d`, METHOD digest
+`sha256:35590e6a3adddcfc5e210a52045c473d286fdbf256db8c47f951a754d7477fb6`,
 and SCOPE-DATUM digest
-`sha256:16255fbe9f46502cbe9841a0e2338dfcb81cf0fcfb43f1d5713c752aaee71537`.
-Agent v0.7.0 resolves this identity and rejects changed catalog or method bytes before
+`sha256:8e5daca8d7e880521b37fdf1ac63b0e7a919d4bab2446d4aca7e135689f11c35`.
+Agent v0.8.0 resolves this identity and rejects changed catalog or method bytes before
 any paid model call.
 
 The agent computes the local `corridor_kit` source-tree digest, uploads that exact SDK
@@ -106,7 +106,7 @@ environment, or model call. It verifies all of the following before returning
 - Codex login, `~/.codex/auth.json`, `CODEX_FORCE_AUTH_JSON=1`, and the explicit
   Trusted Cyber Access attestation;
 - exactly the canonical task filter `terminal-bench/ico-path-patch`, one task, one
-  concurrent trial, Modal, Agent v0.7.0,
+  concurrent trial, Modal, Agent v0.8.0,
   `gpt-5.6-sol` at max effort, zero automatic retries, and private upload;
 - the cached task's x86-64 binary, which requires the Modal amd64 environment rather
   than a local arm64 execution substitute;

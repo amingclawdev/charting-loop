@@ -27,12 +27,12 @@ distinguish method attribution from the general benefit of building a tool first
   `sha256:a32a61879ea94eb9dc16fa1fbeb398759f0c07ca633d9d1f6aec760207036da3`.
 - Population: 74 scored tasks in 7 domains; 4 tasks require GPU-capable execution.
 - Agent: `benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent`.
-- Method: `charting-loop-method-v6` at
-  `3bf463f013e68f157028f85e0e80c7608091a851`.
+- Method: `charting-loop-method-v7` at
+  `c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d`.
 - Method digest:
-  `sha256:ff951939a1573acbf70efe9054f54fac6e5ba51ddabe74d531aac7dca373c28c`.
+  `sha256:35590e6a3adddcfc5e210a52045c473d286fdbf256db8c47f951a754d7477fb6`.
 - Scope-datum digest:
-  `sha256:16255fbe9f46502cbe9841a0e2338dfcb81cf0fcfb43f1d5713c752aaee71537`.
+  `sha256:8e5daca8d7e880521b37fdf1ac63b0e7a919d4bab2446d4aca7e135689f11c35`.
 - SDK: `corridor_kit`, resolved by `KIT_VERSION` plus the canonical source-tree digest
   recorded in each trial before Builder starts.
 

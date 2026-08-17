@@ -178,6 +178,7 @@ ALLOWED_METHOD_ATTRIBUTION = {
     "charting-loop-method-v4",
     "charting-loop-method-v5",
     "charting-loop-method-v6",
+    "charting-loop-method-v7",
 }
 ALLOWED_LICENSE_STATUS = {"cleared", "not-assessed", "restricted", "upstream-reference-only"}
 

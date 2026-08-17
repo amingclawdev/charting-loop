@@ -217,6 +217,7 @@ def copy_method_project(root: Path) -> None:
     (root / "catalog" / "v4").mkdir()
     (root / "catalog" / "v5").mkdir()
     (root / "catalog" / "v6").mkdir()
+    (root / "catalog" / "v7").mkdir()
     for name in ("METHOD.md", "SCOPE-DATUM.md", "VERSIONS.json"):
         shutil.copy2(
             REPOSITORY_ROOT / "method-paper" / name,
@@ -238,6 +239,10 @@ def copy_method_project(root: Path) -> None:
         shutil.copy2(
             REPOSITORY_ROOT / "catalog" / "v6" / name,
             root / "catalog" / "v6" / name,
+        )
+        shutil.copy2(
+            REPOSITORY_ROOT / "catalog" / "v7" / name,
+            root / "catalog" / "v7" / name,
         )
     shutil.copy2(
         REPOSITORY_ROOT / "theory" / "VERSIONS.json",
@@ -931,6 +936,7 @@ class ExogenousRegistryTests(unittest.TestCase):
                 "charting-loop-method-v4",
                 "charting-loop-method-v5",
                 "charting-loop-method-v6",
+                "charting-loop-method-v7",
             ],
         )
         current = next(
@@ -944,6 +950,9 @@ class ExogenousRegistryTests(unittest.TestCase):
         )
         v6 = next(
             version for version in versions if version["version_id"] == "charting-loop-method-v6"
+        )
+        v7 = next(
+            version for version in versions if version["version_id"] == "charting-loop-method-v7"
         )
         historical = next(
             version for version in versions if version["version_id"] == "draft-v2"
@@ -994,7 +1003,13 @@ class ExogenousRegistryTests(unittest.TestCase):
             v6["source_commit"],
             "3bf463f013e68f157028f85e0e80c7608091a851",
         )
-        self.assertEqual(method_report.facts["study_eligible_method_version_count"], 4)
+        self.assertTrue(v7["study_eligible"])
+        self.assertFalse(v7["adoption_eligible"])
+        self.assertEqual(
+            v7["source_commit"],
+            "c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d",
+        )
+        self.assertEqual(method_report.facts["study_eligible_method_version_count"], 5)
         self.assertEqual(method_report.facts["adoption_eligible_method_version_count"], 0)
         self.assertEqual(method_report.facts["eligible_method_version_count"], 0)
 
@@ -1083,6 +1098,7 @@ class ExogenousRegistryTests(unittest.TestCase):
                 "charting-loop-method-v4",
                 "charting-loop-method-v5",
                 "charting-loop-method-v6",
+                "charting-loop-method-v7",
             ],
         )
 
@@ -2210,7 +2226,7 @@ class ExogenousRegistryTests(unittest.TestCase):
             self.assertFalse(report.ok)
             self.assertTrue(any("PATH_SYMLINK" in error for error in report.errors))
 
-    def test_prospective_v6_runtime_projection_does_not_rewrite_frozen_v2(self) -> None:
+    def test_prospective_v7_runtime_projection_does_not_rewrite_frozen_v2(self) -> None:
         paths = [
             REPOSITORY_ROOT / "method-paper" / "METHOD.md",
             REPOSITORY_ROOT / "method-paper" / "SCOPE-DATUM.md",
@@ -2227,7 +2243,7 @@ class ExogenousRegistryTests(unittest.TestCase):
         protocol_v2 = documents["TASK-CONDITIONED-CORRIDOR-EXPERIMENT-V2.md"]
         running = documents["RUNNING-AN-EXPERIMENT.md"]
 
-        self.assertIn("Charting Loop corridor method — v6", method)
+        self.assertIn("Charting Loop corridor method — v7", method)
         self.assertIn("Status: **normative source**", method)
         self.assertIn("Architecture and projection boundary", method)
         self.assertIn("none is a reference\narchitecture", method)
@@ -2247,6 +2263,9 @@ class ExogenousRegistryTests(unittest.TestCase):
         self.assertIn("Gate conformance", method)
         self.assertIn("Gate-chain coherence", method)
         self.assertIn("typed `projection_mismatch`", method)
+        self.assertIn("cooperative-agent experiment profile", method)
+        self.assertIn("not a credential, account", method)
+        self.assertIn("per-file atomic", method)
         self.assertIn("timeline presence alone never admits a Fact", method)
         self.assertIn("fresh Worker and a separate fresh Independent", protocol_v2)
         self.assertIn("exactly one bounded Worker repair opportunity", protocol_v2)

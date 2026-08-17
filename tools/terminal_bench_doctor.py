@@ -35,17 +35,17 @@ TASK_NAME = "ico-path-patch"
 TASK_FILTER = "terminal-bench/ico-path-patch"
 TASK_CACHE_DIGEST = "0115a4136189b48da79070f9b3004dc4e0dfc1a60725c5acebdd7f380d037d14"
 AGENT_IMPORT = "benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent"
-AGENT_VERSION = "0.7.0"
+AGENT_VERSION = "0.8.0"
 CORRIDOR_SDK_VERSION = "0.3.0"
 MODEL = "openai/gpt-5.6-sol"
 REASONING_EFFORT = "max"
-METHOD_VERSION_ID = "charting-loop-method-v6"
-METHOD_SOURCE_COMMIT = "3bf463f013e68f157028f85e0e80c7608091a851"
+METHOD_VERSION_ID = "charting-loop-method-v7"
+METHOD_SOURCE_COMMIT = "c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d"
 METHOD_CONTENT_SHA256 = (
-    "sha256:ff951939a1573acbf70efe9054f54fac6e5ba51ddabe74d531aac7dca373c28c"
+    "sha256:35590e6a3adddcfc5e210a52045c473d286fdbf256db8c47f951a754d7477fb6"
 )
 METHOD_SCOPE_SHA256 = (
-    "sha256:16255fbe9f46502cbe9841a0e2338dfcb81cf0fcfb43f1d5713c752aaee71537"
+    "sha256:8e5daca8d7e880521b37fdf1ac63b0e7a919d4bab2446d4aca7e135689f11c35"
 )
 PHASE_ISOLATION_COMMIT = "9281e739f5bfa6ed78784c505f38831d8ff0f9e7"
 MIN_HARBOR_VERSION = (0, 21, 0)
@@ -328,7 +328,7 @@ def _check_git_and_method(
         return _failed(
             "immutable_inputs",
             "Frozen method or agent bytes do not match the declared condition.",
-            "Restore the frozen v6 method, Agent v0.7.0, and Corridor SDK v0.3.0 before running.",
+            "Restore the frozen v7 method, Agent v0.8.0, and Corridor SDK v0.3.0 before running.",
             {
                 "head": actual_head,
                 "method_version_id": METHOD_VERSION_ID,

@@ -1233,7 +1233,7 @@ class PublicReleaseTests(unittest.TestCase):
         self.assertTrue(any("training_ingestion must remain not-inferred" in error for error in report.errors))
         self.assertTrue(any("public upstream oracle requires publication time" in error for error in report.errors))
 
-    def test_v6_submission_custody_is_frozen_but_task_neutral(self) -> None:
+    def test_v7_submission_custody_is_frozen_but_task_neutral(self) -> None:
         versions = json.loads(
             (REPOSITORY_ROOT / "method-paper" / "VERSIONS.json").read_text(
                 encoding="utf-8"
@@ -1242,10 +1242,11 @@ class PublicReleaseTests(unittest.TestCase):
         v6 = [
             item for item in versions if item["version_id"] == "charting-loop-method-v6"
         ]
+        v7 = [
+            item for item in versions if item["version_id"] == "charting-loop-method-v7"
+        ]
         self.assertEqual(1, len(v6))
-        self.assertEqual("frozen", v6[0]["status"])
-        self.assertTrue(v6[0]["study_eligible"])
-        self.assertFalse(v6[0]["adoption_eligible"])
+        self.assertEqual(1, len(v7))
         self.assertEqual("catalog/v6/CLAIMS.json", v6[0]["claim_catalog"])
         self.assertEqual("catalog/v6/SOURCES.json", v6[0]["source_catalog"])
         self.assertEqual("catalog/v6/EVIDENCE-INDEX.json", v6[0]["evidence_index"])
@@ -1253,13 +1254,23 @@ class PublicReleaseTests(unittest.TestCase):
             "3bf463f013e68f157028f85e0e80c7608091a851",
             v6[0]["source_commit"],
         )
+        self.assertEqual("frozen", v7[0]["status"])
+        self.assertTrue(v7[0]["study_eligible"])
+        self.assertFalse(v7[0]["adoption_eligible"])
+        self.assertEqual("catalog/v7/CLAIMS.json", v7[0]["claim_catalog"])
+        self.assertEqual("catalog/v7/SOURCES.json", v7[0]["source_catalog"])
+        self.assertEqual("catalog/v7/EVIDENCE-INDEX.json", v7[0]["evidence_index"])
+        self.assertEqual(
+            "c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d",
+            v7[0]["source_commit"],
+        )
         for path_key, digest_key in (
             ("path", "content_sha256"),
             ("scope_datum_path", "scope_datum_sha256"),
         ):
-            data = (REPOSITORY_ROOT / v6[0][path_key]).read_bytes()
+            data = (REPOSITORY_ROOT / v7[0][path_key]).read_bytes()
             self.assertEqual(
-                v6[0][digest_key], "sha256:" + hashlib.sha256(data).hexdigest()
+                v7[0][digest_key], "sha256:" + hashlib.sha256(data).hexdigest()
             )
 
         public_surface = "\n".join(

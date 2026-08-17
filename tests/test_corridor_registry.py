@@ -1081,6 +1081,7 @@ class MethodIndexValidationTests(unittest.TestCase):
                 "charting-loop-method-v4",
                 "charting-loop-method-v5",
                 "charting-loop-method-v6",
+                "charting-loop-method-v7",
             ],
         )
         self.assertEqual(
@@ -1097,6 +1098,9 @@ class MethodIndexValidationTests(unittest.TestCase):
         )
         v6 = next(
             version for version in versions if version["version_id"] == "charting-loop-method-v6"
+        )
+        v7 = next(
+            version for version in versions if version["version_id"] == "charting-loop-method-v7"
         )
         historical = next(
             version for version in versions if version["version_id"] == "draft-v2"
@@ -1163,7 +1167,15 @@ class MethodIndexValidationTests(unittest.TestCase):
             v6["source_commit"],
             "3bf463f013e68f157028f85e0e80c7608091a851",
         )
-        self.assertEqual(report.facts["study_eligible_version_count"], 4)
+        self.assertEqual(v7["status"], "frozen")
+        self.assertTrue(v7["study_eligible"])
+        self.assertFalse(v7["adoption_eligible"])
+        self.assertFalse(v7["builder_eligible"])
+        self.assertEqual(
+            v7["source_commit"],
+            "c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d",
+        )
+        self.assertEqual(report.facts["study_eligible_version_count"], 5)
         self.assertEqual(report.facts["adoption_eligible_version_count"], 0)
         self.assertEqual(report.facts["builder_eligible_version_count"], 0)
         self.assertEqual(
@@ -1314,6 +1326,7 @@ class MethodIndexValidationTests(unittest.TestCase):
             (catalog_root / "v4").mkdir()
             (catalog_root / "v5").mkdir()
             (catalog_root / "v6").mkdir()
+            (catalog_root / "v7").mkdir()
             for name in ("METHOD.md", "SCOPE-DATUM.md", "VERSIONS.json"):
                 shutil.copy2(REPOSITORY_ROOT / "method-paper" / name, method_root / name)
             for name in ("CLAIMS.json", "SOURCES.json", "EVIDENCE-INDEX.json"):
@@ -1329,6 +1342,10 @@ class MethodIndexValidationTests(unittest.TestCase):
                 shutil.copy2(
                     REPOSITORY_ROOT / "catalog" / "v6" / name,
                     catalog_root / "v6" / name,
+                )
+                shutil.copy2(
+                    REPOSITORY_ROOT / "catalog" / "v7" / name,
+                    catalog_root / "v7" / name,
                 )
             versions_path = method_root / "VERSIONS.json"
             document = json.loads(versions_path.read_text(encoding="utf-8"))
@@ -1359,6 +1376,7 @@ class MethodIndexValidationTests(unittest.TestCase):
                 "charting-loop-method-v4",
                 "charting-loop-method-v5",
                 "charting-loop-method-v6",
+                "charting-loop-method-v7",
             ],
         )
 

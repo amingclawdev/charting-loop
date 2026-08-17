@@ -56,14 +56,14 @@ from benchmark_agents.contract import (
 )
 
 
-AGENT_VERSION = "0.7.0"
-METHOD_VERSION_ID = "charting-loop-method-v6"
-METHOD_SOURCE_COMMIT = "3bf463f013e68f157028f85e0e80c7608091a851"
+AGENT_VERSION = "0.8.0"
+METHOD_VERSION_ID = "charting-loop-method-v7"
+METHOD_SOURCE_COMMIT = "c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d"
 METHOD_CONTENT_SHA256 = (
-    "sha256:ff951939a1573acbf70efe9054f54fac6e5ba51ddabe74d531aac7dca373c28c"
+    "sha256:35590e6a3adddcfc5e210a52045c473d286fdbf256db8c47f951a754d7477fb6"
 )
 METHOD_SCOPE_SHA256 = (
-    "sha256:16255fbe9f46502cbe9841a0e2338dfcb81cf0fcfb43f1d5713c752aaee71537"
+    "sha256:8e5daca8d7e880521b37fdf1ac63b0e7a919d4bab2446d4aca7e135689f11c35"
 )
 ROLE_ORDER = ("builder", "worker", "qa")
 DEFAULT_TASK_TIMEOUT_SECONDS = 5400
@@ -322,7 +322,7 @@ def _sha256(path: Path) -> str:
 
 
 def _resolve_frozen_method(repository_root: Path) -> Path:
-    """Resolve the exact v6 bytes or fail before a paid model call."""
+    """Resolve the exact v7 bytes or fail before a paid model call."""
 
     index_path = repository_root / "method-paper" / "VERSIONS.json"
     document = json.loads(index_path.read_text(encoding="utf-8"))
@@ -357,9 +357,9 @@ def _resolve_frozen_method(repository_root: Path) -> Path:
     if not method_path.is_file() or not scope_path.is_file():
         raise FileNotFoundError("Frozen method or scope datum is missing")
     if _sha256(method_path) != METHOD_CONTENT_SHA256:
-        raise RuntimeError("Mutable METHOD.md bytes do not match the frozen v6 digest")
+        raise RuntimeError("Mutable METHOD.md bytes do not match the frozen v7 digest")
     if _sha256(scope_path) != METHOD_SCOPE_SHA256:
-        raise RuntimeError("Mutable SCOPE-DATUM.md bytes do not match the frozen v6 digest")
+        raise RuntimeError("Mutable SCOPE-DATUM.md bytes do not match the frozen v7 digest")
     return method_path
 
 
