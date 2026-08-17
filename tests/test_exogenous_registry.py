@@ -215,6 +215,7 @@ def copy_method_project(root: Path) -> None:
     for directory in ("method-paper", "catalog", "theory"):
         (root / directory).mkdir(parents=True, exist_ok=True)
     (root / "catalog" / "v4").mkdir()
+    (root / "catalog" / "v5").mkdir()
     for name in ("METHOD.md", "SCOPE-DATUM.md", "VERSIONS.json"):
         shutil.copy2(
             REPOSITORY_ROOT / "method-paper" / name,
@@ -228,6 +229,10 @@ def copy_method_project(root: Path) -> None:
         shutil.copy2(
             REPOSITORY_ROOT / "catalog" / "v4" / name,
             root / "catalog" / "v4" / name,
+        )
+        shutil.copy2(
+            REPOSITORY_ROOT / "catalog" / "v5" / name,
+            root / "catalog" / "v5" / name,
         )
     shutil.copy2(
         REPOSITORY_ROOT / "theory" / "VERSIONS.json",
@@ -915,13 +920,21 @@ class ExogenousRegistryTests(unittest.TestCase):
         self.assertTrue(method_report.ok, method_report.errors)
         self.assertEqual(
             [version["version_id"] for version in versions],
-            ["paper2-current-v2", "draft-v2", "charting-loop-method-v4"],
+            [
+                "paper2-current-v2",
+                "draft-v2",
+                "charting-loop-method-v4",
+                "charting-loop-method-v5",
+            ],
         )
         current = next(
             version for version in versions if version["version_id"] == "paper2-current-v2"
         )
         v4 = next(
             version for version in versions if version["version_id"] == "charting-loop-method-v4"
+        )
+        v5 = next(
+            version for version in versions if version["version_id"] == "charting-loop-method-v5"
         )
         historical = next(
             version for version in versions if version["version_id"] == "draft-v2"
@@ -960,7 +973,13 @@ class ExogenousRegistryTests(unittest.TestCase):
         )
         self.assertTrue(v4["study_eligible"])
         self.assertFalse(v4["adoption_eligible"])
-        self.assertEqual(method_report.facts["study_eligible_method_version_count"], 2)
+        self.assertTrue(v5["study_eligible"])
+        self.assertFalse(v5["adoption_eligible"])
+        self.assertEqual(
+            v5["source_commit"],
+            "8b0fd5e1c6102c6b4c44cf03612b93c450ddb6fd",
+        )
+        self.assertEqual(method_report.facts["study_eligible_method_version_count"], 3)
         self.assertEqual(method_report.facts["adoption_eligible_method_version_count"], 0)
         self.assertEqual(method_report.facts["eligible_method_version_count"], 0)
 
@@ -1044,7 +1063,7 @@ class ExogenousRegistryTests(unittest.TestCase):
                 for version in versions
                 if version["study_eligible"] is True
             ],
-            ["paper2-current-v2", "charting-loop-method-v4"],
+            ["paper2-current-v2", "charting-loop-method-v4", "charting-loop-method-v5"],
         )
 
     def test_method_loader_rejects_any_invalid_study_eligible_version(self) -> None:
@@ -2171,7 +2190,7 @@ class ExogenousRegistryTests(unittest.TestCase):
             self.assertFalse(report.ok)
             self.assertTrue(any("PATH_SYMLINK" in error for error in report.errors))
 
-    def test_prospective_v4_acceptance_qa_and_ledger_do_not_rewrite_frozen_v2(self) -> None:
+    def test_prospective_v5_runtime_projection_does_not_rewrite_frozen_v2(self) -> None:
         paths = [
             REPOSITORY_ROOT / "method-paper" / "METHOD.md",
             REPOSITORY_ROOT / "method-paper" / "SCOPE-DATUM.md",
@@ -2188,7 +2207,7 @@ class ExogenousRegistryTests(unittest.TestCase):
         protocol_v2 = documents["TASK-CONDITIONED-CORRIDOR-EXPERIMENT-V2.md"]
         running = documents["RUNNING-AN-EXPERIMENT.md"]
 
-        self.assertIn("Charting Loop corridor method — v4", method)
+        self.assertIn("Charting Loop corridor method — v5", method)
         self.assertIn("Status: **normative source**", method)
         self.assertIn("Architecture and projection boundary", method)
         self.assertIn("none is a reference\narchitecture", method)
@@ -2197,6 +2216,9 @@ class ExogenousRegistryTests(unittest.TestCase):
         self.assertIn("append-only **Position ledger**", method)
         self.assertIn("IndependentQAAssessment", method)
         self.assertIn("task acceptance ledger", method)
+        self.assertIn("Work backlog and reusable capability modules", method)
+        self.assertIn("current row", method)
+        self.assertIn("reminder", method)
         self.assertIn("Closing a reported witness is not task closure", method)
         self.assertIn("linear unlock", method)
         self.assertIn("Rule is the normative authority layer", method)

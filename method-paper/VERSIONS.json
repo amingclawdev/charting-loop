@@ -68,7 +68,7 @@
     {
       "version_id": "charting-loop-method-v5",
       "status": "frozen",
-      "study_eligible": false,
+      "study_eligible": true,
       "adoption_eligible": false,
       "builder_eligible": false,
       "source_commit": "8b0fd5e1c6102c6b4c44cf03612b93c450ddb6fd",
@@ -82,9 +82,9 @@
         "representation": "pdf",
         "content_sha256": "sha256:f557af476441e814e4d86041969c18fde2299a6a47d28658bdeb8cec2d7296c1"
       },
-      "claim_catalog": "catalog/v4/CLAIMS.json",
-      "source_catalog": "catalog/v4/SOURCES.json",
-      "evidence_index": "catalog/v4/EVIDENCE-INDEX.json"
+      "claim_catalog": "catalog/v5/CLAIMS.json",
+      "source_catalog": "catalog/v5/SOURCES.json",
+      "evidence_index": "catalog/v5/EVIDENCE-INDEX.json"
     }
   ]
 }

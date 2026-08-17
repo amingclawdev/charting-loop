@@ -35,16 +35,17 @@ TASK_NAME = "ico-path-patch"
 TASK_FILTER = "terminal-bench/ico-path-patch"
 TASK_CACHE_DIGEST = "0115a4136189b48da79070f9b3004dc4e0dfc1a60725c5acebdd7f380d037d14"
 AGENT_IMPORT = "benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent"
-AGENT_VERSION = "0.5.2"
+AGENT_VERSION = "0.6.0"
+CORRIDOR_SDK_VERSION = "0.2.0"
 MODEL = "openai/gpt-5.6-sol"
 REASONING_EFFORT = "max"
-METHOD_VERSION_ID = "charting-loop-method-v4"
-METHOD_SOURCE_COMMIT = "0d3ed5c357c906edcc697a83b3ce681c68cd353a"
+METHOD_VERSION_ID = "charting-loop-method-v5"
+METHOD_SOURCE_COMMIT = "8b0fd5e1c6102c6b4c44cf03612b93c450ddb6fd"
 METHOD_CONTENT_SHA256 = (
-    "sha256:d3a9da497c31f3bde46a31f37990236af51b9f677ae807d023582b27254c4ab0"
+    "sha256:1b8d375f835e1226682febeb2479ea018b4d27725f376128a31430d39a46975a"
 )
 METHOD_SCOPE_SHA256 = (
-    "sha256:65c6a91120c15bec30278288a26ecc98bdf96cfb07fd490dc915408a78844327"
+    "sha256:6a9cfc8eb65d90a5deca463113e238b96c6b28af09c63b3b7ea537c2af2949f0"
 )
 PHASE_ISOLATION_COMMIT = "9281e739f5bfa6ed78784c505f38831d8ff0f9e7"
 MIN_HARBOR_VERSION = (0, 21, 0)
@@ -273,23 +274,65 @@ def _check_git_and_method(
         )
     expected_record = (
         record.get("status") == "frozen"
+        and record.get("study_eligible") is True
+        and record.get("adoption_eligible") is False
+        and record.get("builder_eligible") is False
         and record.get("source_commit") == METHOD_SOURCE_COMMIT
         and record.get("content_sha256") == METHOD_CONTENT_SHA256
         and record.get("scope_datum_sha256") == METHOD_SCOPE_SHA256
     )
     agent_match = re.search(r'^AGENT_VERSION\s*=\s*"([^"]+)"', agent_source, re.MULTILINE)
+    sdk_program = (
+        "import json; from pathlib import Path; "
+        "from corridor_kit import KIT_VERSION, regular_tree_manifest; "
+        "manifest=regular_tree_manifest(Path('corridor_kit')); "
+        "print(json.dumps({'kit_version':KIT_VERSION,'tree_digest':manifest['tree_digest'],"
+        "'paths':[item['path'] for item in manifest['files']]},sort_keys=True))"
+    )
+    sdk_result = runner.run(
+        [tools["harbor_python"], "-c", sdk_program],
+        cwd=config.repo_root,
+        env={"PYTHONPATH": str(config.repo_root)},
+    )
+    try:
+        sdk_identity = _json(sdk_result.stdout)
+    except (ValueError, TypeError):
+        sdk_identity = {}
+    sdk_paths = set(sdk_identity.get("paths", []))
+    required_sdk_paths = {
+        "__main__.py",
+        "acceptance.py",
+        "capabilities.py",
+        "core.py",
+        "domain/binary.py",
+        "runtime.py",
+        "scaffold.py",
+    }
+    sdk_exact = (
+        sdk_result.returncode == 0
+        and sdk_identity.get("kit_version") == CORRIDOR_SDK_VERSION
+        and isinstance(sdk_identity.get("tree_digest"), str)
+        and re.fullmatch(r"sha256:[0-9a-f]{64}", sdk_identity["tree_digest"])
+        is not None
+        and required_sdk_paths.issubset(sdk_paths)
+    )
     if (
         not expected_record
         or method_digest != METHOD_CONTENT_SHA256
         or scope_digest != METHOD_SCOPE_SHA256
         or not agent_match
         or agent_match.group(1) != AGENT_VERSION
+        or not sdk_exact
     ):
         return _failed(
             "immutable_inputs",
             "Frozen method or agent bytes do not match the declared condition.",
-            "Restore the frozen v4 method bytes and Agent v0.5.2 before running.",
-            {"head": actual_head, "method_version_id": METHOD_VERSION_ID},
+            "Restore the frozen v5 method, Agent v0.6.0, and Corridor SDK v0.2.0 before running.",
+            {
+                "head": actual_head,
+                "method_version_id": METHOD_VERSION_ID,
+                "corridor_sdk_version": sdk_identity.get("kit_version"),
+            },
         )
     return _passed(
         "immutable_inputs",
@@ -301,6 +344,8 @@ def _check_git_and_method(
             "method_sha256": method_digest,
             "scope_datum_sha256": scope_digest,
             "agent_version": AGENT_VERSION,
+            "corridor_sdk_version": CORRIDOR_SDK_VERSION,
+            "corridor_sdk_tree_digest": sdk_identity["tree_digest"],
             "isolation_ancestor": PHASE_ISOLATION_COMMIT,
         },
     )
@@ -861,6 +906,7 @@ def run_doctor(config: DoctorConfig, runner: Runner | None = None) -> dict[str, 
             "model": MODEL,
             "reasoning_effort": REASONING_EFFORT,
             "method_version_id": METHOD_VERSION_ID,
+            "corridor_sdk_version": CORRIDOR_SDK_VERSION,
             "job_name": config.job_name,
             "max_retries": 0,
             "upload_visibility": "private",

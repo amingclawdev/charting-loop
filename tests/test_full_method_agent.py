@@ -251,7 +251,7 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertEqual(1, len(versions))
         version = versions[0]
         self.assertEqual("frozen", version["status"])
-        self.assertFalse(version["study_eligible"])
+        self.assertTrue(version["study_eligible"])
         self.assertFalse(version["adoption_eligible"])
         self.assertEqual(
             "8b0fd5e1c6102c6b4c44cf03612b93c450ddb6fd",

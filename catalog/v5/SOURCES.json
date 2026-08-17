@@ -1,0 +1,46 @@
+{
+  "schema_version": "charting-loop/method-sources/v1",
+  "method_version_id": "charting-loop-method-v5",
+  "sources": [
+    {
+      "source_id": "charting-loop-theory-zenodo-v1",
+      "kind": "primary-theory",
+      "artifact_id": "charting-loop-theory",
+      "version_id": "zenodo-v1",
+      "repository_id": "drift-gym",
+      "commit": "cf5ac479e208a2401b9358527d58df48e22c0670",
+      "path": "paper/charting-loop-zenodo.pdf",
+      "content_sha256": "sha256:f557af476441e814e4d86041969c18fde2299a6a47d28658bdeb8cec2d7296c1"
+    },
+    {
+      "source_id": "charting-loop-theory-internal-v5",
+      "kind": "drafting-provenance",
+      "artifact_id": "charting-loop-theory",
+      "version_id": "internal-v5-arxiv-initial",
+      "repository_id": "drift-gym",
+      "commit": "e0dd3a466654011ecf0cb6d8f32e9cbbc4c3cc99",
+      "path": "paper/charting-loop-theory-v2.md",
+      "content_sha256": "sha256:7c7a1522d3d6abd7fb3568046816e8f2708a979cbce0f3c2e041d24f4f8135ea"
+    },
+    {
+      "source_id": "charting-loop-repository-v1",
+      "kind": "repository-experience",
+      "artifact_id": "charting-loop",
+      "version_id": "pilot-v1-baseline",
+      "repository_id": "charting-loop",
+      "commit": "177ab03baa8d03ce77bbc0bd823fe4198e0ec076",
+      "path": "templates/corridor/CORRIDOR.json",
+      "content_sha256": "sha256:1e4d4ea4175963e1600c4a47a562de9a8d570bcfbfa76cb99c99a3ea8b1a6201"
+    },
+    {
+      "source_id": "charting-loop-repository-v4-practice",
+      "kind": "repository-experience",
+      "artifact_id": "charting-loop",
+      "version_id": "pre-v4-practice-summary",
+      "repository_id": "charting-loop",
+      "commit": "976078aabd6fe462de288bf90f93ca1701b7c5cb",
+      "path": "docs/REPLICATION-INVITATION.md",
+      "content_sha256": "sha256:9e937fd2975e3e4d8c04e242721aa6e2c9c2683445679f508741250bbf93a471"
+    }
+  ]
+}

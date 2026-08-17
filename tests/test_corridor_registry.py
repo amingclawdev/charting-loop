@@ -1075,7 +1075,12 @@ class MethodIndexValidationTests(unittest.TestCase):
         self.assertTrue(report.ok, report.errors)
         self.assertEqual(
             [version["version_id"] for version in versions],
-            ["paper2-current-v2", "draft-v2", "charting-loop-method-v4"],
+            [
+                "paper2-current-v2",
+                "draft-v2",
+                "charting-loop-method-v4",
+                "charting-loop-method-v5",
+            ],
         )
         self.assertEqual(
             report.facts["schema_version"], registry.METHOD_INDEX_SCHEMA
@@ -1085,6 +1090,9 @@ class MethodIndexValidationTests(unittest.TestCase):
         )
         v4 = next(
             version for version in versions if version["version_id"] == "charting-loop-method-v4"
+        )
+        v5 = next(
+            version for version in versions if version["version_id"] == "charting-loop-method-v5"
         )
         historical = next(
             version for version in versions if version["version_id"] == "draft-v2"
@@ -1135,7 +1143,15 @@ class MethodIndexValidationTests(unittest.TestCase):
             v4["scope_datum_sha256"],
             "sha256:65c6a91120c15bec30278288a26ecc98bdf96cfb07fd490dc915408a78844327",
         )
-        self.assertEqual(report.facts["study_eligible_version_count"], 2)
+        self.assertEqual(v5["status"], "frozen")
+        self.assertTrue(v5["study_eligible"])
+        self.assertFalse(v5["adoption_eligible"])
+        self.assertFalse(v5["builder_eligible"])
+        self.assertEqual(
+            v5["source_commit"],
+            "8b0fd5e1c6102c6b4c44cf03612b93c450ddb6fd",
+        )
+        self.assertEqual(report.facts["study_eligible_version_count"], 3)
         self.assertEqual(report.facts["adoption_eligible_version_count"], 0)
         self.assertEqual(report.facts["builder_eligible_version_count"], 0)
         self.assertEqual(
@@ -1154,8 +1170,8 @@ class MethodIndexValidationTests(unittest.TestCase):
         )
         self.assertEqual(report.facts["method_primary_theory_version_id"], "zenodo-v1")
         self.assertEqual(report.facts["method_drafting_provenance_count"], 1)
-        self.assertEqual(report.facts["method_claim_count"], 12)
-        self.assertEqual(report.facts["method_binding_count"], 12)
+        self.assertEqual(report.facts["method_claim_count"], 15)
+        self.assertEqual(report.facts["method_binding_count"], 15)
         self.assertEqual(report.facts["method_source_count"], 4)
         self.assertEqual(
             report.facts["method_source_bytes_resolution_status"], "not-resolved"
@@ -1284,6 +1300,7 @@ class MethodIndexValidationTests(unittest.TestCase):
             method_root.mkdir()
             catalog_root.mkdir()
             (catalog_root / "v4").mkdir()
+            (catalog_root / "v5").mkdir()
             for name in ("METHOD.md", "SCOPE-DATUM.md", "VERSIONS.json"):
                 shutil.copy2(REPOSITORY_ROOT / "method-paper" / name, method_root / name)
             for name in ("CLAIMS.json", "SOURCES.json", "EVIDENCE-INDEX.json"):
@@ -1291,6 +1308,10 @@ class MethodIndexValidationTests(unittest.TestCase):
                 shutil.copy2(
                     REPOSITORY_ROOT / "catalog" / "v4" / name,
                     catalog_root / "v4" / name,
+                )
+                shutil.copy2(
+                    REPOSITORY_ROOT / "catalog" / "v5" / name,
+                    catalog_root / "v5" / name,
                 )
             versions_path = method_root / "VERSIONS.json"
             document = json.loads(versions_path.read_text(encoding="utf-8"))
@@ -1316,7 +1337,7 @@ class MethodIndexValidationTests(unittest.TestCase):
                 for version in versions
                 if version["study_eligible"] is True
             ],
-            ["paper2-current-v2", "charting-loop-method-v4"],
+            ["paper2-current-v2", "charting-loop-method-v4", "charting-loop-method-v5"],
         )
 
     def test_primary_theory_and_theory_derived_bindings_are_enforced(self) -> None:

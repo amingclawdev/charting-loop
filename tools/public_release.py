@@ -176,6 +176,7 @@ ALLOWED_METHOD_ATTRIBUTION = {
     "other-declared-method",
     "paper2-current-v2",
     "charting-loop-method-v4",
+    "charting-loop-method-v5",
 }
 ALLOWED_LICENSE_STATUS = {"cleared", "not-assessed", "restricted", "upstream-reference-only"}
 

@@ -1244,8 +1244,11 @@ class PublicReleaseTests(unittest.TestCase):
         ]
         self.assertEqual(1, len(v5))
         self.assertEqual("frozen", v5[0]["status"])
-        self.assertFalse(v5[0]["study_eligible"])
+        self.assertTrue(v5[0]["study_eligible"])
         self.assertFalse(v5[0]["adoption_eligible"])
+        self.assertEqual("catalog/v5/CLAIMS.json", v5[0]["claim_catalog"])
+        self.assertEqual("catalog/v5/SOURCES.json", v5[0]["source_catalog"])
+        self.assertEqual("catalog/v5/EVIDENCE-INDEX.json", v5[0]["evidence_index"])
         self.assertEqual(
             "8b0fd5e1c6102c6b4c44cf03612b93c450ddb6fd",
             v5[0]["source_commit"],

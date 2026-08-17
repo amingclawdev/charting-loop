@@ -8,6 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from tools.terminal_bench_doctor import (
+    CORRIDOR_SDK_VERSION,
     DATASET_CONTENT_SHA256,
     DoctorConfig,
     CommandResult,
@@ -111,6 +112,26 @@ class FakeRunner:
                             "display_name_present": True,
                         }
                     ),
+                )
+            if "regular_tree_manifest" in program:
+                return CommandResult(
+                    0,
+                    json.dumps(
+                        {
+                            "kit_version": CORRIDOR_SDK_VERSION,
+                            "tree_digest": "sha256:" + "a" * 64,
+                            "paths": [
+                                "__main__.py",
+                                "acceptance.py",
+                                "capabilities.py",
+                                "core.py",
+                                "domain/binary.py",
+                                "runtime.py",
+                                "scaffold.py",
+                            ],
+                        }
+                    )
+                    + "\n",
                 )
             if "_phase_quiescence_program" in program:
                 return CommandResult(
@@ -239,6 +260,9 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         self.assertEqual(report["condition"]["task_filter"], TASK_FILTER)
         self.assertEqual(report["condition"]["max_retries"], 0)
         self.assertEqual(report["condition"]["upload_visibility"], "private")
+        self.assertEqual(
+            report["condition"]["corridor_sdk_version"], CORRIDOR_SDK_VERSION
+        )
         self.assertTrue(all(check["passed"] for check in report["checks"]))
         print_calls = [
             call

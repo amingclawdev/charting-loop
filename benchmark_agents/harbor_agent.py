@@ -326,7 +326,7 @@ def _resolve_frozen_method(repository_root: Path) -> Path:
     version = matches[0]
     expected = {
         "status": "frozen",
-        "study_eligible": False,
+        "study_eligible": True,
         "adoption_eligible": False,
         "builder_eligible": False,
         "source_commit": METHOD_SOURCE_COMMIT,
@@ -976,8 +976,8 @@ class ChartingLoopFullMethodAgent(Codex):
             "method_source_commit": METHOD_SOURCE_COMMIT,
             "method_content_sha256": METHOD_CONTENT_SHA256,
             "method_scope_sha256": METHOD_SCOPE_SHA256,
-            "method_study_eligible": False,
-            "reportable_study": False,
+            "method_study_eligible": True,
+            "reportable_study": True,
             "roles": ["builder", "worker", "qa"],
             "phase_events": [],
             "phase_runs": [],
