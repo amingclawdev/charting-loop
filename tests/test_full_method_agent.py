@@ -325,7 +325,12 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("one task-level deadline", worker)
         self.assertIn("corridor_kit submission freeze", worker)
         self.assertIn(contract.SUBMISSION_ROOT, worker)
-        self.assertIn("cannot delete, replace, or block", qa)
+        normalized_qa = " ".join(qa.split())
+        self.assertIn("cooperative protocol roles", normalized_qa)
+        self.assertIn("provenance namespace", normalized_qa)
+        self.assertIn("not an authorization credential or Gate", normalized_qa)
+        self.assertIn("write only the assessment path", normalized_qa)
+        self.assertNotIn("QA remains advisory and cannot delete", qa)
 
     def test_builder_is_task_conditioned_but_must_not_build_a_gate(self) -> None:
         prompt = contract.builder_prompt("Find and repair the fault.")

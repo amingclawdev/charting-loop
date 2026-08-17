@@ -1,4 +1,4 @@
-# Charting Loop corridor method — v6
+# Charting Loop corridor method — v7
 
 Status: **normative source**. A study or implementation adopts this version only by
 pinning an exact frozen catalog identity (source commit, path, content digest, and
@@ -339,13 +339,23 @@ Position-ledger prefix it actually reviewed. It emits one append-only assessment
 `pass`, `fail`, `blocked`, or `not_assessed`. Builder self-tests and executor success
 claims remain ordinary Facts and are never the sole independent support for QA pass.
 
-QA cannot edit the Candidate. A repair creates a new revision with a new assessment;
+The QA protocol forbids QA from editing the Candidate or official task state. A repair
+is performed by the Executor/Worker and creates a new revision with a new assessment;
 the failed or blocked assessment remains. QA pass is additional evidence and never
 substitutes for, issues, or implies a TraversalReceipt, PathCertificate,
 EvidentialWarranty, AuthorityWarranty, authority, benchmark PASS, or current C. In an
 experiment, QA timing and visibility are frozen study variables. QA failure does not
 authorize deletion, repair beyond the frozen task-level deadline, or suppression of
 scoring.
+
+In the bounded cooperative-agent experiment profile, Worker and QA are
+protocol-conformant roles rather than hostile security principals. A role label in a
+submission store is a namespace and provenance assertion, not a credential, account,
+ACL, or authorization Gate. Conformance in that profile requires the agents and runner
+to obey the declared write boundary and retain evidence of the role/session that acted;
+it does not require the store to defend against a process deliberately impersonating
+another role. A security-adversarial profile would need to declare and evaluate its
+own enforcement mechanism separately.
 
 When a task acceptance ledger exists, QA reads and may execute the same frozen
 Corridor as the executor, but it must also independently re-read the original public
@@ -383,7 +393,9 @@ Submission custody is monotonic. As soon as a Worker has one complete, scorable 
 state, it freezes an immutable submission revision covering every declared output or
 task-state path and repeats that operation after each verified improvement. A newer
 revision becomes current only after all declared bytes and identities are closed and
-verified. Incomplete work, a timed-out repair, QA judgment, or a later partial mutation
+verified. A selected latest reference binds exactly to the manifest role, sequence,
+snapshot identity, and tree digest. Incomplete work, a timed-out repair, QA judgment,
+or a later partial mutation
 cannot replace or delete the newest complete Worker revision. At normal return or when
 the task deadline is reached, the runner promotes/restores that newest complete Worker
 revision before external scoring. If none exists, it reports `no_complete_submission`
@@ -395,9 +407,14 @@ becomes the task submission and its verdict cannot prevent restoration or extern
 grading. A submission snapshot is custody evidence, not acceptance evidence, a Gate,
 a PathCertificate, authority, or current C. Restore must run with the task actor's
 existing operating-system authority; the runner may not use snapshot restoration to
-grant access the Worker did not possess. File-based profiles enumerate absolute task
-paths; profiles with databases, services, or other world state provide an equivalent
-task-conditioned freeze/restore adapter whose closed identity is audited before use.
+grant access the Worker did not possess. Before the first destination mutation, a
+file-based restore validates the complete declared set of blobs, identities,
+destinations, parents, modes, and staging writes. It then atomically replaces each file
+individually. This does not claim a whole-set or cross-filesystem transaction: a
+commit-phase operating-system failure or path race may leave a truthfully reported
+restored prefix. File-based profiles enumerate absolute task paths; profiles with
+databases, services, or other world state provide an equivalent task-conditioned
+freeze/restore adapter whose closed identity is audited before use.
 
 ## 4. Construction procedure
 
@@ -658,7 +675,7 @@ this paragraph does not claim that Aming Claw implements every abstract obligati
 
 ## 11. Conformance
 
-A v6 implementation conforms only if it:
+A v7 implementation conforms only if it:
 
 - preserves an exact role definition, separate role assignment, and role-bound Position;
 - uses a declared deterministic Guide to return exactly one tagged, bounded, consumable
@@ -694,10 +711,16 @@ A v6 implementation conforms only if it:
 - requires Corridor-assisted Independent QA to account for the exact acceptance-ID set
   and independently re-check public source completeness, while treating witness closure
   as narrower than whole-task closure;
+- in a cooperative-agent experiment profile, treats Worker/QA role labels as
+  namespaces and provenance rather than credentials or permission Gates, requires each
+  role to obey its declared write boundary, and makes no adversarial-role isolation
+  claim without a separately declared security profile;
 - for bounded single-task experiments, uses one frozen total deadline rather than
   phase-owned hard allocations, freezes complete Worker submissions monotonically,
-  versions QA assessments separately, and restores the newest verified Worker revision
-  before external scoring without converting custody into a Gate or acceptance claim;
+  versions QA assessments separately, binds `latest` exactly to the selected manifest,
+  prevalidates the complete restore set, and uses truthfully reported per-file atomic
+  replacement before external scoring without converting custody into a Gate,
+  whole-set transaction claim, or acceptance claim;
 - keeps the four record surfaces separate, recognizes exactly two warranty kinds, and
   keeps optional authority logs non-gating;
 - represents open and frozen Candidate states, makes semantic edits create new frozen

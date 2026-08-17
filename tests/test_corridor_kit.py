@@ -587,6 +587,50 @@ class SubmissionSnapshotTests(unittest.TestCase):
             with self.assertRaisesRegex(CorridorKitError, "symlink"):
                 freeze_submission(base / "third", role="worker", paths=[link])
 
+    def test_latest_reference_must_exactly_match_selected_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            store = base / "store"
+            output = base / "answer"
+            output.write_text("complete", encoding="utf-8")
+            frozen = freeze_submission(store, role="worker", paths=[output])
+            latest_path = store / "latest" / "worker.json"
+            latest = json.loads(latest_path.read_text(encoding="utf-8"))
+            latest["sequence"] = 99
+            latest_path.write_text(json.dumps(latest), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                CorridorKitError, "latest submission reference mismatch"
+            ):
+                verify_submission(store, role="worker")
+            with self.assertRaisesRegex(
+                CorridorKitError, "latest submission reference mismatch"
+            ):
+                restore_submission(
+                    store, role="worker", snapshot_id=frozen["snapshot_id"]
+                )
+
+    def test_restore_preflights_all_targets_before_first_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            store = base / "store"
+            first = base / "first" / "answer"
+            second = base / "second" / "answer"
+            first.parent.mkdir()
+            second.parent.mkdir()
+            first.write_text("frozen-first", encoding="utf-8")
+            second.write_text("frozen-second", encoding="utf-8")
+            freeze_submission(store, role="worker", paths=[first, second])
+
+            first.write_text("live-first", encoding="utf-8")
+            second.write_text("live-second", encoding="utf-8")
+            second.unlink()
+            second.parent.rmdir()
+            with self.assertRaisesRegex(CorridorKitError, "real directory"):
+                restore_submission(store, role="worker")
+
+            self.assertEqual("live-first", first.read_text(encoding="utf-8"))
+
     def test_cli_freeze_list_and_restore(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             base = Path(raw)

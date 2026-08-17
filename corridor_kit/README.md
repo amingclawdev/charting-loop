@@ -130,16 +130,25 @@ PYTHONPATH=/opt/charting-loop-sdk python3 -m corridor_kit submission freeze \
 Run `submission freeze` again after each verified improvement. Each version is
 immutable, content-addressed, and linked to the preceding role version; `latest`
 advances only after all declared regular-file bytes are closed. `submission list` and
-`submission verify` audit the chain, while `submission restore` atomically restores
-each file in the newest verified version. Restore must run as the same OS identity as
-the task actor, so custody cannot expand authority.
+`submission verify` audit the stored versions. Verification binds a selected `latest`
+reference exactly to the manifest role, sequence, snapshot ID, and tree digest.
 
-QA uses the same store under role `qa` for versioned assessment files. A QA snapshot
-is never a Worker submission. Snapshots do not prove acceptance, authorize mutation,
-or create a workflow Gate. Symlinks, special files, relative paths, corrupt blobs,
-duplicate destinations, and incomplete references fail closed. For database or
-service state that cannot be represented by regular files, a task-specific Corridor
-adapter must first materialize and restore an equivalent closed checkpoint.
+`submission restore` validates every blob, destination, parent, mode, and staging
+write before changing a declared destination. It then performs one atomic replacement
+per file. This is not a whole-set transaction: an operating-system failure or path
+race during the replacement loop can leave a reported prefix restored. Restore uses
+only the caller's existing operating-system authority and cannot expand it.
+
+Worker and QA are cooperative protocol roles. The `--role` value is a namespace and
+provenance label, not a credential, ACL, account boundary, or permission Gate. QA uses
+role `qa` for versioned assessment files and is instructed to write only its
+assessment; the store does not enforce that instruction against a hostile process. A
+QA snapshot is never a Worker submission. Snapshots do not prove acceptance,
+authorize mutation, or create a workflow Gate. Symlinks, special files, relative
+paths, corrupt blobs, duplicate destinations, and incomplete references fail closed.
+For database or service state that cannot be represented by regular files, a
+task-specific Corridor adapter must first materialize and restore an equivalent closed
+checkpoint.
 
 ## Extraction record
 

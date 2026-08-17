@@ -119,10 +119,15 @@ and return to Harbor. It is not extra task time.
 
 Worker freezes the first complete, scorable official task state as soon as it exists
 and freezes every later verified improvement as a new immutable version. QA freezes
-its assessment separately; a QA artifact cannot replace, invalidate, or delete a
-Worker submission. When the remaining time is insufficient for another complete
-transition, the runner stops the exact active role, restores the latest verified
-Worker snapshot atomically, and returns that state for official grading. If no
+its assessment separately. Worker and QA are cooperative protocol roles: the role
+value is a namespace/provenance label, not a credential, ACL, account boundary, or
+permission Gate. QA must write only its assessment and must not replace, invalidate,
+or delete a Worker submission; this experiment does not claim hostile-role isolation.
+When the remaining time is insufficient for another complete transition, the runner
+stops the exact active role, verifies that `latest` exactly matches the selected Worker
+manifest, prevalidates all restore targets and staging writes, then atomically replaces
+each file. This is not a whole-set transaction; any commit-phase partial prefix is
+reported as failure. The runner returns the restored state for official grading. If no
 complete Worker snapshot exists, the run reports that fact and returns the live task
 state without fabricating one.
 
@@ -156,9 +161,11 @@ permits work after the task deadline.
 8. If time remains, the same Worker may perform one bounded repair and freezes a new
    Worker version only after the repaired official state is complete; the same QA may
    then recheck the whole ledger, not only the prior witness.
-9. Before returning unconditionally to Harbor, the runner restores the latest
-   verified complete Worker snapshot. QA never suppresses or replaces the Worker
-   submission and never short-circuits the benchmark grader.
+9. Before returning unconditionally to Harbor, the runner verifies the exact latest
+   binding, prevalidates the complete restore set, and restores the latest verified
+   complete Worker snapshot by per-file atomic replacement. QA follows its cooperative
+   write boundary, never suppresses or replaces the Worker submission, and never
+   short-circuits the benchmark grader.
 
 Every Builder, Worker, QA, repair, and closure model call belongs to the scored agent
 cost. Complete role trajectories and runtime identities are retained once in the

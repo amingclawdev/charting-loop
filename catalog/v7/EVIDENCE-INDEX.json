@@ -1,0 +1,23 @@
+{
+  "schema_version": "charting-loop/method-evidence-index/v1",
+  "method_version_id": "charting-loop-method-v7",
+  "bindings": [
+    {"claim_id": "claim-plane-control-separation", "source_ids": ["charting-loop-theory-zenodo-v1", "charting-loop-repository-v1", "charting-loop-repository-v4-practice"], "relationship": "method distinction informed by published theory and repository practice"},
+    {"claim_id": "claim-task-acceptance-ledger", "source_ids": ["charting-loop-repository-v4-practice"], "relationship": "method correction derived from abstract acceptance-omission failure shapes, without importing task or result content"},
+    {"claim_id": "claim-work-backlog-projection", "source_ids": ["charting-loop-repository-v4-practice"], "relationship": "implementation-neutral task decomposition decision abstracted from repository practice and the frozen scope datum"},
+    {"claim_id": "claim-reusable-capability-boundary", "source_ids": ["charting-loop-repository-v1", "charting-loop-repository-v4-practice"], "relationship": "method boundary separating reusable mechanics from task Rules, answers, and outcome-derived learning"},
+    {"claim_id": "claim-runtime-row-guide-reminders", "source_ids": ["charting-loop-repository-v4-practice"], "relationship": "shared non-gating runtime projection decision derived from abstract coordination failure shapes"},
+    {"claim_id": "claim-total-deadline-monotonic-submission", "source_ids": ["charting-loop-repository-v4-practice"], "relationship": "runtime custody decision derived from the abstract failure shapes of phase-local progress loss, incomplete repair overwrite, inexact latest binding, interleaved validation/mutation, and role-boundary overclaim"},
+    {"claim_id": "claim-rule-authority-and-gate-coherence", "source_ids": ["charting-loop-repository-v4-practice"], "relationship": "method abstraction of authority-layer and Gate-chain coherence failures observed in repository practice"},
+    {"claim_id": "claim-architecture-neutral-projection", "source_ids": ["charting-loop-theory-zenodo-v1", "charting-loop-repository-v1", "charting-loop-repository-v4-practice"], "relationship": "separates theory-derived semantic obligations from contingent repository implementations"},
+    {"claim_id": "claim-experiment-and-governed-profiles", "source_ids": ["charting-loop-repository-v4-practice"], "relationship": "method decision separating intervention measurement from stable-system enforcement"},
+    {"claim_id": "claim-linear-unlock", "source_ids": ["charting-loop-repository-v4-practice"], "relationship": "recovery rule abstracted from repository governance practice"},
+    {"claim_id": "claim-corridor-assisted-independent-qa", "source_ids": ["charting-loop-repository-v4-practice"], "relationship": "method correction requiring shared Corridor visibility plus independent public-source completeness checking"},
+    {"claim_id": "claim-one-entrance-exact-world", "source_ids": ["charting-loop-theory-zenodo-v1", "charting-loop-repository-v1"], "relationship": "theory-derived operational closure generalized across implementation profiles"},
+    {"claim_id": "claim-u-to-c", "source_ids": ["charting-loop-theory-zenodo-v1", "charting-loop-repository-v4-practice"], "relationship": "theory-derived re-entry mapping with a repository-informed non-PASS bypass boundary"},
+    {"claim_id": "claim-orthogonal-evidence", "source_ids": ["charting-loop-theory-zenodo-v1", "charting-loop-repository-v1", "charting-loop-repository-v4-practice"], "relationship": "method separation preserving distinct evidence and warranty propositions"},
+    {"claim_id": "claim-conditional-probability-bridge", "source_ids": ["charting-loop-theory-zenodo-v1"], "relationship": "conditional method-to-experiment bridge; estimator design remains deferred"},
+    {"claim_id": "claim-failure-diagnostic-rubric", "source_ids": ["charting-loop-theory-zenodo-v1", "charting-loop-theory-internal-v5", "charting-loop-repository-v4-practice"], "relationship": "method-level diagnostic procedure grounded in published theory, disclosed drafting provenance, and repository practice"}
+  ]
+}
+

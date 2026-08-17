@@ -225,10 +225,13 @@ Acceptance checks for the smoke task:
   every role handoff, and contains no independent per-phase budget allocation.
 - Worker freezes its first complete, scorable official task state and every later
   verified improvement as immutable, digest-bound versions; QA freezes assessments in
-  a separate role namespace.
-- before grading, the runner verifies and restores the latest complete Worker snapshot
-  atomically. If no Worker snapshot exists, metadata says so explicitly and does not
-  invent one.
+  a separate cooperative role namespace. Role labels are provenance, not credentials
+  or permission Gates, and this condition makes no hostile-role isolation claim.
+- before grading, the runner verifies the exact latest role/sequence/snapshot/tree
+  binding, prevalidates every restore target and staging write, and performs per-file
+  atomic replacement. It does not claim whole-set atomicity; a commit-phase partial
+  prefix is a reported restore failure. If no Worker snapshot exists, metadata says so
+  explicitly and does not invent one.
 - QA emits exactly one result for every expected acceptance ID, independently checks
   the original public task sources, and reports no unmapped or unresolved item before
   pass.

@@ -3,9 +3,10 @@
 The snapshot store is deliberately task-neutral.  A Worker names the absolute
 paths that constitute one complete, scorable submission; the kit copies those
 bytes into an immutable snapshot and advances a small ``latest`` reference only
-after the complete snapshot has been verified.  Restoring a snapshot never
-grants authority: callers must run restore with the same OS identity that owns
-the task state.
+after the complete snapshot has been verified.  Worker and QA are cooperative
+protocol roles, and ``role`` is a namespace/provenance label rather than an
+authorization credential.  Restoring a snapshot never grants authority: callers
+must already have the operating-system authority required by the task state.
 """
 
 from __future__ import annotations
@@ -117,10 +118,17 @@ def _load_latest_optional(root: Path, role: str) -> dict[str, Any] | None:
         raise CorridorKitError(f"latest submission role mismatch: {path}")
     sequence = value.get("sequence")
     snapshot_id = value.get("snapshot_id")
+    tree_digest = value.get("tree_digest")
     if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1:
         raise CorridorKitError(f"invalid latest submission sequence: {path}")
     if not isinstance(snapshot_id, str) or not snapshot_id:
         raise CorridorKitError(f"invalid latest submission id: {path}")
+    if (
+        not isinstance(tree_digest, str)
+        or not tree_digest.startswith("sha256:")
+        or len(tree_digest) != len("sha256:") + 64
+    ):
+        raise CorridorKitError(f"invalid latest submission tree digest: {path}")
     return value
 
 
@@ -275,6 +283,23 @@ def verify_submission(root: Path, *, role: str, snapshot_id: str | None = None) 
     )
     if manifest.get("tree_digest") != tree_digest or snapshot_id != expected_id:
         raise CorridorKitError(f"submission tree identity mismatch: {snapshot_id}")
+    if latest is not None and latest.get("snapshot_id") == snapshot_id:
+        latest_identity = {
+            "role": latest.get("role"),
+            "sequence": latest.get("sequence"),
+            "snapshot_id": latest.get("snapshot_id"),
+            "tree_digest": latest.get("tree_digest"),
+        }
+        manifest_identity = {
+            "role": manifest.get("role"),
+            "sequence": manifest.get("sequence"),
+            "snapshot_id": manifest.get("snapshot_id"),
+            "tree_digest": manifest.get("tree_digest"),
+        }
+        if latest_identity != manifest_identity:
+            raise CorridorKitError(
+                f"latest submission reference mismatch: {snapshot_id}"
+            )
     return {
         "ok": True,
         "role": role,
@@ -312,21 +337,89 @@ def list_submissions(root: Path, *, role: str) -> dict[str, Any]:
 def restore_submission(
     root: Path, *, role: str = "worker", snapshot_id: str | None = None
 ) -> dict[str, Any]:
-    """Restore a verified version atomically to its declared absolute paths."""
+    """Preflight a verified version, then atomically replace each declared file."""
 
     report = verify_submission(root, role=role, snapshot_id=snapshot_id)
-    restored = []
     snapshot = root / "snapshots" / role / report["snapshot_id"]
+    prepared: list[tuple[Path, bytes, int]] = []
     for record in report["manifest"]["files"]:
         destination = Path(record["destination"])
         parent = destination.parent
         if destination.is_symlink():
             raise CorridorKitError(f"refusing to restore over symlink: {destination}")
+        if destination.exists() and not destination.is_file():
+            raise CorridorKitError(
+                f"restore destination must be a regular file or absent: {destination}"
+            )
         if parent.is_symlink() or not parent.is_dir():
             raise CorridorKitError(f"restore parent must be a real directory: {parent}")
-        data = (snapshot / record["blob"]).read_bytes()
-        atomic_write_bytes(destination, data, mode=int(record["mode"]))
-        restored.append(destination.as_posix())
+        blob = snapshot / record["blob"]
+        if blob.is_symlink() or not blob.is_file():
+            raise CorridorKitError(f"missing submission blob: {blob}")
+        data = blob.read_bytes()
+        if record.get("bytes") != len(data) or record.get("sha256") != sha256_bytes(data):
+            raise CorridorKitError(f"submission blob identity changed during restore: {blob}")
+        mode = record.get("mode")
+        if isinstance(mode, bool) or not isinstance(mode, int) or mode < 0 or mode > 0o7777:
+            raise CorridorKitError(f"invalid submission restore mode: {destination}")
+        prepared.append((destination, data, mode))
+
+    staged: list[tuple[Path, Path]] = []
+    restored: list[str] = []
+    try:
+        for destination, data, mode in prepared:
+            descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{destination.name}.restore-", dir=destination.parent
+            )
+            temporary = Path(temporary_name)
+            try:
+                with os.fdopen(descriptor, "wb") as handle:
+                    handle.write(data)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.chmod(temporary, mode)
+            except Exception:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+                try:
+                    temporary.unlink()
+                except FileNotFoundError:
+                    pass
+                raise
+            staged.append((destination, temporary))
+
+        for destination, _ in staged:
+            if destination.is_symlink():
+                raise CorridorKitError(
+                    f"refusing to restore over symlink: {destination}"
+                )
+            if destination.exists() and not destination.is_file():
+                raise CorridorKitError(
+                    "restore destination must be a regular file or absent: "
+                    f"{destination}"
+                )
+            if destination.parent.is_symlink() or not destination.parent.is_dir():
+                raise CorridorKitError(
+                    f"restore parent must be a real directory: {destination.parent}"
+                )
+
+        for destination, temporary in staged:
+            try:
+                os.replace(temporary, destination)
+            except OSError as exc:
+                raise CorridorKitError(
+                    "submission restore commit failed after per-file replacement; "
+                    f"restored_paths={restored}"
+                ) from exc
+            restored.append(destination.as_posix())
+    finally:
+        for _, temporary in staged:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
     return {
         "ok": True,
         "role": role,
@@ -334,4 +427,5 @@ def restore_submission(
         "sequence": report["sequence"],
         "tree_digest": report["tree_digest"],
         "restored_paths": restored,
+        "restore_semantics": "full_set_prevalidated_then_per_file_atomic_replace",
     }

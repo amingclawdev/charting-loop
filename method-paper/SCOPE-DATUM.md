@@ -1,4 +1,4 @@
-# Scope datum for Charting Loop corridor method v6
+# Scope datum for Charting Loop corridor method v7
 
 This non-normative datum freezes the source and judgment boundary used to draft
 `METHOD.md`.
@@ -107,6 +107,24 @@ later repair can overwrite a previously scorable state. No task identifier, task
 bytes, solution, verifier material, score, transcript, or snapshot payload is imported
 into these method bytes. Deadline lengths, finalization reserve, output paths, model,
 runtime, and scorer remain protocol variables frozen by each study.
+
+Version v7 narrows the custody claim and hardens its non-security correctness
+obligations. In the cooperative-agent experiment profile, Worker and QA role values are
+namespaces and provenance labels, not credentials, accounts, ACLs, or permission Gates;
+the agents self-obey their declared write boundaries. This is an explicit trust
+boundary, not an adversarial-role isolation claim. The selected latest reference must
+match its manifest role, sequence, snapshot ID, and tree digest exactly. File restore
+prevalidates every declared target, blob, identity, mode, and staging write before the
+first destination mutation, then performs per-file atomic replacement. It does not
+claim a generic whole-set or cross-filesystem atomic transaction, and a commit-phase
+failure must expose any already-restored prefix without reporting success.
+
+Only the abstract review findings informed v7: a syntactically valid latest reference
+can disagree with its manifest, multi-file validation interleaved with mutation can
+change an earlier target before a later invalid target is discovered, and authorization
+machinery would add an experimental Gate outside the cooperative-role threat model. No
+task identifier, task bytes, solution, verifier material, score, transcript, snapshot
+payload, credential, or subscription information is imported into these method bytes.
 
 This amendment was prompted by a post-hoc review of one excluded benchmark smoke run
 in which a genuine QA witness was repaired but a different public acceptance

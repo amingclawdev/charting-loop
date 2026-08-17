@@ -905,8 +905,11 @@ row state or reminder as sufficient acceptance evidence.
 All roles share one task-level deadline. At this handoff the runner reports about
 {json.dumps(remaining_seconds)} seconds remaining; this is not a QA-owned time
 slice. Preserve a valid assessment early and deepen it only while time remains. The
-runner will freeze each completed QA assessment as audit evidence. QA remains
-advisory and cannot delete, replace, or block the newest complete Worker snapshot.
+runner will freeze each completed QA assessment as audit evidence. Worker and QA are
+cooperative protocol roles, not security principals: the `qa` role is a provenance
+namespace, not an authorization credential or Gate. Follow the protocol boundary
+yourself. Do not delete, replace, or block the newest complete Worker snapshot, and
+write only the assessment path named below.
 
 Do not mutate the official task state, repair the result, or alter the Corridor.
 Diagnostic reads are allowed. Your only write is {QA_PATH}. Write one JSON object:
