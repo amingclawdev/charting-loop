@@ -1,4 +1,4 @@
-# Scope datum for Charting Loop corridor method v4
+# Scope datum for Charting Loop corridor method v5
 
 This non-normative datum freezes the source and judgment boundary used to draft
 `METHOD.md`.
@@ -12,7 +12,7 @@ This non-normative datum freezes the source and judgment boundary used to draft
 - Consulted drafting snapshot: `internal-v5-arxiv-initial` at commit
   `e0dd3a466654011ecf0cb6d8f32e9cbbc4c3cc99`. It is retained only as non-primary
   drafting provenance and is not a public theory dependency of this method version.
-- Repository design cutoff: 2026-08-16.
+- Repository design cutoff: 2026-08-17.
 - Experience boundary: checked-in v1 protocol plus the ratified CL-008 through CL-015
   architecture decisions and their cataloged claims, followed by generic reviews of
   executor self-report versus independently replayable observation, task-acceptance
@@ -73,6 +73,23 @@ profile so that internal `blocked` or `not_assessed` outcomes remain observable 
 changing external execution. Long-lived governed systems may add Gates only with Rule
 authority, Fact selectors, projection conformance, whole-chain coherence, and the
 linear-unlock recovery rule.
+
+Version v5 adds an implementation-neutral execution projection prompted by a fresh
+benchmark construction failure shape: a Builder could enumerate many acceptance
+items yet spend most of its remaining budget rebuilding generic domain mechanics,
+while Worker and QA lacked a shared current-task projection. The method now permits an
+immutable work backlog compiled from acceptance IDs, task-neutral reusable capability
+modules frozen before scored task exposure, and runner-owned row events projected into
+the same advisory current-row Guide and reminders for Worker and QA. A work row remains
+a projection, a capability remains mechanics, and a reminder remains advisory; none is
+a new Rule, Fact, Gate, authority source, task answer, or proof of acceptance.
+
+The task identifier, task bytes, binary offsets or opcodes, verifier material, model
+transcripts, score, and candidate repair remain outside these method bytes. Only the
+abstract failure shape—acceptance without executable decomposition and repeated
+reconstruction of reusable mechanics—informed v5. The bundled binary capability pack
+is generic and read-only: it inventories ELF identity, reports changed ranges, and
+binds shell-free replay inputs without encoding any task-specific patch.
 
 This amendment was prompted by a post-hoc review of one excluded benchmark smoke run
 in which a genuine QA witness was repaired but a different public acceptance

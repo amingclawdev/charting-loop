@@ -1,11 +1,12 @@
-# Charting Loop corridor method — v4
+# Charting Loop corridor method — v5
 
 Status: **normative source**. A study or implementation adopts this version only by
 pinning an exact frozen catalog identity (source commit, path, content digest, and
 scope-datum digest); a branch tip or mutable working-tree copy is not a method input.
-The earlier frozen `paper2-current-v2` package remains an independently addressable
-historical study input. Other Markdown, templates, schemas, and checklists are
-explanatory or executable projections and must not silently add requirements.
+The earlier frozen `paper2-current-v2` and `charting-loop-method-v4` packages remain
+independently addressable historical study inputs. Other Markdown, templates, schemas,
+and checklists are explanatory or executable projections and must not silently add
+requirements.
 
 ## 1. Claim boundary
 
@@ -53,6 +54,12 @@ evidence equivalence to this method, not on naming, module boundaries, deploymen
 shape, or resemblance to any source system. Repository examples, including Aming
 Claw, are practice sources and non-normative projections; none is a reference
 architecture.
+
+Work rows, capability modules, timelines, and reminders introduced below are likewise
+semantic interfaces, not required classes, files, databases, or services. They may be
+represented by any canonically frozen equivalent. Their purpose is to preserve task
+decomposition and reusable domain mechanics across implementations without turning a
+particular source system into the method.
 
 The architectural correspondence is dominant, not one-to-one: Facts principally
 supply the substrate for Position (P); Rules principally anchor Direction (D) while
@@ -111,6 +118,32 @@ are later Facts outside that frozen byte set. Freezing preserves an omission as
 faithfully as it preserves a correct map; it does not prove completeness. A consumer
 must therefore treat ledger identity and ledger completeness as separate claims.
 
+#### Work backlog and reusable capability modules
+
+A task-conditioned Corridor may compile the acceptance ledger into an immutable
+**work backlog**. A **work row** is a bounded execution projection: it has a stable row
+ID, acceptance-ID bindings, declared dependencies, task scope, explicit done-when
+conditions, selected capability IDs, and advisory reminders. A row is not a new Rule,
+Fact, Gate, authority source, or independent definition of success. Its acceptance
+bindings must cover the frozen ledger without inventing, weakening, or silently
+dropping a requirement; dependency cycles and dangling acceptance or capability IDs
+are invalid projections.
+
+A **capability module** is reusable domain mechanics with a stable ID, version, digest,
+entrypoint, input and output contracts, applicability signals, and declared side
+effects. Examples include a generic binary inventory, a schema inspector, or a
+replay-capture primitive. The reusable module contains mechanics, not task Rules,
+fixed offsets, candidate answers, hidden evaluator knowledge, or outcome-derived
+patches. A task Builder selects and binds applicable modules to work rows, then adds
+task-specific adapters inside the Corridor. Module presence or applicability never
+authorizes execution, and a mutating side effect must remain explicit.
+
+For a reportable construction experiment, the runner freezes the reusable capability
+pack before exposing the scored task, records its exact byte identity, and forbids
+learning new module behavior from the task's later score, verifier output, or role
+transcript. A same-task feedback rerun may test engineering regression but is not a
+fresh leaderboard or transfer sample.
+
 ### Guide
 
 Guide is the deterministic control-plane projection defined above. For the same exact
@@ -118,6 +151,16 @@ Rules, admitted Facts, role definition and assignment, scope, warranty states, a
 WorldRef, it returns the same single result: a next Entrance or a typed refusal. An
 implementation may use caches or indexes, but observable selection cannot depend on an
 unbounded search, branch tip, ambient state, or undeclared ranking choice.
+
+When a work backlog is declared, a runtime Guide may project the current row, its
+bounded capability set, and reminder items from the frozen rows plus the visible
+Position-ledger prefix. This projection changes Position, not Direction: it cannot
+alter acceptance Rules, mark a row complete without observation, or promote a reminder
+into an authorizing predicate. A **reminder** is an advisory, replayable statement
+attached to a row state such as ready, entered, before mutation, before completion, or
+blocked. Missing or ignored reminders remain observable but never prevent task
+execution or external evaluation unless a separately declared long-lived-system Rule
+authorizes an explicit Gate.
 
 #### Rule closure, Contract binding, and Gate conformance
 
@@ -246,8 +289,8 @@ Every use declares one profile whose additional encodings and enforcement choice
 frozen with the Candidate. A profile may strengthen the core but cannot weaken it or
 silently change the meaning of a core object.
 
-- The **construction-experiment profile** freezes the acceptance ledger, Guide result,
-  Candidate, evidence visibility, and scoring order, but does not install new blocking
+- The **construction-experiment profile** freezes the acceptance ledger, work backlog,
+  selected capability pack, Guide result, Candidate, evidence visibility, and scoring order, but does not install new blocking
   runtime Gates. Incomplete internal closure remains visible as `blocked` or
   `not_assessed` while the executor and external evaluator continue.
 - The **long-lived governed-system profile** may enforce declared Gates after their Rule
@@ -278,6 +321,14 @@ Rule and receipt/root can move selected evidence into the Fact plane. Ledger pre
 continuity, or a matching hash cannot by itself produce PASS, a PathCertificate, either
 Warranty, authority, or current C. A missing, discontinuous, or unavailable ledger is
 reported as evidence loss; it does not erase the run or suppress an official score.
+
+If the Corridor declares work rows, row events are appended to this same runner-owned
+ledger rather than written back into the frozen backlog. A deterministic projection
+derives `pending`, `ready`, `in_progress`, `blocked`, `done`, or `not_applicable` and
+names the current row. Multiple active rows, an unknown row reference, or a missing
+dependency observation is reported as projection inconsistency; it does not rewrite
+history or mint a blocking Gate. Worker and QA may query the same projected row,
+bounded capability list, and reminders when the study freezes that visibility.
 
 ### Independent QA
 
@@ -310,6 +361,12 @@ entire ledger and repeats its source-completeness check. This protects against a
 shared-map failure in which Builder, Worker, and QA all reason correctly from the same
 incomplete Corridor.
 
+When frozen work rows and capabilities exist, QA uses the same row definitions,
+capability identities, and runner timeline prefix as the Worker. It may replay a
+selected capability and check row done-when evidence, but a row status or reminder is
+never sufficient evidence for an acceptance result. QA still binds each conclusion to
+the acceptance ledger and original public sources.
+
 ## 4. Construction procedure
 
 1. **Pin the method.** Select one exact cataloged method version and verify its source
@@ -328,13 +385,21 @@ incomplete Corridor.
    the sources, record every unmapped or ambiguous clause, and never mark coverage
    complete while either list is non-empty. This is Direction construction, not task
    execution.
-4. **Freeze inputs.** Inventory the Rule and admitted-Fact planes with stable references
+4. **Compile work and reusable mechanics.** Project the acceptance graph into bounded
+   work rows whose bindings cover the complete acceptance-ID set. Give every row stable
+   dependencies, scope, done-when conditions, selected capability IDs, and advisory
+   reminders. Validate dependency acyclicity and all joins. Select reusable capability
+   modules only from a task-neutral pack frozen before the scored task, verify their
+   versions, digests, contracts, applicability, and side effects, and keep task-specific
+   adapters inside the Candidate.
+5. **Freeze inputs.** Inventory the Rule and admitted-Fact planes with stable references
    and scope. Pin supporting papers or packages as MethodRefs/knowledge inputs; reject
-   implicit promotion into Rules. Freeze the acceptance ledger with Direction.
-5. **Bind Position.** Name the Candidate revision, versioned role-definition Rule,
+   implicit promotion into Rules. Freeze the acceptance ledger and work backlog with
+   Direction, and freeze the selected capability identities with the Candidate.
+6. **Bind Position.** Name the Candidate revision, versioned role-definition Rule,
    separate authority- and liveness-bearing assignment Fact, governed object, and exact
    `WorldRef`. Declare which independent Facts can establish the assignment.
-6. **Compile Guide and one result.** The runner freezes the deterministic Guide binding
+7. **Compile Guide and one result.** The runner freezes the deterministic Guide binding
    over Rules, admitted Facts, role/scope, and warranties before builder dispatch.
    Materialize one Entrance with a bounded consumable instruction, or one typed refusal
    with a durable reason. The Entrance binds its effective Direction to the declared
@@ -344,35 +409,37 @@ incomplete Corridor.
    canonical input digest, selection-scope identity/digest, and result bound using the
    declared profile. A physically co-located Contract remains runner-owned and
    read-only; location does not make it builder-writable.
-7. **Build the open Candidate.** Give the builder only the declared Entrance and pinned
+8. **Build the open Candidate.** Give the builder only the declared Entrance and pinned
    MethodRef/knowledge inputs. The builder writes only the explicitly builder-owned
    implementation surface, excluding the frozen Guide contract, and returns completion
    or a blocker. The open proposal remains mutable and uncertifiable.
-8. **Freeze the Candidate.** Seal the implementation tree and all declared inputs by
+9. **Freeze the Candidate.** Seal the implementation tree and all declared inputs by
    digest into one semantic closure. From this point, repair creates a new revision;
    freezing alone does not place any scope in C.
-9. **Record the Position ledger.** Start the runner-held, hash-linked append-only stream
+10. **Record the Position ledger.** Start the runner-held, hash-linked append-only stream
    before execution and bind every observable transition to the frozen Position,
    Direction, actor/session, and exact world identities. Do not expose the audit stream
    to an agent unless a frozen study declares that visibility as an intervention.
-10. **Assess independently.** A distinct Independent QA session reviews the exact
+   When work rows exist, append row events outside the frozen Candidate and project the
+   same current-row Guide and advisory reminders for each declared consumer.
+11. **Assess independently.** A distinct Independent QA session reviews the exact
     frozen revision, the complete task acceptance ledger, the original public task
     sources, and the Position-ledger prefix available to it, then appends `pass`,
     `fail`, `blocked`, or `not_assessed`. QA cannot edit. Any permitted repair
     produces a new revision and is bounded by a previously frozen budget. After repair,
     re-assess the entire ledger rather than only the prior witness.
-11. **Traverse independently.** A runner or evaluator executes the exact Candidate once
+12. **Traverse independently.** A runner or evaluator executes the exact Candidate once
    over a closed `WorldSpan`, records the actual path, freshness checks, bypass status,
    and outcome, and signs or otherwise identifies the receipt issuer.
-12. **Certify the demonstrated path.** An independent PathCertificate may make only its
+13. **Certify the demonstrated path.** An independent PathCertificate may make only its
    certificate-covered path provisionally charted. No other Candidate scope is implied.
-13. **Establish current consumability.** Only scope with
+14. **Establish current consumability.** Only scope with
     a QA `pass`, PathCertificate, and live EvidentialWarranty enters current,
     scope-indexed C. QA pass is not a substitute for either record. Consuming the
     actor–role Assignment additionally requires its EvidentialWarranty and
     AuthorityWarranty to be `live`; elsewhere AuthorityWarranty gates only when the
     applicable Rule or tier requires it.
-14. **Preserve outcomes.** Passed, failed, blocked, protocol-invalid, and infrastructure
+15. **Preserve outcomes.** Passed, failed, blocked, protocol-invalid, and infrastructure
     outcomes remain indexable exogenous Facts. A task score cannot rewrite the Candidate
     or method.
 
@@ -547,7 +614,7 @@ this paragraph does not claim that Aming Claw implements every abstract obligati
 
 ## 11. Conformance
 
-A v4 implementation conforms only if it:
+A v5 implementation conforms only if it:
 
 - preserves an exact role definition, separate role assignment, and role-bound Position;
 - uses a declared deterministic Guide to return exactly one tagged, bounded, consumable
@@ -570,6 +637,16 @@ A v4 implementation conforms only if it:
   typed relations; keeps definition, applicability, coverage, and assessment states
   distinct; and reports unmapped, ambiguous, or unresolved requirements rather than
   silently dropping them;
+- when a work backlog is declared, preserves stable row IDs, complete acceptance
+  bindings, acyclic dependencies, scope, done-when conditions, and selected capability
+  IDs without treating a row as authority;
+- binds every reusable capability module to an exact version, digest, input/output
+  contract, applicability declaration, and side-effect level; keeps reusable mechanics
+  free of task answers and post-outcome learning; and keeps task adapters inside the
+  task-specific Candidate;
+- records mutable row progress only in the runner-owned hash-linked Position ledger,
+  derives current-row Guide and reminder views deterministically, gives Worker and QA
+  the same declared view, and keeps every reminder advisory and non-gating;
 - requires Corridor-assisted Independent QA to account for the exact acceptance-ID set
   and independently re-check public source completeness, while treating witness closure
   as narrower than whole-task closure;
