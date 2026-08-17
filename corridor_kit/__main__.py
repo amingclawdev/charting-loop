@@ -32,6 +32,12 @@ from .runtime import (
     load_runtime_guide,
     validate_work_files,
 )
+from .submission import (
+    freeze_submission,
+    list_submissions,
+    restore_submission,
+    verify_submission,
+)
 
 
 def _emit(value: Any, output: Path | None = None) -> None:
@@ -151,6 +157,25 @@ def _parser() -> argparse.ArgumentParser:
     replay = binary_commands.add_parser("replay", help="bind argv to labeled input identities")
     replay.add_argument("--input", action="append", required=True, dest="inputs")
     replay.add_argument("argv", nargs=argparse.REMAINDER)
+
+    submission = commands.add_parser(
+        "submission", help="freeze, verify, list, or restore task-declared versions"
+    )
+    submission_commands = submission.add_subparsers(
+        dest="submission_command", required=True
+    )
+    submission_freeze = submission_commands.add_parser(
+        "freeze", help="atomically freeze one complete submission version"
+    )
+    submission_freeze.add_argument("--root", required=True, type=Path)
+    submission_freeze.add_argument("--role", required=True, choices=("worker", "qa"))
+    submission_freeze.add_argument("--path", action="append", required=True, dest="paths")
+    for command_name in ("verify", "list", "restore"):
+        command = submission_commands.add_parser(command_name)
+        command.add_argument("--root", required=True, type=Path)
+        command.add_argument("--role", required=True, choices=("worker", "qa"))
+        if command_name in ("verify", "restore"):
+            command.add_argument("--snapshot-id")
     return parser
 
 
@@ -253,6 +278,30 @@ def main(argv: list[str] | None = None) -> int:
                 if command and command[0] == "--":
                     command = command[1:]
                 _emit(binary_replay_record(command, _labeled_roots(args.inputs)))
+            return 0
+        if args.command == "submission":
+            if args.submission_command == "freeze":
+                _emit(
+                    freeze_submission(
+                        args.root,
+                        role=args.role,
+                        paths=[Path(value) for value in args.paths],
+                    )
+                )
+            elif args.submission_command == "verify":
+                _emit(
+                    verify_submission(
+                        args.root, role=args.role, snapshot_id=args.snapshot_id
+                    )
+                )
+            elif args.submission_command == "list":
+                _emit(list_submissions(args.root, role=args.role))
+            else:
+                _emit(
+                    restore_submission(
+                        args.root, role=args.role, snapshot_id=args.snapshot_id
+                    )
+                )
             return 0
     except CorridorKitError as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True), file=sys.stderr)

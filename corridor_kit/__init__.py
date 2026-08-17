@@ -39,6 +39,14 @@ from .runtime import (
     validate_work_backlog,
     validate_work_files,
 )
+from .submission import (
+    SUBMISSION_LATEST_SCHEMA,
+    SUBMISSION_SNAPSHOT_SCHEMA,
+    freeze_submission,
+    list_submissions,
+    restore_submission,
+    verify_submission,
+)
 
 __all__ = [
     "ACCEPTANCE_SCHEMA",
@@ -46,6 +54,8 @@ __all__ = [
     "KIT_VERSION",
     "POSITION_EVENT_SCHEMA",
     "RUNTIME_GUIDE_SCHEMA",
+    "SUBMISSION_LATEST_SCHEMA",
+    "SUBMISSION_SNAPSHOT_SCHEMA",
     "WORK_BACKLOG_SCHEMA",
     "AcceptanceReport",
     "CapabilityReport",
@@ -55,6 +65,7 @@ __all__ = [
     "canonical_json_bytes",
     "capture_command",
     "create_scaffold",
+    "freeze_submission",
     "new_run_directory",
     "public_world_inventory",
     "regular_tree_manifest",
@@ -65,12 +76,15 @@ __all__ = [
     "starter_work_backlog",
     "load_position_timeline",
     "load_runtime_guide",
+    "list_submissions",
     "project_position",
     "runtime_guide",
+    "restore_submission",
     "validate_acceptance_file",
     "validate_acceptance_ledger",
     "validate_capability_file",
     "validate_capability_registry",
     "validate_work_backlog",
     "validate_work_files",
+    "verify_submission",
 ]

@@ -1,4 +1,4 @@
-# Scope datum for Charting Loop corridor method v5
+# Scope datum for Charting Loop corridor method v6
 
 This non-normative datum freezes the source and judgment boundary used to draft
 `METHOD.md`.
@@ -90,6 +90,23 @@ abstract failure shape—acceptance without executable decomposition and repeate
 reconstruction of reusable mechanics—informed v5. The bundled binary capability pack
 is generic and read-only: it inventories ELF identity, reports changed ranges, and
 binds shell-free replay inputs without encoding any task-specific patch.
+
+Version v6 corrects a runtime allocation failure at the method/profile boundary. A
+bounded task now has one total deadline shared by Builder, Worker, QA, repair, and
+closure; those names are logical handoffs rather than independent hard budgets. The
+Worker freezes the first complete scorable task-state revision and every verified
+improvement. QA freezes assessments separately and remains advisory. At normal return
+or total-deadline exhaustion, the runner restores the newest verified Worker revision
+before external scoring; incomplete later work cannot displace it. Snapshot custody is
+not a Gate, acceptance result, certificate, or authority source, and restoration may
+not expand the Worker's operating-system authority.
+
+Only the abstract failure shape informed v6: a phase-local cutoff can destroy a viable
+in-progress submission even when the enclosing task still has time, and an incomplete
+later repair can overwrite a previously scorable state. No task identifier, task
+bytes, solution, verifier material, score, transcript, or snapshot payload is imported
+into these method bytes. Deadline lengths, finalization reserve, output paths, model,
+runtime, and scorer remain protocol variables frozen by each study.
 
 This amendment was prompted by a post-hoc review of one excluded benchmark smoke run
 in which a genuine QA witness was repaired but a different public acceptance

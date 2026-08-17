@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 import shlex
 import uuid
 from pathlib import Path, PurePosixPath
@@ -38,6 +39,7 @@ from benchmark_agents.contract import (
     POSITION_PATH,
     POSITION_ROOT,
     RUNTIME_ROOT,
+    SUBMISSION_ROOT,
     SDK_PACKAGE_PATH,
     SDK_ROOT,
     WORK_PATH,
@@ -64,15 +66,25 @@ METHOD_SCOPE_SHA256 = (
     "sha256:6a9cfc8eb65d90a5deca463113e238b96c6b28af09c63b3b7ea537c2af2949f0"
 )
 ROLE_ORDER = ("builder", "worker", "qa")
-PHASE_TIMEOUT_SECONDS = {
-    "builder": 1800,
-    "worker": 900,
-    "qa": 450,
-    "repair": 210,
-    "closure": 60,
-}
-PHASE_TIMEOUT_TOTAL_SECONDS = sum(PHASE_TIMEOUT_SECONDS.values())
+DEFAULT_TASK_TIMEOUT_SECONDS = 5400
+FINALIZATION_RESERVE_SECONDS = 30
+TASK_TIMEOUT_RE = re.compile(
+    r"\b(?:you\s+have|time(?:out| limit)|budget)\D{0,24}(\d{2,6})\s*seconds?\b",
+    re.IGNORECASE,
+)
 PHASE_TOKEN_ENV = "CHARTING_LOOP_PHASE_TOKEN"
+
+
+def _task_timeout_seconds(instruction: str) -> int:
+    """Resolve one total task clock, preferring an explicit public instruction."""
+
+    matches = [int(value) for value in TASK_TIMEOUT_RE.findall(instruction)]
+    valid = [value for value in matches if value > FINALIZATION_RESERVE_SECONDS]
+    return valid[-1] if valid else DEFAULT_TASK_TIMEOUT_SECONDS
+
+
+def _remaining_seconds(deadline: float) -> int:
+    return max(0, int(deadline - asyncio.get_running_loop().time()))
 
 
 def _codex_runtime_discovery_command() -> str:
@@ -560,7 +572,7 @@ class ChartingLoopFullMethodAgent(Codex):
                 f"install -d -m 0755 {shlex.quote(RUNTIME_ROOT)} "
                 f"{shlex.quote(method_dir)} {shlex.quote(corridor_dir)} "
                 f"{shlex.quote(scratch_dir)} {shlex.quote(SDK_PACKAGE_PATH)} "
-                f"{shlex.quote(POSITION_ROOT)}"
+                f"{shlex.quote(POSITION_ROOT)} {shlex.quote(SUBMISSION_ROOT)}"
             ),
         )
         await self._upload_agent_owned_file(
@@ -625,9 +637,9 @@ class ChartingLoopFullMethodAgent(Codex):
                 f"{shlex.quote(method_dir)} && "
                 f"chmod 0444 {shlex.quote(METHOD_PATH)} && "
                 f"chown {user} {shlex.quote(corridor_dir)} "
-                f"{shlex.quote(scratch_dir)} && "
+                f"{shlex.quote(scratch_dir)} {shlex.quote(SUBMISSION_ROOT)} && "
                 f"chmod 0700 {shlex.quote(corridor_dir)} "
-                f"{shlex.quote(scratch_dir)} && "
+                f"{shlex.quote(scratch_dir)} {shlex.quote(SUBMISSION_ROOT)} && "
                 f"chown -R 0:0 {shlex.quote(POSITION_ROOT)} && "
                 f"chmod 0555 {shlex.quote(POSITION_ROOT)} && "
                 f"chmod 0444 {shlex.quote(POSITION_PATH)}"
@@ -687,14 +699,18 @@ class ChartingLoopFullMethodAgent(Codex):
         prompt: str,
         environment: BaseEnvironment,
         *,
-        timeout_seconds: int,
+        deadline: float,
     ) -> tuple[AgentContext, dict[str, Any]]:
         phase_context = AgentContext()
+        remaining_at_start = max(
+            0.0, deadline - asyncio.get_running_loop().time()
+        )
         outcome: dict[str, Any] = {
             "phase": role,
             "role": role,
             "mode": "new",
-            "timeout_seconds": timeout_seconds,
+            "deadline_scope": "task",
+            "remaining_seconds_at_start": round(remaining_at_start, 3),
             "status": "completed",
             "archived": False,
             "quiescent": False,
@@ -707,11 +723,11 @@ class ChartingLoopFullMethodAgent(Codex):
             return phase_context, outcome
         begin_phase(role)
         try:
-            async with asyncio.timeout(timeout_seconds):
+            async with asyncio.timeout_at(deadline):
                 await self._reset_live_session(environment)
                 await agent.run(prompt, environment, phase_context)
         except TimeoutError:
-            outcome["status"] = "timed_out"
+            outcome["status"] = "task_deadline_reached"
         except asyncio.CancelledError as exc:
             outcome["status"] = "cancelled"
             cancelled = exc
@@ -754,14 +770,18 @@ class ChartingLoopFullMethodAgent(Codex):
         environment: BaseEnvironment,
         *,
         phase: str,
-        timeout_seconds: int,
+        deadline: float,
     ) -> tuple[AgentContext, dict[str, Any]]:
         phase_context = AgentContext()
+        remaining_at_start = max(
+            0.0, deadline - asyncio.get_running_loop().time()
+        )
         outcome: dict[str, Any] = {
             "phase": phase,
             "role": role,
             "mode": "resume",
-            "timeout_seconds": timeout_seconds,
+            "deadline_scope": "task",
+            "remaining_seconds_at_start": round(remaining_at_start, 3),
             "status": "completed",
             "archived": False,
             "quiescent": False,
@@ -774,7 +794,7 @@ class ChartingLoopFullMethodAgent(Codex):
             return phase_context, outcome
         begin_phase(phase)
         try:
-            async with asyncio.timeout(timeout_seconds):
+            async with asyncio.timeout_at(deadline):
                 await self._restore_role(environment, role)
                 await agent.resume(prompt, environment, phase_context)
         except TimeoutError:
@@ -863,6 +883,69 @@ class ChartingLoopFullMethodAgent(Codex):
                 "fi"
             ),
         )
+
+    async def _freeze_submission_paths(
+        self,
+        environment: BaseEnvironment,
+        *,
+        role: str,
+        paths: list[str],
+    ) -> dict[str, Any]:
+        """Freeze declared paths without granting the runner extra OS authority."""
+
+        command = (
+            f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+            "python3 -m corridor_kit submission freeze "
+            f"--root {shlex.quote(SUBMISSION_ROOT)} --role {shlex.quote(role)} "
+            + " ".join(f"--path {shlex.quote(path)}" for path in paths)
+        )
+        result = await environment.exec(
+            command=command,
+            user=environment.default_user,
+        )
+        lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
+        if result.return_code != 0 or not lines:
+            return {
+                "ok": False,
+                "role": role,
+                "status": "snapshot_not_created",
+                "error": (result.stderr or result.stdout or "no output")[-2000:],
+            }
+        try:
+            snapshot = json.loads("\n".join(lines))
+        except json.JSONDecodeError:
+            return {
+                "ok": False,
+                "role": role,
+                "status": "snapshot_unreadable",
+            }
+        return {"status": "snapshot_created", **snapshot}
+
+    async def _restore_latest_worker_submission(
+        self, environment: BaseEnvironment
+    ) -> dict[str, Any]:
+        """Promote the newest verified Worker version using Worker authority."""
+
+        result = await environment.exec(
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                "python3 -m corridor_kit submission restore "
+                f"--root {shlex.quote(SUBMISSION_ROOT)} --role worker"
+            ),
+            user=environment.default_user,
+        )
+        lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
+        if result.return_code != 0 or not lines:
+            return {
+                "ok": False,
+                "status": "no_verified_worker_snapshot",
+                "error": (result.stderr or result.stdout or "no output")[-2000:],
+            }
+        try:
+            restored = json.loads("\n".join(lines))
+        except json.JSONDecodeError:
+            return {"ok": False, "status": "worker_snapshot_restore_unreadable"}
+        return {"status": "worker_snapshot_restored", **restored}
 
     async def _verify_freeze(
         self,
@@ -969,8 +1052,13 @@ class ChartingLoopFullMethodAgent(Codex):
         builder = self._child_agent("builder")
         worker = self._child_agent("worker")
         qa = self._child_agent("qa")
+        loop = asyncio.get_running_loop()
+        started_at = loop.time()
+        task_timeout_seconds = _task_timeout_seconds(instruction)
+        task_deadline = started_at + task_timeout_seconds
+        execution_deadline = task_deadline - FINALIZATION_RESERVE_SECONDS
         metadata: dict[str, Any] = {
-            "schema_version": "charting-loop/full-method-run/v2",
+            "schema_version": "charting-loop/full-method-run/v3",
             "method": "task-conditioned-corridor",
             "method_version_id": METHOD_VERSION_ID,
             "method_source_commit": METHOD_SOURCE_COMMIT,
@@ -981,14 +1069,19 @@ class ChartingLoopFullMethodAgent(Codex):
             "roles": ["builder", "worker", "qa"],
             "phase_events": [],
             "phase_runs": [],
-            "phase_timeout_seconds": dict(PHASE_TIMEOUT_SECONDS),
-            "phase_timeout_total_seconds": PHASE_TIMEOUT_TOTAL_SECONDS,
+            "deadline_policy": "single_task_deadline",
+            "task_timeout_seconds": task_timeout_seconds,
+            "finalization_reserve_seconds": FINALIZATION_RESERVE_SECONDS,
+            "phase_time_allocations": None,
             "corridor_sdk": dict(getattr(self, "_sdk_identity", {})),
+            "submission_root": SUBMISSION_ROOT,
+            "submission_snapshots": [],
             "position_timeline_path": POSITION_PATH,
             "position_events": [],
             "position_timeline_errors": [],
             "runtime_guide_projections": [],
             "qa_is_advisory": True,
+            "last_worker_snapshot_owns_fallback": True,
             "grading_owned_by_harbor": True,
         }
         context.metadata = metadata
@@ -998,7 +1091,7 @@ class ChartingLoopFullMethodAgent(Codex):
             builder,
             builder_prompt(instruction),
             environment,
-            timeout_seconds=PHASE_TIMEOUT_SECONDS["builder"],
+            deadline=execution_deadline,
         )
         self._record_phase_outcome(metadata, builder_run, context)
         await self._record_position_event(
@@ -1067,84 +1160,107 @@ class ChartingLoopFullMethodAgent(Codex):
         )
 
         await self._verify_freeze(environment, expected_digest=digest)
-        _, worker_run = await self._run_new_role(
-            "worker",
-            worker,
-            worker_prompt(
-                instruction,
-                digest,
-                construction_readiness_status=construction_readiness_status,
-                work_backlog_status=str(worker_guide["status"]),
-                current_row_id=worker_guide.get("current_row_id"),
-            ),
-            environment,
-            timeout_seconds=PHASE_TIMEOUT_SECONDS["worker"],
-        )
-        self._record_phase_outcome(metadata, worker_run, context)
-        await self._record_position_event(
-            metadata,
-            environment,
-            actor="runner",
-            event_type="worker_completed",
-            status=worker_run["status"],
-            details={"quiescent": bool(worker_run.get("quiescent"))},
-        )
+        if _remaining_seconds(execution_deadline) > 0:
+            _, worker_run = await self._run_new_role(
+                "worker",
+                worker,
+                worker_prompt(
+                    instruction,
+                    digest,
+                    construction_readiness_status=construction_readiness_status,
+                    work_backlog_status=str(worker_guide["status"]),
+                    current_row_id=worker_guide.get("current_row_id"),
+                    remaining_seconds=_remaining_seconds(execution_deadline),
+                ),
+                environment,
+                deadline=execution_deadline,
+            )
+            self._record_phase_outcome(metadata, worker_run, context)
+            await self._record_position_event(
+                metadata,
+                environment,
+                actor="runner",
+                event_type="worker_completed",
+                status=worker_run["status"],
+                details={"quiescent": bool(worker_run.get("quiescent"))},
+            )
+        else:
+            metadata["phase_events"].append("worker_skipped_task_deadline")
         qa_guide = await self._runtime_guide(environment)
         metadata["runtime_guide_projections"].append({"phase": "qa", **qa_guide})
 
-        await self._verify_freeze(environment, expected_digest=digest)
-        await self._open_qa_directory(environment)
-        try:
-            _, qa_run = await self._run_new_role(
-                "qa",
-                qa,
-                qa_prompt(
-                    instruction,
-                    digest,
-                    acceptance_ledger_status=acceptance_ledger_status,
-                    expected_acceptance_ids=expected_acceptance_ids,
-                    source_mapping_status=source_mapping_status,
-                    definition_closure_status=definition_closure_status,
-                    construction_readiness_status=construction_readiness_status,
-                    work_backlog_status=str(qa_guide["status"]),
-                    current_row_id=qa_guide.get("current_row_id"),
-                ),
+        decision: dict[str, Any] = {
+            "valid": False,
+            "errors": ["QA_SKIPPED_TASK_DEADLINE"],
+            "reported_outcome": None,
+            "outcome": "not_assessed",
+            "repair_required": False,
+        }
+        if _remaining_seconds(execution_deadline) > 0:
+            await self._verify_freeze(environment, expected_digest=digest)
+            await self._open_qa_directory(environment)
+            try:
+                _, qa_run = await self._run_new_role(
+                    "qa",
+                    qa,
+                    qa_prompt(
+                        instruction,
+                        digest,
+                        acceptance_ledger_status=acceptance_ledger_status,
+                        expected_acceptance_ids=expected_acceptance_ids,
+                        source_mapping_status=source_mapping_status,
+                        definition_closure_status=definition_closure_status,
+                        construction_readiness_status=construction_readiness_status,
+                        work_backlog_status=str(qa_guide["status"]),
+                        current_row_id=qa_guide.get("current_row_id"),
+                        remaining_seconds=_remaining_seconds(execution_deadline),
+                    ),
+                    environment,
+                    deadline=execution_deadline,
+                )
+                qa_snapshot = await self._freeze_submission_paths(
+                    environment, role="qa", paths=[QA_PATH]
+                )
+                metadata["submission_snapshots"].append(qa_snapshot)
+            finally:
+                await self._seal_qa_directory(environment)
+            self._record_phase_outcome(metadata, qa_run, context)
+            await self._record_position_event(
+                metadata,
                 environment,
-                timeout_seconds=PHASE_TIMEOUT_SECONDS["qa"],
+                actor="runner",
+                event_type="qa_completed",
+                status=qa_run["status"],
+                details={"quiescent": bool(qa_run.get("quiescent"))},
             )
-        finally:
-            await self._seal_qa_directory(environment)
-        self._record_phase_outcome(metadata, qa_run, context)
-        await self._record_position_event(
-            metadata,
-            environment,
-            actor="runner",
-            event_type="qa_completed",
-            status=qa_run["status"],
-            details={"quiescent": bool(qa_run.get("quiescent"))},
-        )
-        _, decision = await self._read_assessment(
-            environment,
-            path=QA_PATH,
-            expected_digest=digest,
-            acceptance_ledger_status=acceptance_ledger_status,
-            expected_acceptance_ids=expected_acceptance_ids,
-            required_acceptance_ids=required_acceptance_ids,
-            source_mapping_status=source_mapping_status,
-            definition_closure_status=definition_closure_status,
-            construction_readiness_status=construction_readiness_status,
-        )
+            _, decision = await self._read_assessment(
+                environment,
+                path=QA_PATH,
+                expected_digest=digest,
+                acceptance_ledger_status=acceptance_ledger_status,
+                expected_acceptance_ids=expected_acceptance_ids,
+                required_acceptance_ids=required_acceptance_ids,
+                source_mapping_status=source_mapping_status,
+                definition_closure_status=definition_closure_status,
+                construction_readiness_status=construction_readiness_status,
+            )
+        else:
+            metadata["phase_events"].append("qa_skipped_task_deadline")
         metadata["qa_decision"] = decision
 
-        if decision["repair_required"]:
+        if decision["repair_required"] and _remaining_seconds(execution_deadline) > 0:
             await self._verify_freeze(environment, expected_digest=digest)
             _, repair_run = await self._resume_role(
                 "worker",
                 worker,
-                repair_prompt(instruction, digest),
+                repair_prompt(
+                    instruction,
+                    digest,
+                    remaining_seconds=_remaining_seconds(execution_deadline),
+                ),
                 environment,
                 phase="repair",
-                timeout_seconds=PHASE_TIMEOUT_SECONDS["repair"],
+                deadline=execution_deadline,
             )
             self._record_phase_outcome(metadata, repair_run, context)
             await self._record_position_event(
@@ -1156,52 +1272,71 @@ class ChartingLoopFullMethodAgent(Codex):
                 details={"quiescent": bool(repair_run.get("quiescent"))},
             )
 
-            await self._verify_freeze(environment, expected_digest=digest)
-            await self._open_qa_directory(environment)
-            try:
-                _, closure_run = await self._resume_role(
-                    "qa",
-                    qa,
-                    closure_prompt(
-                        instruction,
-                        digest,
-                        acceptance_ledger_status=acceptance_ledger_status,
-                        expected_acceptance_ids=expected_acceptance_ids,
-                        source_mapping_status=source_mapping_status,
-                        definition_closure_status=definition_closure_status,
-                        construction_readiness_status=(
-                            construction_readiness_status
+            if _remaining_seconds(execution_deadline) > 0:
+                await self._verify_freeze(environment, expected_digest=digest)
+                await self._open_qa_directory(environment)
+                try:
+                    _, closure_run = await self._resume_role(
+                        "qa",
+                        qa,
+                        closure_prompt(
+                            instruction,
+                            digest,
+                            acceptance_ledger_status=acceptance_ledger_status,
+                            expected_acceptance_ids=expected_acceptance_ids,
+                            source_mapping_status=source_mapping_status,
+                            definition_closure_status=definition_closure_status,
+                            construction_readiness_status=(
+                                construction_readiness_status
+                            ),
+                            remaining_seconds=_remaining_seconds(
+                                execution_deadline
+                            ),
                         ),
-                    ),
+                        environment,
+                        phase="closure",
+                        deadline=execution_deadline,
+                    )
+                    closure_snapshot = await self._freeze_submission_paths(
+                        environment, role="qa", paths=[CLOSURE_PATH]
+                    )
+                    metadata["submission_snapshots"].append(closure_snapshot)
+                finally:
+                    await self._seal_qa_directory(environment)
+                self._record_phase_outcome(metadata, closure_run, context)
+                await self._record_position_event(
+                    metadata,
                     environment,
-                    phase="closure",
-                    timeout_seconds=PHASE_TIMEOUT_SECONDS["closure"],
+                    actor="runner",
+                    event_type="closure_completed",
+                    status=closure_run["status"],
+                    details={"quiescent": bool(closure_run.get("quiescent"))},
                 )
-            finally:
-                await self._seal_qa_directory(environment)
-            self._record_phase_outcome(metadata, closure_run, context)
-            await self._record_position_event(
-                metadata,
-                environment,
-                actor="runner",
-                event_type="closure_completed",
-                status=closure_run["status"],
-                details={"quiescent": bool(closure_run.get("quiescent"))},
-            )
-            _, closure = await self._read_assessment(
-                environment,
-                path=CLOSURE_PATH,
-                expected_digest=digest,
-                acceptance_ledger_status=acceptance_ledger_status,
-                expected_acceptance_ids=expected_acceptance_ids,
-                required_acceptance_ids=required_acceptance_ids,
-                source_mapping_status=source_mapping_status,
-                definition_closure_status=definition_closure_status,
-                construction_readiness_status=construction_readiness_status,
-            )
-            metadata["qa_closure"] = closure
+                _, closure = await self._read_assessment(
+                    environment,
+                    path=CLOSURE_PATH,
+                    expected_digest=digest,
+                    acceptance_ledger_status=acceptance_ledger_status,
+                    expected_acceptance_ids=expected_acceptance_ids,
+                    required_acceptance_ids=required_acceptance_ids,
+                    source_mapping_status=source_mapping_status,
+                    definition_closure_status=definition_closure_status,
+                    construction_readiness_status=construction_readiness_status,
+                )
+                metadata["qa_closure"] = closure
+            else:
+                metadata["phase_events"].append("closure_skipped_task_deadline")
+        elif decision["repair_required"]:
+            metadata["phase_events"].append("repair_skipped_task_deadline")
 
         await self._verify_freeze(environment, expected_digest=digest)
+        submission_fallback = await self._restore_latest_worker_submission(environment)
+        metadata["submission_fallback"] = submission_fallback
+        metadata["task_deadline_reached"] = loop.time() >= execution_deadline
+        metadata["elapsed_seconds"] = round(loop.time() - started_at, 3)
+        metadata["remaining_finalization_seconds"] = max(
+            0.0, round(task_deadline - loop.time(), 3)
+        )
         metadata["phase_events"].append("agent_returned_for_grading")
         context.metadata = metadata
 

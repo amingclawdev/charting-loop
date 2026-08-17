@@ -29,6 +29,7 @@ CAPABILITIES_PATH = f"{CORRIDOR_PATH}/CAPABILITIES.json"
 FREEZE_PATH = f"{RUNTIME_ROOT}/FREEZE.json"
 QA_PATH = f"{RUNTIME_ROOT}/qa/assessment.json"
 CLOSURE_PATH = f"{RUNTIME_ROOT}/qa/closure.json"
+SUBMISSION_ROOT = "/logs/agent/submissions"
 
 FREEZE_SCHEMA = "charting-loop/frozen-task-corridor/v1"
 ACCEPTANCE_SCHEMA = "charting-loop/task-acceptance-ledger/v1"
@@ -793,6 +794,10 @@ README, then make the global replay check executable, then deepen diagnostics on
 if time remains. A partial but honest `unresolved` Corridor is preferable to an
 invalid ledger or an unproved readiness claim.
 
+Builder, Worker, QA, repair, and closure share the official task's single total
+clock. There is no Builder-owned time slice to exhaust. Finish and hand off as soon
+as a useful, valid Corridor is frozen-ready so that later roles retain time.
+
 Experimental constraint: do not install a mandatory workflow gate, approval gate,
 or pre-mutation gate that can block the later Worker from continuing. A Corridor may
 diagnose, plan, validate, warn, or refuse an explicitly requested unsafe operation;
@@ -811,6 +816,7 @@ def worker_prompt(
     construction_readiness_status: str = "unknown",
     work_backlog_status: str = "unknown",
     current_row_id: str | None = None,
+    remaining_seconds: int | None = None,
 ) -> str:
     """Prompt the execution role with the exact frozen Corridor identity."""
 
@@ -844,6 +850,20 @@ Use row acceptance bindings, dependencies, done-when conditions, bounded capabil
 and reminders to avoid losing place. Re-check live state: row events and reminders are
 RAW observations, not authority or proof of completion.
 
+All roles share one task-level deadline. At this handoff the runner reports about
+{json.dumps(remaining_seconds)} seconds remaining; this is a progress signal, not a
+separate Worker budget. Establish a complete, scorable version early. As soon as
+every official output path for one internally consistent version exists, freeze it
+with the task-neutral SDK, listing every required output path explicitly:
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit submission freeze --root {SUBMISSION_ROOT} --role worker --path <absolute-output-path> [--path <absolute-output-path> ...]`
+
+Run that command again after every verified improvement. A snapshot is immutable;
+the newest complete snapshot becomes the monotonic fallback. Include only official
+deliverables or task-state files needed for grading, never credentials, logs, or
+unrelated host files. Freezing is custody, not acceptance and not a Gate: continue
+working after a snapshot when time remains.
+
 Execute the task now. Do not wait for QA and do not create a gate around your work.
 The harness will invoke an independent QA role afterward.
 """
@@ -860,6 +880,7 @@ def qa_prompt(
     construction_readiness_status: str = "unknown",
     work_backlog_status: str = "unknown",
     current_row_id: str | None = None,
+    remaining_seconds: int | None = None,
 ) -> str:
     """Prompt an independent QA session that can use the same frozen Corridor."""
 
@@ -880,6 +901,12 @@ capabilities, Position timeline, Guide, and reminders used by Worker with:
 
 Audit row done-when evidence and replay applicable capabilities, but never treat a
 row state or reminder as sufficient acceptance evidence.
+
+All roles share one task-level deadline. At this handoff the runner reports about
+{json.dumps(remaining_seconds)} seconds remaining; this is not a QA-owned time
+slice. Preserve a valid assessment early and deepen it only while time remains. The
+runner will freeze each completed QA assessment as audit evidence. QA remains
+advisory and cannot delete, replace, or block the newest complete Worker snapshot.
 
 Do not mutate the official task state, repair the result, or alter the Corridor.
 Diagnostic reads are allowed. Your only write is {QA_PATH}. Write one JSON object:
@@ -946,7 +973,12 @@ from running.
 """
 
 
-def repair_prompt(task_instruction: str, corridor_digest_value: str) -> str:
+def repair_prompt(
+    task_instruction: str,
+    corridor_digest_value: str,
+    *,
+    remaining_seconds: int | None = None,
+) -> str:
     """Resume the same Worker once when QA supplies a valid failure witness."""
 
     return f"""Resume as the SAME Worker for one bounded repair pass.
@@ -964,6 +996,13 @@ again against every stable acceptance ID in {ACCEPTANCE_PATH}; closing the repor
 witness alone is insufficient. This is the single permitted repair pass. Do not
 create a new gate.
 
+The shared task clock has about {json.dumps(remaining_seconds)} seconds remaining;
+there is no repair-owned time slice. The prior Worker snapshot remains protected.
+Only after the repaired result is again complete and scorable, freeze a newer
+Worker version with the same `corridor_kit submission freeze` command and the full
+set of official output paths. If the repair stays incomplete, do not advance the
+snapshot: the runner will restore the last complete Worker version.
+
 Re-query the shared advisory runtime Guide at {POSITION_PATH}; row state helps recover
 Position but does not authorize repair.
 """
@@ -978,6 +1017,7 @@ def closure_prompt(
     source_mapping_status: str = "unknown",
     definition_closure_status: str = "unknown",
     construction_readiness_status: str = "unknown",
+    remaining_seconds: int | None = None,
 ) -> str:
     """Resume the same QA session to assess the one repair pass."""
 
@@ -998,6 +1038,11 @@ construction-readiness statuses remain `{source_mapping_status}`,
 report those dimensions separately from assessment closure. A fail still requires a concrete
 acceptance-ID/constraint/evidence/replay witness. This closure is advisory and must
 not gate the official verifier.
+
+The shared task clock has about {json.dumps(remaining_seconds)} seconds remaining;
+there is no closure-owned time slice. Write a complete atomic closure assessment
+early. The runner freezes it as audit evidence and then restores/promotes the newest
+complete Worker submission for official grading regardless of the QA verdict.
 
 Re-query the same runtime Guide and Position timeline at {POSITION_PATH}; row progress
 and reminders remain RAW, advisory evidence rather than acceptance authority.

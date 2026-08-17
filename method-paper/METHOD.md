@@ -1,12 +1,12 @@
-# Charting Loop corridor method — v5
+# Charting Loop corridor method — v6
 
 Status: **normative source**. A study or implementation adopts this version only by
 pinning an exact frozen catalog identity (source commit, path, content digest, and
 scope-datum digest); a branch tip or mutable working-tree copy is not a method input.
-The earlier frozen `paper2-current-v2` and `charting-loop-method-v4` packages remain
-independently addressable historical study inputs. Other Markdown, templates, schemas,
-and checklists are explanatory or executable projections and must not silently add
-requirements.
+The earlier frozen `paper2-current-v2`, `charting-loop-method-v4`, and
+`charting-loop-method-v5` packages remain independently addressable historical study
+inputs. Other Markdown, templates, schemas, and checklists are explanatory or
+executable projections and must not silently add requirements.
 
 ## 1. Claim boundary
 
@@ -344,7 +344,8 @@ the failed or blocked assessment remains. QA pass is additional evidence and nev
 substitutes for, issues, or implies a TraversalReceipt, PathCertificate,
 EvidentialWarranty, AuthorityWarranty, authority, benchmark PASS, or current C. In an
 experiment, QA timing and visibility are frozen study variables. QA failure does not
-authorize deletion, repair beyond the frozen budget, or suppression of scoring.
+authorize deletion, repair beyond the frozen task-level deadline, or suppression of
+scoring.
 
 When a task acceptance ledger exists, QA reads and may execute the same frozen
 Corridor as the executor, but it must also independently re-read the original public
@@ -366,6 +367,37 @@ capability identities, and runner timeline prefix as the Worker. It may replay a
 selected capability and check row done-when evidence, but a row status or reminder is
 never sufficient evidence for an acceptance result. QA still binds each conclusion to
 the acceptance ledger and original public sources.
+
+### Total deadline and monotonic submission custody
+
+For a bounded single-task experiment, freeze one total task deadline. Builder,
+Executor/Worker, Independent QA, repair, and closure are logical handoffs that consume
+the same remaining clock; they do not own independent hard time allocations. A profile
+may expose advisory pacing targets, but crossing one cannot terminate a complete
+submission, discard progress, or suppress scoring. The runner may reserve a small,
+declared portion of the same total clock only for process quiescence, snapshot
+verification, restoration, evidence flush, and return to the external evaluator. This
+reserve is not a model phase or an additional task budget.
+
+Submission custody is monotonic. As soon as a Worker has one complete, scorable task
+state, it freezes an immutable submission revision covering every declared output or
+task-state path and repeats that operation after each verified improvement. A newer
+revision becomes current only after all declared bytes and identities are closed and
+verified. Incomplete work, a timed-out repair, QA judgment, or a later partial mutation
+cannot replace or delete the newest complete Worker revision. At normal return or when
+the task deadline is reached, the runner promotes/restores that newest complete Worker
+revision before external scoring. If none exists, it reports `no_complete_submission`
+and must not manufacture one.
+
+QA freezes each completed assessment as a separate append-only audit revision against
+the same Corridor and Worker revision. QA may request repair, but its snapshot never
+becomes the task submission and its verdict cannot prevent restoration or external
+grading. A submission snapshot is custody evidence, not acceptance evidence, a Gate,
+a PathCertificate, authority, or current C. Restore must run with the task actor's
+existing operating-system authority; the runner may not use snapshot restoration to
+grant access the Worker did not possess. File-based profiles enumerate absolute task
+paths; profiles with databases, services, or other world state provide an equivalent
+task-conditioned freeze/restore adapter whose closed identity is audited before use.
 
 ## 4. Construction procedure
 
@@ -422,24 +454,36 @@ the acceptance ledger and original public sources.
    to an agent unless a frozen study declares that visibility as an intervention.
    When work rows exist, append row events outside the frozen Candidate and project the
    same current-row Guide and advisory reminders for each declared consumer.
-11. **Assess independently.** A distinct Independent QA session reviews the exact
+11. **Freeze the first complete submission.** The Worker freezes a complete, scorable
+    task-state revision as soon as one exists and freezes each verified improvement.
+    Logical phase changes consume one task-level clock and never invalidate the newest
+    complete revision. Submission custody remains separate from Candidate freezing and
+    from acceptance.
+12. **Assess independently.** A distinct Independent QA session reviews the exact
     frozen revision, the complete task acceptance ledger, the original public task
     sources, and the Position-ledger prefix available to it, then appends `pass`,
     `fail`, `blocked`, or `not_assessed`. QA cannot edit. Any permitted repair
-    produces a new revision and is bounded by a previously frozen budget. After repair,
-    re-assess the entire ledger rather than only the prior witness.
-12. **Traverse independently.** A runner or evaluator executes the exact Candidate once
+    produces a new revision and consumes the same frozen task-level deadline. Freeze a
+    repaired submission only after it is complete; otherwise retain the prior Worker
+    revision. After repair, re-assess the entire ledger rather than only the prior
+    witness.
+13. **Promote for scoring.** At normal return or total-deadline exhaustion, stop the
+    active role, establish process quiescence, verify and restore the newest complete
+    Worker submission, and return unconditionally to the external evaluator. Preserve
+    every QA assessment separately. Report absence or restore failure without claiming
+    success.
+14. **Traverse independently.** A runner or evaluator executes the exact Candidate once
    over a closed `WorldSpan`, records the actual path, freshness checks, bypass status,
    and outcome, and signs or otherwise identifies the receipt issuer.
-13. **Certify the demonstrated path.** An independent PathCertificate may make only its
+15. **Certify the demonstrated path.** An independent PathCertificate may make only its
    certificate-covered path provisionally charted. No other Candidate scope is implied.
-14. **Establish current consumability.** Only scope with
+16. **Establish current consumability.** Only scope with
     a QA `pass`, PathCertificate, and live EvidentialWarranty enters current,
     scope-indexed C. QA pass is not a substitute for either record. Consuming the
     actor–role Assignment additionally requires its EvidentialWarranty and
     AuthorityWarranty to be `live`; elsewhere AuthorityWarranty gates only when the
     applicable Rule or tier requires it.
-15. **Preserve outcomes.** Passed, failed, blocked, protocol-invalid, and infrastructure
+17. **Preserve outcomes.** Passed, failed, blocked, protocol-invalid, and infrastructure
     outcomes remain indexable exogenous Facts. A task score cannot rewrite the Candidate
     or method.
 
@@ -614,7 +658,7 @@ this paragraph does not claim that Aming Claw implements every abstract obligati
 
 ## 11. Conformance
 
-A v5 implementation conforms only if it:
+A v6 implementation conforms only if it:
 
 - preserves an exact role definition, separate role assignment, and role-bound Position;
 - uses a declared deterministic Guide to return exactly one tagged, bounded, consumable
@@ -650,6 +694,10 @@ A v5 implementation conforms only if it:
 - requires Corridor-assisted Independent QA to account for the exact acceptance-ID set
   and independently re-check public source completeness, while treating witness closure
   as narrower than whole-task closure;
+- for bounded single-task experiments, uses one frozen total deadline rather than
+  phase-owned hard allocations, freezes complete Worker submissions monotonically,
+  versions QA assessments separately, and restores the newest verified Worker revision
+  before external scoring without converting custody into a Gate or acceptance claim;
 - keeps the four record surfaces separate, recognizes exactly two warranty kinds, and
   keeps optional authority logs non-gating;
 - represents open and frozen Candidate states, makes semantic edits create new frozen

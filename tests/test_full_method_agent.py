@@ -195,6 +195,18 @@ class FullMethodContractTests(unittest.TestCase):
 
             self.assertNotEqual(0, completed.returncode)
 
+    def test_one_total_task_deadline_prefers_explicit_public_limit(self) -> None:
+        module = load_harbor_agent_with_stubs()
+        self.assertEqual(5400, module._task_timeout_seconds("No limit is stated."))
+        self.assertEqual(
+            3600,
+            module._task_timeout_seconds("You have 3600 seconds to complete the task."),
+        )
+        self.assertEqual(
+            7200,
+            module._task_timeout_seconds("The task time limit is 7200 seconds."),
+        )
+
     def test_protocol_and_runbook_fix_the_claim_and_visibility_boundaries(self) -> None:
         protocol = (
             REPOSITORY_ROOT
@@ -308,6 +320,10 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn('"definition_closure_complete"', qa)
         self.assertIn('"assessment_closure"', qa)
         self.assertNotIn('"coverage_complete"', qa)
+        self.assertIn("one task-level deadline", worker)
+        self.assertIn("corridor_kit submission freeze", worker)
+        self.assertIn(contract.SUBMISSION_ROOT, worker)
+        self.assertIn("cannot delete, replace, or block", qa)
 
     def test_builder_is_task_conditioned_but_must_not_build_a_gate(self) -> None:
         prompt = contract.builder_prompt("Find and repair the fault.")
@@ -672,7 +688,7 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertEqual("incomplete", identity["definition_closure_status"])
             self.assertEqual([], identity["acceptance_ledger_errors"])
 
-    def test_phase_timeout_terminates_resistant_child_before_archive(self) -> None:
+    def test_task_deadline_terminates_resistant_child_before_archive(self) -> None:
         adapter = load_harbor_agent_with_stubs()
         events: list[str] = []
 
@@ -706,6 +722,7 @@ class FullMethodContractTests(unittest.TestCase):
 
         async def scenario() -> dict[str, object]:
             owner = object.__new__(adapter.ChartingLoopFullMethodAgent)
+            loop = asyncio.get_running_loop()
 
             async def reset(environment) -> None:
                 events.append("reset")
@@ -720,12 +737,13 @@ class FullMethodContractTests(unittest.TestCase):
                 ResistantAgent(),
                 "do the task",
                 object(),
-                timeout_seconds=0.01,
+                deadline=loop.time() + 0.01,
             )
             return outcome
 
         outcome = asyncio.run(scenario())
-        self.assertEqual("timed_out", outcome["status"])
+        self.assertEqual("task_deadline_reached", outcome["status"])
+        self.assertEqual("task", outcome["deadline_scope"])
         self.assertTrue(outcome["quiescent"])
         self.assertTrue(outcome["archived"])
         self.assertLess(
@@ -761,6 +779,7 @@ class FullMethodContractTests(unittest.TestCase):
         async def cancellation_scenario() -> bool:
             owner = object.__new__(adapter.ChartingLoopFullMethodAgent)
             agent = CancelledAgent()
+            loop = asyncio.get_running_loop()
 
             async def reset(environment) -> None:
                 pass
@@ -776,7 +795,7 @@ class FullMethodContractTests(unittest.TestCase):
                     agent,
                     "build",
                     object(),
-                    timeout_seconds=30,
+                    deadline=loop.time() + 30,
                 )
             )
             await agent.started.wait()
@@ -812,7 +831,7 @@ class FullMethodContractTests(unittest.TestCase):
             "closure_prompt(",
             "await agent.resume(",
             'self._resume_role(\n                "worker",\n                worker,',
-            'self._resume_role(\n                    "qa",\n                    qa,',
+            'self._resume_role(',
             'decision["repair_required"]',
             "subagent_trajectories",
             "CHARTING_LOOP_PHASE_TOKEN",
@@ -825,8 +844,14 @@ class FullMethodContractTests(unittest.TestCase):
             "run_initialized",
             "runtime_guide_projections",
             "position_timeline_errors",
+            '"deadline_policy": "single_task_deadline"',
+            "FINALIZATION_RESERVE_SECONDS",
+            "_restore_latest_worker_submission",
+            "submission restore",
         ):
             self.assertIn(marker, source)
+        self.assertNotIn("PHASE_TIMEOUT_SECONDS", source)
+        self.assertNotIn('"phase_timeout_seconds"', source)
         self.assertNotIn("official verifier", source.lower())
         self.assertNotIn("verifier.run", source)
 

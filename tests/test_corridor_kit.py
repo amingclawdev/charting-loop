@@ -17,8 +17,11 @@ from corridor_kit import (
     append_position_event,
     capture_command,
     create_scaffold,
+    freeze_submission,
+    list_submissions,
     public_world_inventory,
     regular_tree_manifest,
+    restore_submission,
     runtime_guide,
     sha256_json,
     validate_acceptance_file,
@@ -26,6 +29,7 @@ from corridor_kit import (
     validate_capability_registry,
     validate_work_backlog,
     validate_work_files,
+    verify_submission,
 )
 from corridor_kit.domain.binary import (
     binary_diff,
@@ -501,6 +505,136 @@ class BinaryCapabilityTests(unittest.TestCase):
             self.assertIs(replay["shell"], False)
             self.assertEqual("not_executed", replay["side_effects"])
             self.assertRegex(replay["replay_digest"], r"^sha256:[0-9a-f]{64}$")
+
+
+class SubmissionSnapshotTests(unittest.TestCase):
+    def test_versions_are_monotonic_immutable_and_latest_restores(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            store = base / "store"
+            output = base / "answer.bin"
+            checksum = base / "answer.sha256"
+            output.write_bytes(b"version-one")
+            checksum.write_text("one\n", encoding="utf-8")
+
+            first = freeze_submission(
+                store, role="worker", paths=[output, checksum]
+            )
+            output.write_bytes(b"version-two")
+            checksum.write_text("two\n", encoding="utf-8")
+            second = freeze_submission(
+                store, role="worker", paths=[output, checksum]
+            )
+
+            self.assertEqual(1, first["sequence"])
+            self.assertEqual(2, second["sequence"])
+            self.assertNotEqual(first["snapshot_id"], second["snapshot_id"])
+            history = list_submissions(store, role="worker")
+            self.assertEqual(
+                [first["snapshot_id"], second["snapshot_id"]],
+                [item["snapshot_id"] for item in history["snapshots"]],
+            )
+
+            output.write_bytes(b"unfinished-repair")
+            checksum.write_text("unfinished\n", encoding="utf-8")
+            restored = restore_submission(store, role="worker")
+            self.assertEqual(second["snapshot_id"], restored["snapshot_id"])
+            self.assertEqual(b"version-two", output.read_bytes())
+            self.assertEqual("two\n", checksum.read_text(encoding="utf-8"))
+
+            first_report = verify_submission(
+                store, role="worker", snapshot_id=first["snapshot_id"]
+            )
+            self.assertFalse(first_report["latest"])
+            first_blob = (
+                store
+                / "snapshots"
+                / "worker"
+                / first["snapshot_id"]
+                / "files"
+                / "0000.bin"
+            )
+            self.assertEqual(b"version-one", first_blob.read_bytes())
+
+    def test_corrupt_or_unsafe_snapshots_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            store = base / "store"
+            output = base / "answer"
+            output.write_text("safe", encoding="utf-8")
+            frozen = freeze_submission(store, role="worker", paths=[output])
+            blob = (
+                store
+                / "snapshots"
+                / "worker"
+                / frozen["snapshot_id"]
+                / "files"
+                / "0000.bin"
+            )
+            blob.chmod(0o600)
+            blob.write_text("corrupt", encoding="utf-8")
+            with self.assertRaisesRegex(CorridorKitError, "identity mismatch"):
+                restore_submission(store, role="worker")
+
+            relative = Path("relative-output")
+            with self.assertRaisesRegex(CorridorKitError, "absolute"):
+                freeze_submission(base / "other", role="worker", paths=[relative])
+
+            target = base / "target"
+            target.write_text("target", encoding="utf-8")
+            link = base / "link"
+            link.symlink_to(target)
+            with self.assertRaisesRegex(CorridorKitError, "symlink"):
+                freeze_submission(base / "third", role="worker", paths=[link])
+
+    def test_cli_freeze_list_and_restore(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            store = base / "store"
+            output = base / "answer"
+            output.write_text("frozen", encoding="utf-8")
+            command = [
+                sys.executable,
+                "-m",
+                "corridor_kit",
+                "submission",
+                "freeze",
+                "--root",
+                str(store),
+                "--role",
+                "worker",
+                "--path",
+                str(output),
+            ]
+            result = subprocess.run(
+                command,
+                cwd=Path(__file__).resolve().parents[1],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(1, json.loads(result.stdout)["sequence"])
+            output.write_text("unfinished", encoding="utf-8")
+            restore = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "corridor_kit",
+                    "submission",
+                    "restore",
+                    "--root",
+                    str(store),
+                    "--role",
+                    "worker",
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, restore.returncode, restore.stderr)
+            self.assertEqual("frozen", output.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
