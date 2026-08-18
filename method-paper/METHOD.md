@@ -1,10 +1,10 @@
-# Charting Loop corridor method — v7
+# Charting Loop corridor method — v8
 
 Status: **normative source**. A study or implementation adopts this version only by
 pinning an exact frozen catalog identity (source commit, path, content digest, and
 scope-datum digest); a branch tip or mutable working-tree copy is not a method input.
-The earlier frozen `paper2-current-v2`, `charting-loop-method-v4`, and
-`charting-loop-method-v5` packages remain independently addressable historical study
+The earlier frozen `paper2-current-v2` and `charting-loop-method-v4` through
+`charting-loop-method-v7` packages remain independently addressable historical study
 inputs. Other Markdown, templates, schemas, and checklists are explanatory or
 executable projections and must not silently add requirements.
 
@@ -61,15 +61,30 @@ represented by any canonically frozen equivalent. Their purpose is to preserve t
 decomposition and reusable domain mechanics across implementations without turning a
 particular source system into the method.
 
-The architectural correspondence is dominant, not one-to-one: Facts principally
-supply the substrate for Position (P); Rules principally anchor Direction (D) while
-also constraining P and Entrance (E); Guide principally delivers E while recomputing or
-checking the relevant P and D projection. P, D, and E are not independent probability
-factors, and no component gains an exclusive claim over one of them.
+The method has two navigation variables. **Position (P)** is the checkpointed location
+of the governed work over admitted Facts. **Direction (D)** is the effective projection
+of frozen objective and applicable Rules at that Position. **Entrance (E)** is the
+deterministic Guide result for one transition—an Entrance or typed refusal—not a third
+stored state variable or an independent source of authority. Facts principally supply
+P; Rules and the frozen objective principally determine D; Guide derives E from their
+pinned identities. No component gains an exclusive claim over any semantic role.
+
+Published Theory v1 retains its own P/D/E vocabulary and probability statement. This
+two-variable navigation model is a versioned method decision about construction and
+replay; it does not silently revise the published theory. Any later theory revision
+must be proposed and frozen separately.
 
 ## 2. Core objects
 
 ### Position
+
+A Position is an immutable, content-addressed **checkpoint** over the governed object,
+role binding, exact world, and admitted-Fact state. A checkpoint contains a stable
+`PositionRef`, its canonical digest, the admitted-Fact root and admission receipt,
+the evidence-prefix watermark from which those Facts were admitted, the applicable
+scope, unresolved or conflicting Fact references, and the exact `WorldRef`. Replaying
+a decision pins this checkpoint; it does not reconstruct Position from ambient files,
+the latest timeline, or an agent summary.
 
 A Position binds the governed object and exact world state to a role. A **role
 definition** is a versioned Rule that states duties, permissions, scope, and transition
@@ -81,13 +96,36 @@ object or revision, and an exact `WorldRef`. Evidence from one role cannot be re
 as evidence authored by another. A worker's self-report is a Fact, never the sole
 independent proof of Position.
 
+Raw timeline, log, tool, or evaluator evidence does not enter a Position merely by
+existing. It first needs admission under the pinned admission Rule. Creating a
+Position checkpoint is an audit and replay operation, not a Gate: a construction
+experiment records missing or unresolved checkpoint material without installing a new
+runtime permission barrier.
+
 ### Direction
 
-Direction is the frozen objective and acceptance datum for this Candidate. A later
-Direction supersedes by an explicit transition and creates a new Candidate; it does not
-rewrite the meaning of an earlier dispatch. The effective Direction must resolve to a
-declared compilation Rule; placing objective text beside a Guide result cannot bypass
-the Rule input plane.
+Direction has two separately pinned forms:
+
+- the **frozen Direction datum** is the source-complete objective, acceptance ledger,
+  governing Rule references, scope, and declared precedence or unresolved conflicts
+  frozen for the Candidate; and
+- the **effective Direction projection** is
+  `ProjectDirection(frozen Direction, Rule closure, Position, scope, warranties)` for
+  one exact Position checkpoint.
+
+The effective projection names the applicable and non-applicable Rule IDs with reasons,
+current obligations and prohibitions, unresolved conflicts, warranty assumptions, and
+its canonical `DirectionDigest`. It does not choose an operation or fill operation
+arguments; that is the later Guide/Entrance step. For the same frozen Direction, Rule
+closure, Position checkpoint, scope, and warranty states, the effective Direction is
+identical.
+
+A later frozen Direction datum supersedes by an explicit transition and creates a new
+Candidate; it does not rewrite the meaning of an earlier dispatch. A Position change
+may change which frozen Rules apply and therefore yield a new effective Direction
+projection without changing the frozen objective. Effective Direction must resolve to
+declared Rule authority; placing objective text beside a Guide result cannot bypass the
+Rule input plane.
 
 #### Task acceptance ledger
 
@@ -118,6 +156,23 @@ are later Facts outside that frozen byte set. Freezing preserves an omission as
 faithfully as it preserves a correct map; it does not prove completeness. A consumer
 must therefore treat ledger identity and ledger completeness as separate claims.
 
+#### Behavioral acceptance closure
+
+Textual clause coverage is necessary but not sufficient for requirements whose meaning
+spans a behavior space. For every universal, negative, stateful, temporal, or coupled
+Rule, the ledger also declares the finite behavioral partition used for assessment:
+boundary classes, relevant state and operation combinations, transition orderings,
+interactions, and applicable metamorphic relations. Each declared partition binds to
+acceptance IDs and says what observation would pass, fail, or remain unknown.
+
+This is not a claim that finite tests prove an unbounded property. The ledger records
+the covered partition and the unresolved remainder separately. Representative examples
+cannot silently stand in for a universal or negative Rule, and checking each Rule in
+isolation cannot establish a coupled invariant. When the study labels a Rule high risk,
+Independent QA must derive at least one source-grounded observation that is independent
+of the Builder's own harness or report `blocked`/`not_assessed`. These obligations stay
+non-gating in the construction-experiment profile.
+
 #### Work backlog and reusable capability modules
 
 A task-conditioned Corridor may compile the acceptance ledger into an immutable
@@ -146,16 +201,21 @@ fresh leaderboard or transfer sample.
 
 ### Guide
 
-Guide is the deterministic control-plane projection defined above. For the same exact
-Rules, admitted Facts, role definition and assignment, scope, warranty states, and
-WorldRef, it returns the same single result: a next Entrance or a typed refusal. An
+Guide is the deterministic control-plane projection defined above. It first resolves
+the pinned Position checkpoint and effective Direction, then evaluates
+`Guide(PositionRef, DirectionDigest) -> Entrance | typed refusal`. For the same exact
+Rules, admitted Facts, role definition and assignment, scope, warranty states,
+`WorldRef`, Position checkpoint, and effective-Direction digest, it returns the same
+single result. An
 implementation may use caches or indexes, but observable selection cannot depend on an
 unbounded search, branch tip, ambient state, or undeclared ranking choice.
 
 When a work backlog is declared, a runtime Guide may project the current row, its
 bounded capability set, and reminder items from the frozen rows plus the visible
-Position-ledger prefix. This projection changes Position, not Direction: it cannot
-alter acceptance Rules, mark a row complete without observation, or promote a reminder
+Position-ledger prefix. New admitted Facts create a new Position checkpoint and may
+change the effective Direction projection; they do not alter the frozen Direction
+datum. The row projection cannot alter acceptance Rules, mark a row complete without
+observation, or promote a reminder
 into an authorizing predicate. A **reminder** is an advisory, replayable statement
 attached to a row state such as ready, entered, before mutation, before completion, or
 blocked. Missing or ignored reminders remain observable but never prevent task
@@ -193,8 +253,9 @@ evidence, or amend a Contract. Every Gate predicate maps to a pinned Rule ID and
 exact admitted-Fact selector it evaluates. Gate conformance is complete when no
 applicable Rule is silently omitted and sound when no predicate imposes an orphan
 condition that lacks Rule authority. A Gate, Guide, and resulting Entrance for one
-decision must bind the same Rule-closure digest, admitted-Fact root, role/scope,
-`WorldRef`, warranty states, and verdict. A stale projection or disagreement produces
+decision must bind the same Rule-closure digest, Position checkpoint, effective-
+Direction digest, admitted-Fact root, role/scope, `WorldRef`, warranty states, and
+verdict. A stale projection or disagreement produces
 a typed `projection_mismatch`, not a fallback decision.
 
 **Gate-chain coherence** is stronger than pairwise Gate success. Every declared
@@ -209,12 +270,16 @@ dependent blocks but cannot make the chain coherent or establish C.
 
 ### Entrance
 
-A Guide evaluation has exactly one semantic result. A successful result is one
-**Entrance**; otherwise it is one typed refusal with a stable reason code. The Entrance
+Entrance is the derived transition result of Guide evaluation, not a third navigation
+variable, checkpoint, Rule, Fact, or authority plane. A Guide evaluation has exactly
+one semantic result. A successful result is one **Entrance**; otherwise it is one typed
+refusal with a stable reason code. The result binds the source `PositionRef`,
+`DirectionDigest`, Rule-closure digest, and evaluation algorithm identity, so replaying
+the same inputs returns the same result. The Entrance
 binds:
 
-1. the frozen task and Direction;
-2. the starting Position and exact `WorldRef`;
+1. the frozen task and frozen Direction datum plus effective `DirectionDigest`;
+2. the starting Position checkpoint and exact `WorldRef`;
 3. the applicable Rule set;
 4. one deterministic, consumable instruction with a pinned operation identity and
    version, canonical input binding, closed lookup or selection scope, declared result
@@ -273,6 +338,12 @@ Changing any listed identity or digest creates a different `WorldRef`.
 Timeline presence alone is not an admitted Fact: only the admission receipt/root under
 the pinned admission Rule can move evidence into the Fact plane.
 
+A Position checkpoint canonically joins one `WorldRef`, admitted-Fact root, role
+definition and assignment, governed-object revision, evidence watermark, and unresolved
+Fact set. Any change to one of those fields creates a new `PositionRef`. The checkpoint
+does not duplicate RAW evidence and cannot admit it; it is the replay key for the state
+that the Guide actually evaluated.
+
 A `WorldSpan` is closed only when it binds exact start and end `WorldRef` values over
 the same project, run, generation, governed-world identity, immutable base revision, environment,
 admission Rule, and projector. Its end may extend only the same RAW ledger by a
@@ -310,7 +381,7 @@ silently change the meaning of a core object.
 A prospective execution maintains a runner-held, append-only **Position ledger** over
 the observable work. Each entry has a monotonically increasing sequence, the preceding
 entry digest, its own canonical digest, observation time, actor and session, role,
-Position and Direction identities, the exact before/after `WorldRef` or closed
+Position checkpoint, frozen-Direction and effective-Direction identities, the exact before/after `WorldRef` or closed
 `WorldSpan`, and content-addressed action, result, and artifact references. Corrections
 append a new entry; they never rewrite an earlier observation. Logs, database snapshots,
 tool calls, service receipts, and evaluator outputs may be referenced when observable,
@@ -378,6 +449,14 @@ selected capability and check row done-when evidence, but a row status or remind
 never sufficient evidence for an acceptance result. QA still binds each conclusion to
 the acceptance ledger and original public sources.
 
+For universal, negative, stateful, temporal, coupled, or study-declared high-risk
+acceptance Rules, QA also checks the declared behavioral partitions, interactions,
+transition orders, boundary classes, and applicable metamorphic relations. Re-running
+only the Builder's examples or harness is not independent support. QA derives at least
+one source-grounded observation through an independently selected probe when feasible;
+otherwise it preserves the uncovered remainder and reports `blocked` or
+`not_assessed` rather than upgrading representative coverage to whole-rule closure.
+
 ### Total deadline and monotonic submission custody
 
 For a bounded single-task experiment, freeze one total task deadline. Builder,
@@ -432,8 +511,10 @@ freeze/restore adapter whose closed identity is audited before use.
    instruction and named public specifications into the task acceptance ledger. Give
    each item a stable ID, source reference, scope, Rule, and typed relations. Re-read
    the sources, record every unmapped or ambiguous clause, and never mark coverage
-   complete while either list is non-empty. This is Direction construction, not task
-   execution.
+   complete while either list is non-empty. For universal, negative, stateful,
+   temporal, or coupled Rules, declare behavioral partitions, boundary classes,
+   interactions or transition orders, applicable metamorphic relations, and the
+   unresolved remainder. This is frozen-Direction construction, not task execution.
 4. **Compile work and reusable mechanics.** Project the acceptance graph into bounded
    work rows whose bindings cover the complete acceptance-ID set. Give every row stable
    dependencies, scope, done-when conditions, selected capability IDs, and advisory
@@ -445,11 +526,16 @@ freeze/restore adapter whose closed identity is audited before use.
    and scope. Pin supporting papers or packages as MethodRefs/knowledge inputs; reject
    implicit promotion into Rules. Freeze the acceptance ledger and work backlog with
    Direction, and freeze the selected capability identities with the Candidate.
-6. **Bind Position.** Name the Candidate revision, versioned role-definition Rule,
-   separate authority- and liveness-bearing assignment Fact, governed object, and exact
-   `WorldRef`. Declare which independent Facts can establish the assignment.
+6. **Checkpoint Position and project Direction.** Name the Candidate revision,
+   versioned role-definition Rule, separate authority- and liveness-bearing assignment
+   Fact, governed object, admitted-Fact root and evidence watermark, and exact
+   `WorldRef`; hash them into one `PositionRef`. Declare which independent Facts can
+   establish the assignment. Project the frozen Direction and applicable Rule closure
+   at that Position into one effective `DirectionDigest`, retaining non-applicability
+   reasons and unresolved conflicts.
 7. **Compile Guide and one result.** The runner freezes the deterministic Guide binding
-   over Rules, admitted Facts, role/scope, and warranties before builder dispatch.
+   over `PositionRef`, `DirectionDigest`, Rules, admitted Facts, role/scope, and
+   warranties before builder dispatch.
    Materialize one Entrance with a bounded consumable instruction, or one typed refusal
    with a durable reason. The Entrance binds its effective Direction to the declared
    Direction-compilation Rule and its canonical allowed-action set to the declared
@@ -466,11 +552,13 @@ freeze/restore adapter whose closed identity is audited before use.
    digest into one semantic closure. From this point, repair creates a new revision;
    freezing alone does not place any scope in C.
 10. **Record the Position ledger.** Start the runner-held, hash-linked append-only stream
-   before execution and bind every observable transition to the frozen Position,
-   Direction, actor/session, and exact world identities. Do not expose the audit stream
+   before execution and bind every observable transition to its Position checkpoint,
+   frozen and effective Direction, actor/session, and exact world identities. Do not expose the audit stream
    to an agent unless a frozen study declares that visibility as an intervention.
    When work rows exist, append row events outside the frozen Candidate and project the
-   same current-row Guide and advisory reminders for each declared consumer.
+   same current-row Guide and advisory reminders for each declared consumer. Admit
+   newly observed evidence under the frozen admission Rule, create a new Position
+   checkpoint, and recompute effective Direction before deriving a later Entrance.
 11. **Freeze the first complete submission.** The Worker freezes a complete, scorable
     task-state revision as soon as one exists and freezes each verified improvement.
     Logical phase changes consume one task-level clock and never invalidate the newest
@@ -523,7 +611,7 @@ two are warranty kinds: `EvidentialWarranty` and `AuthorityWarranty`.
 - **AuthorityWarranty** states that an independent issuer supports a declared actor's
   authority for one role assignment, act, scope, Rule, and `WorldRef`. It has the same
   four states. Temporal freshness is liveness within a warranty, never a third warranty
-  kind or a P/D/E factor.
+  kind or an additional navigation variable.
 
 A passing score is not a PathCertificate. A PathCertificate is not an Evidential
 Warranty. An EvidentialWarranty is not an AuthorityWarranty. Authority evidence does
@@ -545,7 +633,8 @@ AuthorityWarranty. The executor cannot issue an independent warranty for its own
 and an AI cannot create real-world authority by citing this method.
 
 Before runtime, or when no live warranty is available, a declared paper-based drift
-diagnosis may identify unresolved P/D/E or warranty conditions at a critical point.
+diagnosis may identify unresolved Position, Direction, Entrance-derivation, or warranty
+conditions at a critical point.
 Its advisory `AssessmentReceipt` binds the claim, Rule, frozen evidence, `WorldRef`,
 scope, time, and method version. It is not a Warranty and cannot mint, renew, or revoke
 one; authorize action; satisfy a gate; produce PASS; or count as independent
@@ -554,14 +643,17 @@ verification.
 For a paper-grounded failure diagnosis, classify the invariant that the observed
 decision violates rather than the file, module, actor, or message that exposed it:
 
-- **P (Position):** the located actor, role, object, layer, or world state differs from
-  the actual governed state.
-- **D (Direction):** the frozen objective, acceptance datum, or governing version used
-  by the decision is wrong, unauthorized, or silently superseded.
-- **E (Entrance):** Position and Direction are adequate, but no legal transition is
-  available or the selected transition is not the single declared Entrance.
+- **P (Position):** the selected checkpoint locates the wrong actor, role, object,
+  layer, admitted-Fact state, or exact world.
+- **D (Direction):** the frozen objective, governing Rule closure, applicability, or
+  effective projection at that Position is wrong, unauthorized, incomplete, or
+  silently superseded.
+- **E (Entrance result):** Position and Direction are adequate, but Guide cannot derive
+  one legal transition or selects a result other than the single declared Entrance.
+  This is a transition-result failure class, not a third navigation variable.
 - **X (execution):** the authorized Entrance is correct, but its action is executed
-  incorrectly; X is recorded outside the P/D/E navigation factor set.
+  incorrectly; X is recorded outside the P/D navigation state and Entrance-result
+  classification.
 
 The evaluator records the selected invariant, frozen evidence, uncertainty, and any
 counter-witness. A composite mechanism may violate more than one invariant. This rubric
@@ -580,7 +672,8 @@ or tier requires one. The new Candidate revision has:
 
 - a new candidate or revision identity;
 - an explicit link to the prior Candidate and re-entry reason;
-- newly frozen Direction, Entrance, Position, and `WorldRef`; and
+- a newly frozen Direction datum, Position checkpoint, derived Entrance, and
+  `WorldRef`; and
 - new implementation and traversal evidence.
 
 Evidence from the prior revision remains historical and cannot be spliced into a
@@ -607,17 +700,18 @@ one gate defect at a time. It never converts the bypassed path into PASS or C.
 ## 7. Composite mechanisms and proof-obligation order
 
 Physical modules, documents, tools, and agents may combine responsibilities. For
-example, one handoff can materialize Direction, role-bound Position, and Entrance; the
-method does not require a separate component per P/D/E factor. Composition does not
-collapse propositions:
+example, one handoff can carry a Position checkpoint, its effective Direction, and the
+derived Entrance; the method does not require a separate component per semantic role.
+Composition does not collapse propositions:
 Position, Direction, Entrance, EvidentialWarranty, and AuthorityWarranty must remain
 separately named and their evidence receipts separately checkable.
 
 The proof-obligation order is: pin method and exact world; compile source-complete
-task acceptance; admit Rules and Facts; establish a consistent Rule closure and
-coherent Rule transitions; bind role definition and assignment; for a profile that
+task acceptance including applicable behavioral partitions; admit Rules and Facts;
+establish a consistent Rule closure and coherent Rule transitions; bind role definition
+and assignment; checkpoint Position; project effective Direction; for a profile that
 declares Gates, prove Gate conformance and whole-chain coherence; evaluate Guide to
-one tagged result from the same closure and Fact root; freeze the semantic closure;
+one tagged result from the same Position, closure, and Fact root; freeze the semantic closure;
 traverse one base world; certify the demonstrated path; establish a live scope-bound
 EvidentialWarranty; then establish a live AuthorityWarranty where the assignment,
 Rule, or tier requires it. A later obligation cannot retroactively satisfy an earlier
@@ -637,12 +731,14 @@ adoption eligibility.
 
 For decision opportunity `i`, let
 `Z_i = (R_def,i, R_asg,i, WorldRef_i, Datum_i, history_i)`, where the role definition is
-a Rule and the assignment is an authority- and liveness-bearing Fact binding. The
-relevant joint quantity is `Pr(P_i, D_i, E_i | Z_i)`. If a study factorizes it, only the
-conditional chain
-`Pr(P_i | Z_i) Pr(D_i | P_i, Z_i) Pr(E_i | P_i, D_i, Z_i)` is admissible; marginal
-success rates must not be multiplied, and roles or events must not be treated as
-independent samples merely because they are recorded separately.
+a Rule and the assignment is an authority- and liveness-bearing Fact binding. The v8
+method records navigation state as `(P_i, D_i)` and records `E_i` as the Guide's tagged
+transition result conditional on that state. A study may still report the published
+theory bridge `Pr(P_i, D_i, E_i | Z_i)` and its conditional chain
+`Pr(P_i | Z_i) Pr(D_i | P_i, Z_i) Pr(E_i | P_i, D_i, Z_i)`, but must not reinterpret
+that notation as three independent stored variables. Marginal success rates must not
+be multiplied, and roles or events must not be treated as independent samples merely
+because they are recorded separately.
 
 A decision opportunity is a repeated observation. A run or scenario is the cluster and
 primary experimental unit unless a later protocol justifies a different unit.
@@ -668,19 +764,26 @@ Neither is a benchmark, an effect estimate, an authority assessment, or evidence
 this method is ready for operational adoption.
 
 An Aming Claw Contract handoff illustrates one possible composite projection: one bound
-handoff may jointly carry Direction, a role definition plus live assignment, and one
-Entrance. It is neither privileged nor required. Any use as evidence must pin an exact
+handoff may jointly carry a Position checkpoint, effective Direction, a role definition
+plus live assignment, and one derived Entrance. It is neither privileged nor required.
+Any use as evidence must pin an exact
 repository commit and trace cutoff, then map distinct receipts to each proposition;
 this paragraph does not claim that Aming Claw implements every abstract obligation.
 
 ## 11. Conformance
 
-A v7 implementation conforms only if it:
+A v8 implementation conforms only if it:
 
-- preserves an exact role definition, separate role assignment, and role-bound Position;
+- preserves an exact role definition and separate role assignment; checkpoints Position
+  over admitted Facts, evidence watermark, scope, governed object, and exact world; and
+  never treats raw timeline presence as an admitted Fact or a checkpoint as a Gate;
+- separates the frozen Direction datum from the effective Direction projection at one
+  Position, pins applicable and non-applicable Rules, unresolved conflicts, warranties,
+  and `DirectionDigest`, and keeps operation selection out of that projection;
 - uses a declared deterministic Guide to return exactly one tagged, bounded, consumable
-  Entrance or typed refusal, while recognizing that structure alone cannot prove runtime
-  determinism;
+  Entrance or typed refusal from the pinned `PositionRef` and `DirectionDigest`, treats
+  the result as derived rather than a third navigation variable, and recognizes that
+  structure alone cannot prove runtime determinism;
 - binds the Entrance action set and digest to exactly one declared action-transition
   Rule, and pins the profile-declared operation, canonical inputs, closed selection
   scope, and result cardinality;
@@ -692,12 +795,17 @@ A v7 implementation conforms only if it:
 - proves Rule consistency and Rule-transition coherence, and represents unresolved
   conflict, revision change, identity rotation, and invalidation explicitly;
 - when Gates are declared, maps every Gate predicate to a pinned Rule and admitted-Fact
-  selector, binds Gate and Guide to the same closure and verdict, and checks whole-chain
-  satisfiability across retry, resume, repair, fan-out, and fan-in;
+  selector, binds Gate and Guide to the same Position, effective Direction, closure,
+  and verdict, and checks whole-chain satisfiability across retry, resume, repair,
+  fan-out, and fan-in;
 - freezes a task acceptance ledger whose atomic items retain source, scope, Rule, and
   typed relations; keeps definition, applicability, coverage, and assessment states
   distinct; and reports unmapped, ambiguous, or unresolved requirements rather than
   silently dropping them;
+- for universal, negative, stateful, temporal, or coupled Rules, declares the assessed
+  behavioral partitions, boundary classes, interactions or transition orders,
+  applicable metamorphic relations, and unresolved remainder without claiming finite
+  examples prove an unbounded property;
 - when a work backlog is declared, preserves stable row IDs, complete acceptance
   bindings, acyclic dependencies, scope, done-when conditions, and selected capability
   IDs without treating a row as authority;
@@ -710,7 +818,9 @@ A v7 implementation conforms only if it:
   the same declared view, and keeps every reminder advisory and non-gating;
 - requires Corridor-assisted Independent QA to account for the exact acceptance-ID set
   and independently re-check public source completeness, while treating witness closure
-  as narrower than whole-task closure;
+  as narrower than whole-task closure; for high-risk behavioral Rules it also requires
+  an independently selected source-grounded probe when feasible, otherwise preserving
+  `blocked` or `not_assessed`;
 - in a cooperative-agent experiment profile, treats Worker/QA role labels as
   namespaces and provenance rather than credentials or permission Gates, requires each
   role to obey its declared write boundary, and makes no adversarial-role isolation

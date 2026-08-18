@@ -1,4 +1,4 @@
-# Scope datum for Charting Loop corridor method v7
+# Scope datum for Charting Loop corridor method v8
 
 This non-normative datum freezes the source and judgment boundary used to draft
 `METHOD.md`.
@@ -125,6 +125,27 @@ change an earlier target before a later invalid target is discovered, and author
 machinery would add an experimental Gate outside the cooperative-role threat model. No
 task identifier, task bytes, solution, verifier material, score, transcript, snapshot
 payload, credential, or subscription information is imported into these method bytes.
+
+Version v8 resolves a method-level modeling ambiguity without revising published
+Theory v1. The method now treats Position and Direction as its two stored navigation
+variables: Position is a content-addressed checkpoint over admitted Facts and the exact
+world, while effective Direction is the deterministic projection of the frozen
+objective and applicable Rule closure at that checkpoint. Entrance is the tagged Guide
+result for one transition, not a third stored state variable or authority source. The
+published theory's P/D/E vocabulary and conditional probability bridge remain cited as
+provenance; any change to theory definitions, predictions, or falsifiers is deferred to
+a separately proposed and frozen theory version.
+
+Version v8 also strengthens task acceptance from textual clause coverage to declared
+behavioral coverage. Universal, negative, stateful, temporal, and coupled Rules name
+their finite partitions, boundary classes, relevant interactions or transition orders,
+applicable metamorphic relations, and unresolved remainder. High-risk Rules require an
+independently selected source-grounded QA probe when feasible; otherwise QA reports
+`blocked` or `not_assessed`. These remain non-gating construction-experiment
+obligations. The abstract review finding was that replaying representative positive
+examples can preserve a wrong Direction projection when negative or interacting states
+were never represented. No task identifier, task bytes, solution, verifier material,
+score, transcript, or repair content is imported into v8.
 
 This amendment was prompted by a post-hoc review of one excluded benchmark smoke run
 in which a genuine QA witness was repaired but a different public acceptance
