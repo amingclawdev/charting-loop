@@ -704,6 +704,33 @@ class FullMethodContractTests(unittest.TestCase):
                 preserved_manifest,
                 (custody / "custody-manifest.json").read_bytes(),
             )
+            root_manifest = json.loads(preserved_manifest)
+            root_manifest["forged_extra"] = True
+            (custody / "custody-manifest.json").write_text(
+                json.dumps(root_manifest), encoding="utf-8"
+            )
+            root_manifest_retry = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    contract.private_custody_program(
+                        agent_dir=str(agent_dir),
+                        expected_corridor_digest=digest,
+                        runtime_root=str(runtime_root),
+                        position_path=str(position),
+                        submission_root=str(submissions),
+                    ),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, root_manifest_retry.returncode, root_manifest_retry.stderr)
+            root_manifest_report = json.loads(root_manifest_retry.stdout)
+            self.assertFalse(root_manifest_report["ok"])
+            self.assertFalse(root_manifest_report["existing_bytes_revalidated"])
+            self.assertTrue(root_manifest_report["preserved_existing"])
+            (custody / "custody-manifest.json").write_bytes(preserved_manifest)
             injected = custody / "roles" / "builder" / "custody-manifest.json"
             injected.write_text("unbound nested bytes\n", encoding="utf-8")
             nested_injection_retry = subprocess.run(

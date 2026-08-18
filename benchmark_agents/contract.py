@@ -179,8 +179,23 @@ def private_custody_program(
             try:
                 if target.is_symlink() or not target.is_dir():
                     raise ValueError("existing private custody target is unsafe")
+                manifest_path = target / "custody-manifest.json"
+                manifest_bytes = manifest_path.read_bytes()
+
+                def reject_duplicates(pairs):
+                    value = {{}}
+                    for key, item in pairs:
+                        if key in value:
+                            raise ValueError(f"duplicate manifest key: {{key}}")
+                        value[key] = item
+                    return value
+
                 existing = json.loads(
-                    (target / "custody-manifest.json").read_text(encoding="utf-8")
+                    manifest_bytes.decode("utf-8"),
+                    object_pairs_hook=reject_duplicates,
+                    parse_constant=lambda item: (_ for _ in ()).throw(
+                        ValueError(f"non-finite manifest value: {{item}}")
+                    ),
                 )
                 if not isinstance(existing, dict):
                     raise ValueError("existing private custody manifest is invalid")
@@ -204,6 +219,17 @@ def private_custody_program(
                     "tree_digest": digest(canonical(records)),
                     "builder_recovery_evidence": "roles/builder",
                 }}
+                if set(existing) != set(expected_fields) | {{"captured_at"}}:
+                    raise ValueError("existing custody manifest fields mismatch")
+                captured_at = existing.get("captured_at")
+                if (
+                    not isinstance(captured_at, str)
+                    or not captured_at.endswith("Z")
+                ):
+                    raise ValueError("existing custody captured_at is invalid")
+                datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+                if manifest_bytes != canonical(existing) + b"\\n":
+                    raise ValueError("existing custody manifest is not canonical")
                 for key, value in expected_fields.items():
                     if existing.get(key) != value:
                         raise ValueError(f"existing custody mismatch: {{key}}")
