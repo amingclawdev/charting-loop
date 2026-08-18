@@ -14,15 +14,20 @@ role transcripts, credentials, or solution-bearing failure details.
 - Agent condition: `gpt-5.6-sol`, maximum reasoning effort, Modal, zero automatic
   retries, Charting Loop method v8, SDK v0.4.0, Agent v0.9.0.
 - Result: **19/19 verifier checks passed; official reward 1.0**.
-- Classification: **valid method pass**. There was one completed trial, no trial
-  exception, and no retry.
+- Classification: **official task pass in a same-task adaptive engineering run**.
+  There was one completed trial, no trial exception, and no retry. Complete Method
+  conformance was not established: definition closure was incomplete and construction
+  readiness remained unresolved.
 - Scope: a same-task engineering and recovery observation. It is not a matched
   Treatment/Control experiment, a new-task sample, an accepted leaderboard
   submission, or evidence that the complete method caused the score.
 
-Job `008` remains an independently valid 15/19 failure. Job `009` is a later 19/19
-pass; it does not retroactively turn the earlier outcome into a pass or make the
-same-task sequence a controlled comparison.
+Job `008` remains a valid 15/19 method failure. Its four failing verifier checks were
+observed before general Method and SDK work strengthened acceptance-boundary
+representation and job `009` ran. No task-specific solution bytes were placed in the
+reusable SDK, but the sequence was informed by same-task verifier feedback. Job `009`
+therefore does not retroactively turn the earlier outcome into a pass, make the
+sequence an independent reproduction, or make it a controlled comparison.
 
 ## External comparison, with its boundary
 
@@ -35,11 +40,12 @@ the issue by stating that all tasks were being moved to an eight-hour timeout.
 
 Job `009` completed all 19 verifier checks in 1 hour, 26 minutes, and 34 seconds. Its
 agent elapsed time was 5,107.230 seconds, below the original 5,400-second task limit.
-It therefore directly answers the former public reproducibility question. From the
-official public issue history currently available, it is the first independently
-documented 19/19 completion we can verify under that original limit. This bounded
-statement is not a current eight-hour leaderboard maximum, a matched same-model
-Control, or a rank. The job has not been accepted as an official Harbor submission.
+It demonstrates that this adaptively developed harness produced a 19/19 run under the
+former time condition. It does not directly answer the issue's independent-agent
+reproducibility question because earlier same-task verifier feedback informed the
+development sequence. The currently available public issue history does not establish
+a world-first result or leaderboard maximum. This run is not a matched same-model
+Control, a rank, or an accepted Harbor submission.
 
 ## Attempt chronology
 
@@ -50,14 +56,15 @@ Control, or a rank. The job has not been accepted as an official Harbor submissi
 | `004` | Runtime-invalid | Codex installed, but Agent v0.5.1 searched the wrong runtime home and stopped before paid model work. | Resolve and exercise the installed CLI from the same fresh Linux role environment. |
 | `005` | Valid method failure, reward 0.0 | Method v4 built a large acceptance ledger, but construction closure remained unresolved and fixed phase budgets expired. | Add task-neutral work rows, capability records, and advisory reminders; do not import task answers into the SDK. |
 | `006` | Valid method failure, reward 0.0 | Method v5's fixed per-phase allocation stopped Worker before a complete deliverable entered custody. | Replace phase budgets with one task deadline and freeze every complete Worker improvement for final restore. |
-| `007` | Runtime-invalid | Builder and Worker produced frozen state, but importing a read-only adapter created an undeclared byte before QA and grading. | Suppress Python bytecode creation in every role while retaining strict frozen-tree digest checks. |
+| `007` | Project-caused harness-integrity invalid | Builder and Worker produced frozen state, but importing a read-only adapter created an undeclared byte before QA and grading. This was caused by our frozen-harness behavior, not by the benchmark runtime. | Suppress Python bytecode creation in every role while retaining strict frozen-tree digest checks. |
 | `008` | Valid method failure, **15/19**, reward 0.0 | Builder, Worker, and QA completed under one deadline; both task roles used the same frozen Corridor. The remaining miss was an internal acceptance-boundary completeness failure, not a launcher, account, timeout, or evaluator crash. | Keep the failure as method evidence; next iterations should reduce construction volume and require boundary-complete acceptance witnesses without embedding a task-specific repair. |
-| `009` | Valid method pass, **19/19**, reward 1.0 | Method v8 completed under the original 5,400-second limit. Worker and QA queried the same frozen Corridor; six Worker snapshots preserved complete states, and the sixth was restored for grading. | Index the pass without treating the changed Method, SDK, Agent, Builder artifact, and model sample as a matched causal comparison. |
+| `009` | Official task pass with incomplete Method conformance, **19/19**, reward 1.0 | Method v8 execution completed under the original 5,400-second limit. Worker and QA queried the same frozen Corridor; six Worker snapshots preserved complete states, and the sixth was restored for grading. Definition closure was incomplete, construction readiness unresolved, and QA normalized to `not_assessed`. | Index the engineering result while disclosing same-task verifier-feedback-informed adaptation and without treating changed Method, SDK, Agent, Builder artifact, and model sample as a matched causal comparison. |
 
-The four launcher/runtime-invalid identities are evidence about the harness, not agent
-task performance. Jobs `005`, `006`, and `008` are valid method observations even
-though all received reward 0.0; job `009` is a valid method pass. No identity is
-overwritten or reclassified.
+Jobs `002`–`004` are launcher/runtime infrastructure-invalid identities before
+meaningful task work. Job `007` is instead a project-caused harness-integrity invalid
+attempt. Jobs `005`, `006`, and `008` are valid method observations even though all
+received reward 0.0; job `009` is an official task pass but not a complete
+Method-conformance pass. No prior score or attempt identity is overwritten.
 
 ## What changed in the reusable method and SDK
 
@@ -84,6 +91,11 @@ checkpoint, and Direction is the projection of the applicable Rule closure at th
 Position. Each compiled acceptance item must carry all six required obligation
 partitions before the task is declared ready. These are task-neutral constraints on
 the Builder's representation, not a stored repair for this benchmark.
+
+These general changes were nevertheless developed after observing job `008`'s hidden
+verifier outcome. “No task-specific solution was embedded” is narrower than “no
+feedback influence”: evaluator-feedback-informed hill climbing remains a live
+alternative explanation for the same-task improvement.
 
 These changes are generic scaffolding. Role labels are cooperative provenance, not an
 operating-system permission boundary, and reminders are advisory rather than new
@@ -125,6 +137,9 @@ does not justify copying this task's hidden failing boundary into the generic me
   concrete defect, but its envelope combined incomplete definition closure with
   complete assessment closure. QA's effective outcome was `not_assessed`; no repair
   ran, and the sixth Worker snapshot was graded.
+- The Corridor itself reported `definition_closure_status=incomplete` and
+  `construction_readiness_status=unresolved`. The 19/19 score is therefore an official
+  evaluator pass, not evidence that the complete frozen Method contract was satisfied.
 - The original Modal container had already been destroyed when custody was collected.
   The Corridor was reconstructed from archived Builder write events, and the recovered
   bytes reproduced the frozen digest exactly. This is recovered byte-identical
@@ -136,6 +151,12 @@ authentication-bearing operational logs. Public auditability is provided here th
 exact task/method identities, digests, timings, disposition history, and the official
 score. Publication of the raw bytes would change the benchmark and leakage boundary;
 redacting subscription and profile tokens alone would not make solution bytes safe.
+
+The immutable public-summary package is
+[`public/results/ico-path-patch/job-009`](../public/results/ico-path-patch/job-009/).
+Its manifest binds the private audit, runner result, Corridor custody manifest, role
+transcripts, official reward receipt, final Worker snapshot, original binary, patch
+generator, and patched binary by digest and size without publishing those bytes.
 
 ## How to interpret this task beside `production-planning`
 

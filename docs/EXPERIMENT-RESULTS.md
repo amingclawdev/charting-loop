@@ -15,10 +15,12 @@ attempts on one task as new tasks.
   Only three count: the fourth belongs to CL-032 attempt-003, whose Control QA timed
   out and made the whole matched attempt infrastructure-invalid. It has no standalone
   public arm manifest and is not used in the effect pattern.
-- On the second task, `ico-path-patch`, the latest valid full-method recovery run
-  passed 19/19 verifier checks and received official reward 1.0 within the original
-  5,400-second condition. It was not a matched experiment or an accepted leaderboard
-  submission.
+- On the second task, `ico-path-patch`, a same-task adaptive engineering run passed
+  19/19 verifier checks and received official reward 1.0 within the original
+  5,400-second condition. Definition closure was incomplete, construction readiness
+  unresolved, and QA `not_assessed`, so this is not classified as a complete
+  Method-conformance pass. It was not an independent reproduction, matched experiment,
+  or accepted leaderboard submission.
 
 The matched pattern remains a repeated descriptive result on one task. Adding a
 passing same-task recovery observation on a second task gives two-task engineering
@@ -28,7 +30,8 @@ benchmark-wide efficacy evidence, or a production-readiness claim.
 ## Publication and participation status
 
 **Current status: the public result and causal-evidence release is live.** A reader can
-inspect six current arm packages, validate their exact Git and digest identities,
+inspect six current causal-evidence arm packages and one engineering-result package,
+validate their exact Git and digest identities,
 follow the observable event chain, use the bounded AI review prompts, and follow the
 prospective replication protocol. Publication does not mean that a benchmark
 submission, leaderboard run, or external intake channel already exists.
@@ -38,8 +41,8 @@ submission, leaderboard run, or external intake channel already exists.
 | Human explanation and result navigation | Ready | This index and the two task pages explain the design, attempts, scores, mechanism evidence, adjustments, and limitations. |
 | Post-hoc AI review | Ready | Complete evidence-bound prompts are available for the whole task and CL-030/031/032. They are not experiment input. |
 | Prospective replication instructions | Ready for a frozen pilot | The human invitation, operator runbook, and authoritative protocol define how to add distinct tasks without treating repetitions as new tasks. |
-| Current result artifacts | Six causal-evidence arm releases plus one passing engineering result | Treatment and Control for CL-030/031/032 each have an immutable `public-v2` branch. The `ico-path-patch` page is a public-safe main-branch summary with sealed raw artifacts; it is not registered as a causal-evidence arm release. |
-| Public release registry | Twelve validated append-only rows | Six `public-v1` rows remain immutable; six `public-v2` rows supersede them without deletion. The registry binds every branch to its commit, tree, manifest digest, typed identity, outcome, and sealed-source digests. |
+| Current result artifacts | Six causal-evidence arm releases plus one engineering-result release | Treatment and Control for CL-030/031/032 each have an immutable `public-v2` branch. The separate `ico-path-patch` job-009 `public-v1` branch records an official pass with incomplete Method conformance and same-task adaptive provenance; it is not a causal-evidence arm release. |
+| Public release registry | Thirteen validated append-only rows | Six historical `public-v1` arm rows and six superseding `public-v2` arm rows remain immutable. The thirteenth row binds the job-009 engineering summary. Every row binds its branch to a commit, tree, manifest digest, typed identity, outcome, and sealed-source digests. |
 | Public remote and submission channel | Repository live; intake not opened | The repository is public at [`amingclawdev/charting-loop`](https://github.com/amingclawdev/charting-loop), but no project submission endpoint is advertised yet. |
 | Official benchmark leaderboard | No accepted project entry | The matched pairs are not a complete eligible run. The passing `ico-path-patch` job has not been accepted as a Harbor submission, so no rank or accepted submission is claimed. |
 
@@ -207,7 +210,9 @@ not identify a causal effect, establish multi-task efficacy, or make official 20
 equivalent to unqualified semantic correctness. The separate `ico-path-patch` sequence
 now contains a 19/19 same-task recovery after an earlier 15/19 failure, but it had no
 matched Control and changed the Method, SDK, Agent, Builder artifact, and model sample.
-It therefore broadens engineering coverage without upgrading this causal claim.
+The earlier verifier feedback also informed the later general Method/SDK work. It
+therefore broadens engineering coverage without upgrading this causal claim or
+constituting an independent reproduction.
 Testing the stronger claim requires distinct tasks with matched arms, more pairs, and
 evaluators whose objectives match their written tasks.
 
@@ -216,7 +221,7 @@ evaluators whose objectives match their written tasks.
 | Benchmark task | Release | Attempts represented | Headline | Human detail |
 | --- | --- | --- | --- | --- |
 | `production-planning` | Terminal-Bench 3.0 | Three counted completed pairs and two invalid predecessors | Four observed Treatment 20/20 executions, of which three belong to counted pairs; counted Controls were 16/20, 16/20, and 15/20 | [Open the task result](PRODUCTION-PLANNING-RESULT.md) |
-| `ico-path-patch` | Terminal-Bench 3.0 | Jobs 002–009: four launcher/runtime-invalid identities, three valid method failures, and one valid method pass | Latest valid run passed 19/19 checks with reward 1.0 within the original 5,400-second condition; official maintainer triage had previously reported 10/19 as its best result under that condition | [Open the task result](ICO-PATH-PATCH-RESULT.md) |
+| `ico-path-patch` | Terminal-Bench 3.0 | Jobs 002–009: three launcher/runtime-invalid identities, one project-caused harness-integrity invalid attempt, three valid method failures, and one official task pass with incomplete Method conformance | Job 009 passed 19/19 with reward 1.0 within the original 5,400-second condition after same-task verifier-feedback-informed adaptation; official maintainer triage had previously reported 10/19 as its best result under that condition | [Open the task result](ICO-PATH-PATCH-RESULT.md) |
 
 Each row is one distinct task. Repeated runs, repairs, verifier replays, or invalid
 predecessors for that task belong on its task page rather than becoming extra rows.

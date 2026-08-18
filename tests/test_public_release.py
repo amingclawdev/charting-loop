@@ -290,7 +290,8 @@ class PublicReleaseTests(unittest.TestCase):
         for marker in (
             "**public release live and replication-invitation ready**",
             "Six sanitized arm summaries from three matched attempts",
-            "public-safe engineering result",
+            "official 19/19",
+            "same-task adaptive recovery after verifier feedback",
             "https://github.com/amingclawdev/charting-loop",
         ):
             self.assertIn(marker, readme_words)
@@ -337,7 +338,7 @@ class PublicReleaseTests(unittest.TestCase):
             "**not multi-task efficacy evidence**",
             "passing same-task recovery observation",
             "19/19 verifier checks and received official reward 1.0",
-            "not a matched experiment or an accepted leaderboard submission",
+            "not an independent reproduction, matched experiment, or accepted leaderboard submission",
             "## Result index",
             "Each row is one distinct task",
             "[Open the task result](PRODUCTION-PLANNING-RESULT.md)",
@@ -352,10 +353,10 @@ class PublicReleaseTests(unittest.TestCase):
         publication_markers = (
             "## Publication and participation status",
             "**Current status: the public result and causal-evidence release is live.**",
-            "| Current result artifacts | Six causal-evidence arm releases plus one passing engineering result |",
-            "| Public release registry | Twelve validated append-only rows |",
-            "six `public-v2` rows supersede them without deletion",
-            "binds every branch to its commit, tree, manifest digest",
+            "| Current result artifacts | Six causal-evidence arm releases plus one engineering-result release |",
+            "| Public release registry | Thirteen validated append-only rows |",
+            "thirteenth row binds the job-009 engineering summary",
+            "Every row binds its branch to a commit, tree, manifest digest",
             "| Public remote and submission channel | Repository live; intake not opened |",
             "| Official benchmark leaderboard | No accepted project entry |",
             "reader, runner, and sanitized result package is public",
@@ -525,15 +526,17 @@ class PublicReleaseTests(unittest.TestCase):
             "# `ico-path-patch` engineering result",
             "second distinct benchmark task represented",
             "**19/19 verifier checks passed; official reward 1.0**",
-            "**valid method pass**",
-            "Job `008` remains an independently valid 15/19 failure",
+            "**official task pass in a same-task adaptive engineering run**",
+            "Job `008` remains a valid 15/19 method failure",
             "Best grader result: 10/19",
             "https://github.com/harbor-framework/terminal-bench/issues/1453",
             "original 5,400-second task limit",
-            "first independently documented 19/19 completion we can verify",
-            "not a current eight-hour leaderboard maximum",
+            "does not directly answer the issue's independent-agent reproducibility question",
+            "does not establish a world-first result or leaderboard maximum",
             "charting-loop-tb3-ico-path-patch-009",
-            "job `009` is a valid method pass",
+            "official task pass but not a complete Method-conformance pass",
+            "project-caused harness-integrity",
+            "evaluator-feedback-informed hill climbing",
             "one absolute task deadline instead of fixed Builder/Worker/QA allocations",
             "shared Corridor access for both Worker and QA",
             "Position is an evidence-bound checkpoint",
@@ -551,7 +554,10 @@ class PublicReleaseTests(unittest.TestCase):
             "Worker froze six complete snapshots",
             "worker-000006-458931fa489a7207",
             "effective outcome was `not_assessed`",
+            "`definition_closure_status=incomplete`",
+            "`construction_readiness_status=unresolved`",
             "recovered byte-identical custody, not a direct container download",
+            "public/results/ico-path-patch/job-009",
             "two-task engineering coverage, not multi-task efficacy",
             "Four Treatment executions were observed at 20/20",
             "infrastructure-invalid pair and remains noncounting",
@@ -572,6 +578,42 @@ class PublicReleaseTests(unittest.TestCase):
             self.assertNotIn(forbidden, ico_result)
         self.assertNotRegex(ico_result, r"/(?:Users|home)/[^/\s]+/")
         self.assertNotRegex(ico_result, r"\bico-path-patch__[A-Za-z0-9]+\b")
+
+        engineering_root = (
+            REPOSITORY_ROOT / "public" / "results" / "ico-path-patch" / "job-009"
+        )
+        engineering_summary = (engineering_root / "SUMMARY.md").read_text(
+            encoding="utf-8"
+        )
+        engineering_manifest = json.loads(
+            (engineering_root / "MANIFEST.json").read_text(encoding="utf-8")
+        )
+        for marker in (
+            "official task pass",
+            "not a complete Method-conformance pass",
+            "incomplete definition closure",
+            "construction readiness",
+            "same-task verifier feedback",
+            "project-caused harness-integrity",
+            "independent reproduction",
+            "recovered byte-identical",
+        ):
+            self.assertIn(marker, engineering_summary)
+        self.assertEqual(engineering_manifest["identity"]["arm"], "corridor")
+        self.assertEqual(engineering_manifest["official_evaluation"]["checks_passed"], 19)
+        self.assertEqual(engineering_manifest["process"]["qa_outcome"], "not_assessed")
+        self.assertEqual(len(engineering_manifest["sealed_artifacts"]), 13)
+        public_engineering_bytes = (
+            engineering_summary
+            + (engineering_root / "MANIFEST.json").read_text(encoding="utf-8")
+        )
+        self.assertNotRegex(public_engineering_bytes, r"/(?:Users|home)/[^/\s]+/")
+        self.assertNotRegex(
+            public_engineering_bytes,
+            r"\bico-path-patch__[A-Za-z0-9]+\b",
+        )
+        for forbidden in ("subscription_token", "session_token", "Bearer ", "patch_ico.py"):
+            self.assertNotIn(forbidden, public_engineering_bytes)
 
         for human_page in (index, task_result, ico_result):
             self.assertNotIn("```text", human_page)
@@ -702,7 +744,7 @@ class PublicReleaseTests(unittest.TestCase):
             history_base_ref=PUBLIC_V1_MAIN_COMMIT,
         )
         self.assertTrue(report.ok, report.errors)
-        self.assertEqual(report.facts["release_count"], 12)
+        self.assertEqual(report.facts["release_count"], 13)
         releases = checked_registry()["releases"]
         self.assertEqual(
             [(row["identity"]["run_id"], row["identity"]["arm"]) for row in releases],
@@ -713,11 +755,11 @@ class PublicReleaseTests(unittest.TestCase):
                 ("cl031-attempt-002", "control"),
                 ("cl032-attempt-004", "treatment"),
                 ("cl032-attempt-004", "control"),
-            ],
+            ] + [("job-009", "corridor")],
         )
         expected_schemas = ["charting-loop/public-result-summary/v1"] * 6 + [
             "charting-loop/public-result-evidence/v2"
-        ] * 6
+        ] * 6 + ["charting-loop/public-result-summary/v1"]
         for row, expected_schema in zip(releases, expected_schemas, strict=True):
             shown = git(
                 REPOSITORY_ROOT,
@@ -755,7 +797,7 @@ class PublicReleaseTests(unittest.TestCase):
                 set(changed.stdout.splitlines()),
                 {row["artifact_manifest_path"], summary["path"]},
             )
-        for previous, current in zip(releases[:6], releases[6:], strict=True):
+        for previous, current in zip(releases[:6], releases[6:12], strict=True):
             self.assertEqual(current["supersedes_release_id"], previous["release_id"])
             self.assertEqual(current["identity"]["result_release"], "public-v2")
             self.assertTrue(current["branch_ref"].endswith("/public-v2"))
@@ -768,7 +810,7 @@ class PublicReleaseTests(unittest.TestCase):
                     f'{row["commit_sha"]}:{row["artifact_manifest_path"]}',
                 ).stdout
             )
-            for row in releases[6:]
+            for row in releases[6:12]
         }
         expected_redactions = [
             "subscription-authentication",
@@ -863,8 +905,51 @@ class PublicReleaseTests(unittest.TestCase):
             "cl031-control-public-v2",
             "cl032-treatment-public-v2",
             "cl032-control-public-v2",
+            "ico-path-patch-job-009-public-v1",
         ):
             self.assertEqual(first.count(release_id), 1)
+
+    def test_v1_allows_descriptive_corridor_engineering_arm_but_v2_does_not(self) -> None:
+        releases = checked_registry()["releases"]
+        engineering = releases[-1]
+        self.assertEqual(engineering["identity"]["arm"], "corridor")
+        manifest = json.loads(
+            git(
+                REPOSITORY_ROOT,
+                "show",
+                f'{engineering["commit_sha"]}:{engineering["artifact_manifest_path"]}',
+            ).stdout
+        )
+        self.assertEqual(manifest["schema_version"], public_release.PUBLIC_RESULT_SCHEMA)
+        self.assertEqual(manifest["condition"]["label"], "Corridor-assisted engineering run")
+
+        causal_row = releases[6]
+        causal = json.loads(
+            git(
+                REPOSITORY_ROOT,
+                "show",
+                f'{causal_row["commit_sha"]}:{causal_row["artifact_manifest_path"]}',
+            ).stdout
+        )
+        causal["identity"]["arm"] = "corridor"
+        causal["condition"] = copy.deepcopy(manifest["condition"])
+        report = public_release.Report(subject="v2-corridor-arm")
+        public_release._validate_public_result_manifest(
+            causal_row,
+            (
+                json.dumps(causal, ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n"
+            ).encode("utf-8"),
+            manifest_path=causal_row["artifact_manifest_path"],
+            commit=causal_row["commit_sha"],
+            repo=REPOSITORY_ROOT,
+            location="release",
+            report=report,
+        )
+        self.assertTrue(
+            any("PUBLIC_RESULT_CONDITION" in error for error in report.errors),
+            report.errors,
+        )
 
     def test_public_v2_manifest_rejects_broken_causal_and_lineage_joins(self) -> None:
         row = checked_registry()["releases"][8]

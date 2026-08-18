@@ -4,10 +4,12 @@ This repository separates a draft corridor method from the empirical data used t
 it. Current status: **public release live and replication-invitation ready**. Six
 sanitized arm summaries from three matched attempts on `production-planning` are
 published through immutable result branches and the machine release registry. A
-separate public-safe engineering result records a valid but non-passing
-`ico-path-patch` full-method smoke run. The public index therefore covers two distinct
-tasks, but only the first has a matched comparison. Structural validation works, but
-no aggregate, causal, multi-task-efficacy, benchmark-wide, production,
+separate immutable public-summary branch records an official 19/19
+`ico-path-patch` engineering run whose complete Method conformance was not established.
+The public index therefore covers two distinct tasks, but only the first has a matched
+comparison. The second is a same-task adaptive recovery after verifier feedback, not
+an independent reproduction. Structural validation works, but no aggregate, causal,
+multi-task-efficacy, benchmark-wide, production,
 semantic-correctness, leaderboard, or real-world-authority result has been established.
 
 ## Read the theory

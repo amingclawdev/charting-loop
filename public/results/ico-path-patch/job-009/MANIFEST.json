@@ -1,0 +1,212 @@
+{
+  "condition": {
+    "corridor_access": true,
+    "corridor_observably_used": true,
+    "label": "Corridor-assisted engineering run",
+    "plain_language": "A same-task engineering run in which Builder constructed a frozen Corridor and both Worker and QA could query it; no matched no-Corridor arm was run."
+  },
+  "identity": {
+    "arm": "corridor",
+    "attempt_id": "job-009",
+    "benchmark_dataset": "terminal-bench",
+    "benchmark_release": "3.0",
+    "build_id": "job-009-corridor-build",
+    "candidate_id": "ico-path-patch-corridor",
+    "candidate_revision": "b8b8f2853ffc9cb30372af08dcd6ef1a652235243d822b9998f9bff2aa08ce7d",
+    "construction_id": "job-009-builder",
+    "launch_id": "job-009-launch",
+    "method_version_id": "charting-loop-method-v8",
+    "protocol_id": "tb3-full-method-smoke",
+    "result_release": "public-v1",
+    "run_id": "job-009",
+    "study_id": "cl074-tb3-ico-path-patch-replay",
+    "task_id": "ico-path-patch",
+    "taskset_id": "tb30-ico-path-patch"
+  },
+  "interpretation": {
+    "causal_claim": false,
+    "distinct_benchmark_tasks": 1,
+    "evidence_class": "descriptive-same-task-adaptive-engineering-result",
+    "leaderboard_claim": false,
+    "mechanism_summary": "Builder produced a frozen task-conditioned Corridor, Worker and QA both queried it, and the final Worker snapshot passed 19/19; incomplete definition closure, unresolved construction readiness, QA not_assessed, and same-task verifier-feedback-informed adaptation prevent complete Method-conformance or causal attribution.",
+    "multi_task_evidence": false
+  },
+  "official_evaluation": {
+    "checks_passed": 19,
+    "checks_total": 19,
+    "outcome": "pass",
+    "reward": 1.0
+  },
+  "process": {
+    "database_changed_after_qa": null,
+    "evaluation_mode": "official-evaluation-after-advisory-qa-and-worker-snapshot-restore",
+    "post_repair_qa_performed": false,
+    "qa_outcome": "not_assessed",
+    "repair_attempts_executed": 0,
+    "repair_launch_attempted": false,
+    "repair_status": "not-launched"
+  },
+  "public_summary": {
+    "path": "public/results/ico-path-patch/job-009/SUMMARY.md",
+    "sha256": "sha256:4f11c1020e42dd265744eda9c4fc3aa760fbbd9cb755652faaca00ef4c1113e6",
+    "size_bytes": 3088
+  },
+  "release_id": "ico-path-patch-job-009-public-v1",
+  "schema_version": "charting-loop/public-result-summary/v1",
+  "sealed_artifacts": [
+    {
+      "artifact_id": "private-result-audit",
+      "custody": "local sealed Harbor job 009 custody; raw bytes excluded from public Git",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "post-run public-safe audit source containing execution and claim-boundary facts",
+      "release_trigger": "publish only a separately scanned redacted derivative",
+      "sha256": "sha256:2de8bb4bf6d2e9cabb105f7a6e0bd17dbfec789cd3779ab283e3301307480840",
+      "size_bytes": 2442,
+      "source_ref": "private-custody:harbor-job/job-009/private-result-audit"
+    },
+    {
+      "artifact_id": "harbor-trial-result",
+      "custody": "local sealed Harbor job 009 custody; raw bytes excluded from public Git",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "Harbor trial result with task, runtime, agent, phase, QA, and evaluator metadata",
+      "release_trigger": "publish only a separately scanned redacted derivative",
+      "sha256": "sha256:572da00e20282d89058b9a53a7736925fd4b29d63704d929a88066e1495e6412",
+      "size_bytes": 18238,
+      "source_ref": "private-custody:harbor-job/job-009/trial-result"
+    },
+    {
+      "artifact_id": "controlled-content-manifest",
+      "custody": "local sealed Harbor job 009 custody; raw bytes excluded from public Git",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "Harbor artifact index for original and submitted task bytes",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:3cb1641c581c178b9a878c7822629ae7c1679ab61205d07acf2f6ffab64d8102",
+      "size_bytes": 617,
+      "source_ref": "private-custody:harbor-job/job-009/controlled-content-manifest"
+    },
+    {
+      "artifact_id": "corridor-custody-manifest",
+      "custody": "local sealed Harbor job 009 custody; raw Corridor bytes excluded from public Git",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "recovered byte-identical frozen Corridor index with per-file digests",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:b6ecc4273377ef8700dd85ed993d9adde67753be810783cd47314b573e67c117",
+      "size_bytes": 2953,
+      "source_ref": "private-custody:harbor-job/job-009/corridor-custody-manifest"
+    },
+    {
+      "artifact_id": "builder-role-transcript",
+      "custody": "local sealed Harbor job 009 custody; raw bytes excluded from public Git",
+      "license_status": "restricted",
+      "media_type": "text/plain",
+      "provenance": "complete Builder role transcript",
+      "release_trigger": "publish only a separately scanned redacted derivative",
+      "sha256": "sha256:5986fc2d40762a721d26c94d41c84c298204e12afa605a6696f44ea069c6a040",
+      "size_bytes": 373304,
+      "source_ref": "private-custody:harbor-job/job-009/builder-role-transcript"
+    },
+    {
+      "artifact_id": "worker-role-transcript",
+      "custody": "local sealed Harbor job 009 custody; raw bytes excluded from public Git",
+      "license_status": "restricted",
+      "media_type": "text/plain",
+      "provenance": "complete Worker role transcript",
+      "release_trigger": "publish only a separately scanned redacted derivative",
+      "sha256": "sha256:c6d36b074b67356201033d4c4ea51a982e7237e8a118f6d374cf9c5ffcf1ff56",
+      "size_bytes": 1981293,
+      "source_ref": "private-custody:harbor-job/job-009/worker-role-transcript"
+    },
+    {
+      "artifact_id": "qa-role-transcript",
+      "custody": "local sealed Harbor job 009 custody; raw bytes excluded from public Git",
+      "license_status": "restricted",
+      "media_type": "text/plain",
+      "provenance": "complete QA role transcript",
+      "release_trigger": "publish only a separately scanned redacted derivative",
+      "sha256": "sha256:90b544a92904515c970ee5227d42be264f2d9d550d068eba37d6485e36fc5e3d",
+      "size_bytes": 1660718,
+      "source_ref": "private-custody:harbor-job/job-009/qa-role-transcript"
+    },
+    {
+      "artifact_id": "official-reward-receipt",
+      "custody": "local sealed Harbor job 009 custody",
+      "license_status": "restricted",
+      "media_type": "text/plain",
+      "provenance": "official Harbor verifier reward receipt",
+      "release_trigger": "publish only through an authorized sanitized result release",
+      "sha256": "sha256:4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "size_bytes": 2,
+      "source_ref": "private-custody:harbor-job/job-009/official-reward-receipt"
+    },
+    {
+      "artifact_id": "verifier-output",
+      "custody": "local sealed Harbor job 009 custody; hidden checks excluded from public Git",
+      "license_status": "restricted",
+      "media_type": "text/plain",
+      "provenance": "official verifier check output supporting the 19/19 count",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:76c0b173525d91bcf93bab775bcf083d41274bb5e1a95a5bdee794523fe94b86",
+      "size_bytes": 4058,
+      "source_ref": "private-custody:harbor-job/job-009/verifier-output"
+    },
+    {
+      "artifact_id": "final-worker-snapshot-manifest",
+      "custody": "local sealed Harbor job 009 custody; snapshot bytes excluded from public Git",
+      "license_status": "restricted",
+      "media_type": "application/json",
+      "provenance": "manifest for Worker snapshot sequence 6 restored for grading",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:ca413fc648901dc87fb09ef8605f5817e73b00772195d9425ff0fefe1b0a5d4e",
+      "size_bytes": 687,
+      "source_ref": "private-custody:harbor-job/job-009/final-worker-snapshot-manifest"
+    },
+    {
+      "artifact_id": "patch-generator",
+      "custody": "local sealed Harbor job 009 custody; solution code excluded from public Git",
+      "license_status": "restricted",
+      "media_type": "text/x-python",
+      "provenance": "task-specific patch generator submitted by Worker",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:5198290eace248aadaa0164e9d343b16993a75035ddfd710419f0b162d7babeb",
+      "size_bytes": 7123,
+      "source_ref": "private-custody:harbor-job/job-009/patch-generator"
+    },
+    {
+      "artifact_id": "original-binary",
+      "custody": "local sealed Harbor job 009 custody; benchmark bytes excluded from public Git",
+      "license_status": "restricted",
+      "media_type": "application/x-executable",
+      "provenance": "original benchmark binary captured by Harbor",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:dc8ded372b9d9e6e34d923a78879a3b2780db63e806d1aeea41e064bd786165d",
+      "size_bytes": 1419776,
+      "source_ref": "private-custody:harbor-job/job-009/original-binary"
+    },
+    {
+      "artifact_id": "patched-binary",
+      "custody": "local sealed Harbor job 009 custody; solution bytes excluded from public Git",
+      "license_status": "restricted",
+      "media_type": "application/x-executable",
+      "provenance": "patched binary submitted by Worker and evaluated by Harbor",
+      "release_trigger": "task retirement or written benchmark-maintainer clearance",
+      "sha256": "sha256:14f63aa61546510909ba5f5453590789ba176f778175e39c703887eea4830dc0",
+      "size_bytes": 1419776,
+      "source_ref": "private-custody:harbor-job/job-009/patched-binary"
+    }
+  ],
+  "source_custody": {
+    "builder_service_commit": null,
+    "builder_service_tree": null,
+    "controlled_result_commit": null,
+    "controlled_result_path": "private-custody:harbor-job/job-009/private-result-audit",
+    "controlled_result_tree": null,
+    "method_source_commit": "3c3813444a7d43d0a56837e9cb960be86ce26d06",
+    "official_task_committed_at": null,
+    "official_task_source_commit": null,
+    "official_task_url": "https://github.com/harbor-framework/terminal-bench/issues/1453"
+  }
+}

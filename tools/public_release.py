@@ -1239,10 +1239,19 @@ def _validate_public_result_manifest(
     identity = manifest.get("identity")
     arm = identity.get("arm") if isinstance(identity, dict) else None
     condition = manifest.get("condition")
-    expected_condition = {
+    expected_conditions = {
         "control": ("Control", False),
         "treatment": ("Treatment", True),
-    }.get(arm)
+    }
+    if schema_version == PUBLIC_RESULT_SCHEMA:
+        # A descriptive engineering result can record Corridor use without
+        # pretending that an unrun matched Control exists. The causal-evidence
+        # v2 contract deliberately remains restricted to Treatment/Control.
+        expected_conditions["corridor"] = (
+            "Corridor-assisted engineering run",
+            True,
+        )
+    expected_condition = expected_conditions.get(arm)
     if not _closed_keys(
         condition,
         PUBLIC_RESULT_CONDITION_KEYS,
@@ -1252,7 +1261,7 @@ def _validate_public_result_manifest(
         report.error(
             "PUBLIC_RESULT_CONDITION",
             manifest_location,
-            "condition and typed arm must describe treatment or control",
+            "condition and typed arm are not supported by this public-result schema",
         )
     else:
         expected_label, expected_access = expected_condition

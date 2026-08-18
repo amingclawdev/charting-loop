@@ -898,7 +898,7 @@ class ExogenousRegistryTests(unittest.TestCase):
             history_base_ref="0029d1f2412ee41c040b9a2364c2e78e69c0e81d",
         )
         self.assertTrue(release_report.ok, release_report.errors)
-        self.assertEqual(release_report.facts["release_count"], 12)
+        self.assertEqual(release_report.facts["release_count"], 13)
         for marker in (
             "## Public executed-topology amendments",
             "they do not rewrite the frozen STUDY or RUN registry",
