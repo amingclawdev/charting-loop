@@ -89,10 +89,52 @@ def _remaining_seconds(deadline: float) -> int:
     return max(0, int(deadline - asyncio.get_running_loop().time()))
 
 
+def _builder_freeze_metrics(
+    freeze: dict[str, Any], *, elapsed_seconds: float
+) -> dict[str, Any]:
+    """Name a first-valid freeze only when all frozen readiness facts support it."""
+
+    valid = bool(
+        freeze.get("builder_corridor_status") == "frozen"
+        and freeze.get("method_capsule_status") == "complete"
+        and freeze.get("method_capsule_errors") == []
+        and freeze.get("method_capsule_digest_matches_stored") is True
+        and isinstance(freeze.get("method_capsule_digest"), str)
+        and freeze.get("method_capsule_digest")
+        == freeze.get("method_capsule_expected_digest")
+        and freeze.get("method_capsule_digest")
+        == freeze.get("method_capsule_stored_digest")
+        and freeze.get("acceptance_ledger_status") == "complete"
+        and freeze.get("source_mapping_status") == "complete"
+        and freeze.get("definition_closure_status") == "complete"
+        and freeze.get("construction_readiness_status") == "ready"
+        and freeze.get("acceptance_ledger_errors") == []
+    )
+    elapsed = round(elapsed_seconds, 3)
+    return {
+        "freeze_elapsed_seconds": elapsed,
+        "first_valid_freeze_recorded": valid,
+        "first_valid_freeze_elapsed_seconds": elapsed if valid else None,
+        "method_capsule_status": freeze.get("method_capsule_status", "missing"),
+        "method_capsule_errors": freeze.get("method_capsule_errors", []),
+        "method_capsule_digest": freeze.get("method_capsule_digest"),
+        "method_capsule_expected_digest": freeze.get(
+            "method_capsule_expected_digest"
+        ),
+        "method_capsule_stored_digest": freeze.get(
+            "method_capsule_stored_digest"
+        ),
+        "method_capsule_digest_matches_stored": bool(
+            freeze.get("method_capsule_digest_matches_stored")
+        ),
+    }
+
+
 def _role_metrics_program(role_dir: str, corridor_path: str) -> str:
     """Return a private-log parser for construction latency and artifact size."""
 
     return f"""
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -154,12 +196,44 @@ total_wall = (
 )
 capsule = {{}}
 kit = {{}}
+parse_errors = {{}}
+
+def reject_duplicates(pairs):
+    value = {{}}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate key: {{key}}")
+        value[key] = item
+    return value
+
 for path, target in ((corridor / "METHOD-CAPSULE.json", capsule), (corridor / "KIT.json", kit)):
     if path.is_file() and not path.is_symlink():
         try:
-            target.update(json.loads(path.read_text(encoding="utf-8")))
-        except (OSError, json.JSONDecodeError):
-            pass
+            value = json.loads(
+                path.read_text(encoding="utf-8"),
+                object_pairs_hook=reject_duplicates,
+                parse_constant=lambda item: (_ for _ in ()).throw(
+                    ValueError(f"non-finite value: {{item}}")
+                ),
+            )
+            if isinstance(value, dict):
+                target.update(value)
+            else:
+                parse_errors[path.name] = "object_required"
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            parse_errors[path.name] = type(exc).__name__
+actual_capsule_digest = None
+if capsule and "METHOD-CAPSULE.json" not in parse_errors:
+    actual_capsule_digest = "sha256:" + hashlib.sha256(
+        json.dumps(
+            capsule,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+stored_capsule_digest = kit.get("method_capsule_digest")
 print(json.dumps({{
     "schema_version": "charting-loop/role-construction-metrics/v1",
     "turn_count": agent_messages,
@@ -177,7 +251,13 @@ print(json.dumps({{
         "method_version": capsule.get("method_version"),
         "method_digest": capsule.get("method_digest"),
         "method_scope_digest": capsule.get("method_scope_digest"),
-        "capsule_digest": kit.get("method_capsule_digest"),
+        "capsule_digest": actual_capsule_digest,
+        "stored_capsule_digest": stored_capsule_digest,
+        "capsule_digest_matches_stored": (
+            actual_capsule_digest is not None
+            and actual_capsule_digest == stored_capsule_digest
+        ),
+        "parse_errors": parse_errors,
         "scaffold_digest": kit.get("starter_digest"),
     }},
     "metrics_are_descriptive": True,
@@ -767,7 +847,11 @@ class ChartingLoopFullMethodAgent(Codex):
                 f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
                 "python3 -m corridor_kit validate-capsule "
                 f"{shlex.quote(corridor_dir + '/METHOD-CAPSULE.json')} "
-                f"--expected-method-digest {shlex.quote(METHOD_CONTENT_SHA256)}"
+                f"--kit {shlex.quote(corridor_dir + '/KIT.json')} "
+                f"--expected-method-version {shlex.quote(METHOD_VERSION_ID)} "
+                f"--expected-method-digest {shlex.quote(METHOD_CONTENT_SHA256)} "
+                "--expected-method-scope-digest "
+                f"{shlex.quote(METHOD_SCOPE_SHA256)}"
             ),
         )
         if initialized.return_code != 0:
@@ -1279,6 +1363,8 @@ class ChartingLoopFullMethodAgent(Codex):
                 "tree_digest",
                 "captured_at",
                 "error_type",
+                "already_captured",
+                "preserved_existing",
                 "builder_recovery_evidence",
             )
             if key in report
@@ -1427,12 +1513,21 @@ class ChartingLoopFullMethodAgent(Codex):
         digest = str(freeze["corridor_digest"])
         metadata["corridor_digest"] = digest
         builder_metrics = dict(builder_run.get("role_metrics", {}))
-        builder_metrics["first_valid_freeze_elapsed_seconds"] = round(
-            loop.time() - started_at, 3
+        builder_metrics.update(
+            _builder_freeze_metrics(
+                freeze, elapsed_seconds=loop.time() - started_at
+            )
         )
         builder_metrics["frozen_corridor_digest"] = digest
         metadata["builder_construction_metrics"] = builder_metrics
         metadata["builder_corridor_status"] = freeze.get("builder_corridor_status")
+        metadata["method_capsule_status"] = freeze.get("method_capsule_status")
+        metadata["method_capsule_errors"] = freeze.get(
+            "method_capsule_errors", []
+        )
+        metadata["method_capsule_digest_matches_stored"] = bool(
+            freeze.get("method_capsule_digest_matches_stored")
+        )
         acceptance_ledger_status = str(
             freeze.get("acceptance_ledger_status", "missing")
         )

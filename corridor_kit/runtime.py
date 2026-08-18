@@ -11,7 +11,11 @@ from pathlib import Path
 import re
 from typing import Any
 
-from .acceptance import qa_assessment_decision, validate_acceptance_ledger
+from .acceptance import (
+    load_qa_json_text,
+    qa_assessment_decision,
+    validate_acceptance_ledger,
+)
 from .capabilities import validate_capability_registry
 from .core import (
     CorridorKitError,
@@ -818,8 +822,8 @@ def validate_qa_assessment_path(
     assessment_path = Path(assessment_path)
     raw = assessment_path.read_bytes()
     try:
-        value = json.loads(raw)
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        value = load_qa_json_text(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
         return {
             "schema_version": "charting-loop/qa-assessment-decision/v1",
             "valid": False,

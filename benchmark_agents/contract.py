@@ -16,9 +16,12 @@ from pathlib import Path
 from typing import Any
 
 from corridor_kit.acceptance import (
+    MAX_QA_JSON_BYTES,
     QA_ASSESSMENT_SCHEMA,
+    load_qa_json_text,
     validate_qa_assessment as validate_corridor_qa_assessment,
 )
+from corridor_kit.scaffold import method_capsule
 
 
 RUNTIME_ROOT = "/tmp/charting-loop"
@@ -47,7 +50,6 @@ ACCEPTANCE_STATES = frozenset({"pass", "fail", "unknown", "not_reached"})
 CONSTRUCTION_READINESS_STATES = frozenset({"ready", "unresolved"})
 ASSESSMENT_CLOSURE_STATES = frozenset({"complete", "incomplete"})
 SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
-MAX_QA_JSON_BYTES = 256 * 1024
 METHOD_VERSION_ID = "charting-loop-method-v8"
 METHOD_CONTENT_SHA256 = (
     "sha256:85b5a7a8700312ec1e35b80df6e224221d44a48904247a8d6d32cfe940459446"
@@ -122,6 +124,43 @@ def private_custody_program(
         submission_root = Path({submission_root!r})
         expected_digest = {expected_corridor_digest!r}
         target = agent_dir / "corridor-custody"
+
+        if target.exists() or target.is_symlink():
+            try:
+                if target.is_symlink() or not target.is_dir():
+                    raise ValueError("existing private custody target is unsafe")
+                existing = json.loads(
+                    (target / "custody-manifest.json").read_text(encoding="utf-8")
+                )
+                if not isinstance(existing, dict):
+                    raise ValueError("existing private custody manifest is invalid")
+                existing["already_captured"] = True
+                existing["preserved_existing"] = True
+                print(json.dumps({{
+                    "ok": bool(
+                        existing.get("custody_status") == "direct"
+                        and existing.get("direct_byte_match") is True
+                    ),
+                    **existing,
+                }}, sort_keys=True))
+            except Exception as exc:
+                print(json.dumps({{
+                    "ok": False,
+                    "schema_version": "charting-loop/benchmark-private-custody/v1",
+                    "private": True,
+                    "public_release_allowed": False,
+                    "source_kind": "direct_runtime_capture_failed",
+                    "custody_status": "capture_failed",
+                    "direct_byte_match": False,
+                    "direct_download": False,
+                    "recovered": False,
+                    "expected_corridor_digest": expected_digest,
+                    "error_type": type(exc).__name__,
+                    "preserved_existing": True,
+                    "builder_recovery_evidence": "../phases/builder",
+                }}, sort_keys=True))
+            raise SystemExit(0)
+
         staging = Path(tempfile.mkdtemp(prefix=".corridor-custody-", dir=agent_dir))
 
         def digest(data):
@@ -211,13 +250,12 @@ def private_custody_program(
                 "captured_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             }}
             (staging / "custody-manifest.json").write_bytes(canonical(manifest) + b"\\n")
-            if target.exists():
-                raise ValueError("private custody target already exists")
+            if target.exists() or target.is_symlink():
+                raise ValueError("private custody target appeared during capture")
             os.replace(staging, target)
             print(json.dumps({{"ok": direct_match, **manifest}}, sort_keys=True))
         except Exception as exc:
             shutil.rmtree(staging, ignore_errors=True)
-            target.mkdir(parents=True, exist_ok=True)
             failure = {{
                 "schema_version": "charting-loop/benchmark-private-custody/v1",
                 "private": True,
@@ -231,7 +269,13 @@ def private_custody_program(
                 "error_type": type(exc).__name__,
                 "builder_recovery_evidence": "../phases/builder",
             }}
-            (target / "custody-manifest.json").write_bytes(canonical(failure) + b"\\n")
+            if not target.exists() and not target.is_symlink():
+                target.mkdir(parents=True)
+                (target / "custody-manifest.json").write_bytes(
+                    canonical(failure) + b"\\n"
+                )
+            else:
+                failure["preserved_existing"] = True
             print(json.dumps({{"ok": False, **failure}}, sort_keys=True))
         """
     )
@@ -282,6 +326,13 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
     succeeded.  The fallback is visible to both downstream roles and in FREEZE.json.
     """
 
+    expected_capsule = method_capsule(
+        method_version=METHOD_VERSION_ID,
+        method_digest=METHOD_CONTENT_SHA256,
+        method_scope_digest=METHOD_SCOPE_SHA256,
+    )
+    expected_capsule_digest = sha256_bytes(canonical_json_bytes(expected_capsule))
+
     return textwrap.dedent(
         f"""
         import hashlib
@@ -296,6 +347,8 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
         method = root / "method" / "METHOD.md"
         freeze = root / "FREEZE.json"
         schema = {FREEZE_SCHEMA!r}
+        expected_capsule = {expected_capsule!r}
+        expected_capsule_digest = {expected_capsule_digest!r}
 
         def digest(data):
             return "sha256:" + hashlib.sha256(data).hexdigest()
@@ -330,6 +383,77 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
             if not records:
                 raise ValueError("corridor contains no regular files")
             return records
+
+        def strict_json(path):
+            if path.is_symlink() or not path.is_file():
+                raise ValueError(f"regular JSON file required: {{path.name}}")
+
+            def reject_duplicates(pairs):
+                value = {{}}
+                for key, item in pairs:
+                    if key in value:
+                        raise ValueError(f"duplicate key: {{key}}")
+                    value[key] = item
+                return value
+
+            return json.loads(
+                path.read_text(encoding="utf-8"),
+                object_pairs_hook=reject_duplicates,
+                parse_constant=lambda item: (_ for _ in ()).throw(
+                    ValueError(f"non-finite value: {{item}}")
+                ),
+            )
+
+        def summarize_method_capsule():
+            summary = {{
+                "status": "missing",
+                "expected_digest": expected_capsule_digest,
+                "actual_digest": None,
+                "stored_digest": None,
+                "stored_digest_matches_actual": False,
+                "errors": [],
+            }}
+            try:
+                capsule = strict_json(corridor / "METHOD-CAPSULE.json")
+            except Exception as exc:
+                summary["errors"].append(
+                    f"METHOD_CAPSULE_JSON:{{type(exc).__name__}}"
+                )
+                return summary
+            if not isinstance(capsule, dict):
+                summary["status"] = "invalid"
+                summary["errors"].append("METHOD_CAPSULE_OBJECT_REQUIRED")
+                return summary
+            try:
+                summary["actual_digest"] = digest(canonical(capsule))
+            except Exception as exc:
+                summary["status"] = "invalid"
+                summary["errors"].append(
+                    f"METHOD_CAPSULE_CANONICAL:{{type(exc).__name__}}"
+                )
+                return summary
+            if capsule != expected_capsule:
+                summary["errors"].append("METHOD_CAPSULE_CONTENT_MISMATCH")
+            if summary["actual_digest"] != expected_capsule_digest:
+                summary["errors"].append("METHOD_CAPSULE_DIGEST_MISMATCH")
+            try:
+                kit = strict_json(corridor / "KIT.json")
+            except Exception as exc:
+                summary["errors"].append(f"KIT_JSON:{{type(exc).__name__}}")
+                kit = None
+            if not isinstance(kit, dict):
+                summary["errors"].append("KIT_OBJECT_REQUIRED")
+            else:
+                summary["stored_digest"] = kit.get("method_capsule_digest")
+                summary["stored_digest_matches_actual"] = (
+                    summary["stored_digest"] == summary["actual_digest"]
+                )
+                if not summary["stored_digest_matches_actual"]:
+                    summary["errors"].append(
+                        "METHOD_CAPSULE_STORED_DIGEST_MISMATCH"
+                    )
+            summary["status"] = "complete" if not summary["errors"] else "invalid"
+            return summary
 
         def summarize_acceptance():
             path = corridor / "ACCEPTANCE.json"
@@ -643,12 +767,14 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
             files = scan()
 
         acceptance = summarize_acceptance()
+        capsule = summarize_method_capsule()
         manifest = {{
             "schema_version": schema,
             "builder_corridor_status": status,
             "builder_failure": failure,
             "method_sha256": digest(method.read_bytes()) if method.is_file() else None,
             "corridor_tree_sha256": digest(canonical(files)),
+            "method_capsule": capsule,
             "acceptance_ledger": acceptance,
             "files": files,
         }}
@@ -680,6 +806,14 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
             "ok": True,
             "corridor_digest": manifest["corridor_tree_sha256"],
             "builder_corridor_status": status,
+            "method_capsule_status": capsule["status"],
+            "method_capsule_errors": capsule["errors"],
+            "method_capsule_digest": capsule["actual_digest"],
+            "method_capsule_expected_digest": capsule["expected_digest"],
+            "method_capsule_stored_digest": capsule["stored_digest"],
+            "method_capsule_digest_matches_stored": capsule[
+                "stored_digest_matches_actual"
+            ],
             "acceptance_ledger_status": acceptance["status"],
             "acceptance_ids": acceptance["acceptance_ids"],
             "required_acceptance_ids": acceptance["required_acceptance_ids"],
@@ -794,29 +928,6 @@ def remote_json_read_program(path: str) -> str:
         print(path.read_text(encoding="utf-8"))
         """
     ).strip()
-
-
-def load_qa_json_text(text: str) -> Any:
-    """Parse bounded QA JSON without duplicate keys or non-finite numbers."""
-
-    if len(text.encode("utf-8")) > MAX_QA_JSON_BYTES:
-        raise ValueError("QA JSON exceeds the size limit")
-
-    def reject_duplicate_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        value: dict[str, Any] = {}
-        for key, item in pairs:
-            if key in value:
-                raise ValueError(f"duplicate QA JSON key: {key}")
-            value[key] = item
-        return value
-
-    return json.loads(
-        text,
-        object_pairs_hook=reject_duplicate_pairs,
-        parse_constant=lambda item: (_ for _ in ()).throw(
-            ValueError(f"non-finite QA JSON value: {item}")
-        ),
-    )
 
 
 def _task_block(task_instruction: str) -> str:

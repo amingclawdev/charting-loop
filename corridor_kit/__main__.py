@@ -88,7 +88,10 @@ def _parser() -> argparse.ArgumentParser:
 
     capsule = commands.add_parser("validate-capsule", help="verify a Method capsule binding")
     capsule.add_argument("capsule", type=Path)
+    capsule.add_argument("--kit", required=True, type=Path)
+    capsule.add_argument("--expected-method-version", required=True)
     capsule.add_argument("--expected-method-digest", required=True)
+    capsule.add_argument("--expected-method-scope-digest", required=True)
     capsule.add_argument("--output", type=Path)
 
     qa = commands.add_parser("qa", help="validate an advisory QA assessment")
@@ -215,9 +218,17 @@ def main(argv: list[str] | None = None) -> int:
             _emit({"ok": True, "kit_version": KIT_VERSION, "output": str(created)})
             return 0
         if args.command == "validate-capsule":
+            kit = load_json(args.kit)
             errors = validate_method_capsule(
                 load_json(args.capsule),
+                expected_method_version=args.expected_method_version,
                 expected_method_digest=args.expected_method_digest,
+                expected_method_scope_digest=args.expected_method_scope_digest,
+                expected_capsule_digest=(
+                    kit.get("method_capsule_digest")
+                    if isinstance(kit, dict)
+                    else ""
+                ),
             )
             report = {"ok": not errors, "errors": errors}
             _emit(report, args.output)

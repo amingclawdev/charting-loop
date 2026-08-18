@@ -66,7 +66,10 @@ python3 -m corridor_kit init /tmp/charting-loop/corridor \
   --method-scope-digest sha256:SCOPE_DIGEST
 python3 -m corridor_kit validate-capsule \
   /tmp/charting-loop/corridor/METHOD-CAPSULE.json \
-  --expected-method-digest sha256:METHOD_DIGEST
+  --kit /tmp/charting-loop/corridor/KIT.json \
+  --expected-method-version charting-loop-method-v8 \
+  --expected-method-digest sha256:METHOD_DIGEST \
+  --expected-method-scope-digest sha256:SCOPE_DIGEST
 python3 -m corridor_kit validate \
   /tmp/charting-loop/corridor/ACCEPTANCE.json --allow-draft
 python3 -m corridor_kit validate-capabilities \

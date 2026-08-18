@@ -15,6 +15,7 @@ from pathlib import Path, PurePosixPath
 from unittest import mock
 
 from benchmark_agents import contract
+from corridor_kit import create_scaffold
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -676,6 +677,32 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertFalse(
                 (custody / "submission-manifests" / "blobs").exists()
             )
+            preserved_manifest = (custody / "custody-manifest.json").read_bytes()
+            repeated = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    contract.private_custody_program(
+                        agent_dir=str(agent_dir),
+                        expected_corridor_digest=digest,
+                        runtime_root=str(runtime_root),
+                        position_path=str(position),
+                        submission_root=str(submissions),
+                    ),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, repeated.returncode, repeated.stderr)
+            repeated_report = json.loads(repeated.stdout)
+            self.assertTrue(repeated_report["ok"])
+            self.assertTrue(repeated_report["already_captured"])
+            self.assertTrue(repeated_report["preserved_existing"])
+            self.assertEqual(
+                preserved_manifest,
+                (custody / "custody-manifest.json").read_bytes(),
+            )
 
         recovered = contract.custody_provenance(
             "recovered_from_builder_events", direct_byte_match=False
@@ -683,6 +710,67 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertEqual("recovered", recovered["custody_status"])
         self.assertTrue(recovered["recovered"])
         self.assertFalse(recovered["direct_download"])
+
+    def test_private_custody_reports_digest_mismatch_and_capture_failure(self) -> None:
+        for case in ("mismatch", "missing_position"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                agent_dir = root / "agent"
+                runtime_root = root / "runtime"
+                corridor = runtime_root / "corridor"
+                position = root / "position" / "POSITION.jsonl"
+                submissions = agent_dir / "submissions"
+                (agent_dir / "phases" / "builder").mkdir(parents=True)
+                submissions.mkdir(parents=True)
+                corridor.mkdir(parents=True)
+                (corridor / "README.md").write_text("corridor\n", encoding="utf-8")
+                actual_digest = contract.corridor_digest(
+                    contract.corridor_manifest(corridor)
+                )
+                (runtime_root / "FREEZE.json").write_text(
+                    json.dumps({"corridor_digest": actual_digest}), encoding="utf-8"
+                )
+                if case != "missing_position":
+                    position.parent.mkdir(parents=True)
+                    position.write_text('{"event":"start"}\n', encoding="utf-8")
+                expected = (
+                    "sha256:" + "0" * 64 if case == "mismatch" else actual_digest
+                )
+                completed = subprocess.run(
+                    [
+                        sys.executable,
+                        "-c",
+                        contract.private_custody_program(
+                            agent_dir=str(agent_dir),
+                            expected_corridor_digest=expected,
+                            runtime_root=str(runtime_root),
+                            position_path=str(position),
+                            submission_root=str(submissions),
+                        ),
+                    ],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(0, completed.returncode, completed.stderr)
+                report = json.loads(completed.stdout)
+                if case == "mismatch":
+                    self.assertFalse(report["ok"])
+                    self.assertEqual("digest_mismatch", report["custody_status"])
+                    self.assertFalse(report["direct_byte_match"])
+                    self.assertFalse(report["direct_download"])
+                else:
+                    self.assertFalse(report["ok"])
+                    self.assertEqual("capture_failed", report["custody_status"])
+                    self.assertEqual("FileNotFoundError", report["error_type"])
+                    self.assertEqual(
+                        "../phases/builder", report["builder_recovery_evidence"]
+                    )
+                manifest = json.loads(
+                    (agent_dir / "corridor-custody" / "custody-manifest.json")
+                    .read_text(encoding="utf-8")
+                )
+                self.assertEqual(report["custody_status"], manifest["custody_status"])
 
     def test_role_metrics_separate_tool_and_inference_wall_time(self) -> None:
         adapter = load_harbor_agent_with_stubs()
@@ -740,7 +828,9 @@ class FullMethodContractTests(unittest.TestCase):
             )
             (corridor / "KIT.json").write_text(
                 json.dumps({
-                    "method_capsule_digest": "sha256:" + "c" * 64,
+                    "method_capsule_digest": contract.sha256_bytes(
+                        contract.canonical_json_bytes(capsule)
+                    ),
                     "starter_digest": "sha256:" + "d" * 64,
                 }),
                 encoding="utf-8",
@@ -763,7 +853,94 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertEqual(2.0, metrics["tool_wall_seconds"])
             self.assertEqual(8.0, metrics["inference_wall_seconds"])
             self.assertEqual(10.0, metrics["total_wall_seconds"])
+            self.assertEqual(2, metrics["generated_file_count"])
+            self.assertGreater(metrics["generated_bytes"], 0)
             self.assertEqual("bound", metrics["method_capsule"]["binding_state"])
+            self.assertEqual(
+                contract.sha256_bytes(contract.canonical_json_bytes(capsule)),
+                metrics["method_capsule"]["capsule_digest"],
+            )
+            self.assertEqual(
+                metrics["method_capsule"]["capsule_digest"],
+                metrics["method_capsule"]["stored_capsule_digest"],
+            )
+            self.assertTrue(
+                metrics["method_capsule"]["capsule_digest_matches_stored"]
+            )
+            self.assertEqual({}, metrics["method_capsule"]["parse_errors"])
+            self.assertEqual(
+                "sha256:" + "d" * 64,
+                metrics["method_capsule"]["scaffold_digest"],
+            )
+
+        valid_freeze = {
+            "builder_corridor_status": "frozen",
+            "method_capsule_status": "complete",
+            "method_capsule_errors": [],
+            "method_capsule_digest": "sha256:" + "e" * 64,
+            "method_capsule_expected_digest": "sha256:" + "e" * 64,
+            "method_capsule_stored_digest": "sha256:" + "e" * 64,
+            "method_capsule_digest_matches_stored": True,
+            "acceptance_ledger_status": "complete",
+            "source_mapping_status": "complete",
+            "definition_closure_status": "complete",
+            "construction_readiness_status": "ready",
+            "acceptance_ledger_errors": [],
+        }
+        valid_metrics = adapter._builder_freeze_metrics(
+            valid_freeze, elapsed_seconds=12.3456
+        )
+        self.assertTrue(valid_metrics["first_valid_freeze_recorded"])
+        self.assertEqual(12.346, valid_metrics["first_valid_freeze_elapsed_seconds"])
+        self.assertEqual("complete", valid_metrics["method_capsule_status"])
+        self.assertEqual([], valid_metrics["method_capsule_errors"])
+        self.assertTrue(valid_metrics["method_capsule_digest_matches_stored"])
+
+        invalid_freeze = dict(valid_freeze)
+        invalid_freeze["acceptance_ledger_status"] = "invalid"
+        invalid_metrics = adapter._builder_freeze_metrics(
+            invalid_freeze, elapsed_seconds=9.0
+        )
+        self.assertFalse(invalid_metrics["first_valid_freeze_recorded"])
+        self.assertIsNone(invalid_metrics["first_valid_freeze_elapsed_seconds"])
+        self.assertEqual(9.0, invalid_metrics["freeze_elapsed_seconds"])
+
+    def test_freezer_marks_a_tampered_method_capsule_invalid(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "method").mkdir(parents=True)
+            (root / "method" / "METHOD.md").write_text(
+                "method\n", encoding="utf-8"
+            )
+            corridor = create_scaffold(
+                root / "corridor",
+                method_version=contract.METHOD_VERSION_ID,
+                method_digest=contract.METHOD_CONTENT_SHA256,
+                method_scope_digest=contract.METHOD_SCOPE_SHA256,
+            )
+            capsule_path = corridor / "METHOD-CAPSULE.json"
+            capsule = json.loads(capsule_path.read_text(encoding="utf-8"))
+            capsule["builder_invariants"] = ["replace the frozen method"]
+            capsule_path.write_text(json.dumps(capsule), encoding="utf-8")
+
+            completed = subprocess.run(
+                [sys.executable, "-c", contract.freeze_program(str(root))],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            identity = json.loads(completed.stdout)
+            self.assertEqual("invalid", identity["method_capsule_status"])
+            self.assertIn(
+                "METHOD_CAPSULE_CONTENT_MISMATCH",
+                identity["method_capsule_errors"],
+            )
+            self.assertFalse(identity["method_capsule_digest_matches_stored"])
+            manifest = json.loads(
+                (root / "FREEZE.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual("invalid", manifest["method_capsule"]["status"])
 
     def test_freezer_closes_bytes_and_falls_back_when_builder_is_empty(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1151,6 +1328,8 @@ class FullMethodContractTests(unittest.TestCase):
             "_worker_revision_progress",
             "_archive_private_custody",
             "private_custody_",
+            "_builder_freeze_metrics",
+            '"first_valid_freeze_elapsed_seconds"',
         ):
             self.assertIn(marker, source)
         self.assertNotIn("PHASE_TIMEOUT_SECONDS", source)

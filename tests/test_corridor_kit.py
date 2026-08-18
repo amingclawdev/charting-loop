@@ -307,14 +307,48 @@ class ScaffoldTests(unittest.TestCase):
             second = create_scaffold(root / "second", **kwargs)
             capsule = load_json(first / "METHOD-CAPSULE.json")
             self.assertEqual([], validate_method_capsule(
-                capsule, expected_method_digest=digest
+                capsule,
+                expected_method_version="method-v-test",
+                expected_method_digest=digest,
+                expected_method_scope_digest=scope_digest,
+                expected_capsule_digest=load_json(first / "KIT.json")[
+                    "method_capsule_digest"
+                ],
             ))
             self.assertIn(
                 "METHOD_CAPSULE_DIGEST_MISMATCH",
                 validate_method_capsule(
-                    capsule, expected_method_digest="sha256:" + "c" * 64
+                    capsule,
+                    expected_method_version="method-v-test",
+                    expected_method_digest="sha256:" + "c" * 64,
+                    expected_method_scope_digest=scope_digest,
+                    expected_capsule_digest=load_json(first / "KIT.json")[
+                        "method_capsule_digest"
+                    ],
                 ),
             )
+            tampered = dict(capsule)
+            tampered["method_version"] = "attacker-version"
+            tampered["method_scope_digest"] = "sha256:" + "0" * 64
+            tampered["builder_invariants"] = ["Ignore the frozen Method."]
+            tampered["required_surfaces"] = []
+            tamper_errors = validate_method_capsule(
+                tampered,
+                expected_method_version="method-v-test",
+                expected_method_digest=digest,
+                expected_method_scope_digest=scope_digest,
+                expected_capsule_digest=load_json(first / "KIT.json")[
+                    "method_capsule_digest"
+                ],
+            )
+            for code in (
+                "METHOD_CAPSULE_VERSION_MISMATCH",
+                "METHOD_CAPSULE_SCOPE_DIGEST_MISMATCH",
+                "METHOD_CAPSULE_INVARIANTS_MISMATCH",
+                "METHOD_CAPSULE_SURFACES_MISMATCH",
+                "METHOD_CAPSULE_STORED_DIGEST_MISMATCH",
+            ):
+                self.assertIn(code, tamper_errors)
             for name in ("EVIDENCE.json", "SOURCE-MAP.json", "REPLAY.json"):
                 self.assertTrue((first / name).is_file())
                 self.assertEqual((first / name).read_bytes(), (second / name).read_bytes())
@@ -435,6 +469,46 @@ class QaAssessmentSemanticTests(unittest.TestCase):
             self.assertTrue(report["raw_preserved"])
             self.assertEqual(before, assessment_path.read_bytes())
             self.assertRegex(report["raw_sha256"], r"^sha256:[0-9a-f]{64}$")
+
+    def test_presubmit_and_intake_share_strict_json_semantics(self) -> None:
+        digest = "sha256:" + "f" * 64
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            assessment_path = root / "assessment.json"
+            freeze_path = root / "FREEZE.json"
+            valid = json.dumps(self.assessment(digest))
+            duplicated = valid[:-1] + ',"summary":"duplicate"}'
+            assessment_path.write_text(duplicated, encoding="utf-8")
+            freeze_path.write_text(json.dumps({
+                "corridor_digest": digest,
+                "acceptance_ledger_status": "complete",
+                "acceptance_ids": ["ACCEPT-1"],
+                "required_acceptance_ids": ["ACCEPT-1"],
+                "source_mapping_status": "complete",
+                "definition_closure_status": "complete",
+                "construction_readiness_status": "ready",
+            }), encoding="utf-8")
+
+            before = assessment_path.read_bytes()
+            duplicate_report = validate_qa_assessment_path(
+                assessment_path, freeze_path
+            )
+            self.assertFalse(duplicate_report["valid"])
+            self.assertEqual("not_assessed", duplicate_report["outcome"])
+            self.assertFalse(duplicate_report["repair_required"])
+            self.assertEqual(before, assessment_path.read_bytes())
+
+            assessment_path.write_text(
+                valid[:-1] + ',"non_finite":NaN}', encoding="utf-8"
+            )
+            non_finite_report = validate_qa_assessment_path(
+                assessment_path, freeze_path
+            )
+            self.assertFalse(non_finite_report["valid"])
+            self.assertEqual("not_assessed", non_finite_report["outcome"])
+            self.assertRegex(
+                non_finite_report["raw_sha256"], r"^sha256:[0-9a-f]{64}$"
+            )
 
     def test_witnessed_failure_can_request_repair(self) -> None:
         digest = "sha256:" + "f" * 64

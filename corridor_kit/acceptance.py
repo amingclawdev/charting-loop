@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 from pathlib import Path
 import re
 from typing import Any
@@ -18,6 +19,7 @@ QA_ACCEPTANCE_STATES = frozenset({"pass", "fail", "unknown", "not_reached"})
 QA_CLOSURE_STATES = frozenset({"complete", "incomplete"})
 QA_SCOPE_STATES = frozenset({"complete", "partial"})
 SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
+MAX_QA_JSON_BYTES = 256 * 1024
 RELATION_TYPES = frozenset(
     {"requires", "subsumes", "overlaps", "conflicts", "derived_from"}
 )
@@ -487,6 +489,29 @@ def validate_acceptance_file(
         report.error("JSON_INPUT", str(path), str(exc))
         return report
     return validate_acceptance_ledger(value, allow_draft=allow_draft)
+
+
+def load_qa_json_text(text: str) -> Any:
+    """Parse bounded QA JSON with the same rules for producer and consumer."""
+
+    if len(text.encode("utf-8")) > MAX_QA_JSON_BYTES:
+        raise ValueError("QA JSON exceeds the size limit")
+
+    def reject_duplicate_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        value: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError(f"duplicate QA JSON key: {key}")
+            value[key] = item
+        return value
+
+    return json.loads(
+        text,
+        object_pairs_hook=reject_duplicate_pairs,
+        parse_constant=lambda item: (_ for _ in ()).throw(
+            ValueError(f"non-finite QA JSON value: {item}")
+        ),
+    )
 
 
 def validate_qa_assessment(

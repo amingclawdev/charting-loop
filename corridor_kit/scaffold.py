@@ -68,23 +68,50 @@ def method_capsule(
 
 
 def validate_method_capsule(
-    value: Any, *, expected_method_digest: str
+    value: Any,
+    *,
+    expected_method_version: str,
+    expected_method_digest: str,
+    expected_method_scope_digest: str,
+    expected_capsule_digest: str,
 ) -> list[str]:
     errors: list[str] = []
     if not isinstance(value, dict):
         return ["METHOD_CAPSULE_OBJECT_REQUIRED"]
+    expected = method_capsule(
+        method_version=expected_method_version,
+        method_digest=expected_method_digest,
+        method_scope_digest=expected_method_scope_digest,
+    )
+    if set(value) != set(expected):
+        errors.append("METHOD_CAPSULE_KEYS")
     if value.get("schema_version") != METHOD_CAPSULE_SCHEMA:
         errors.append("METHOD_CAPSULE_SCHEMA")
     if value.get("binding_state") != "bound":
         errors.append("METHOD_CAPSULE_BOUND_REQUIRED")
+    if value.get("method_version") != expected_method_version:
+        errors.append("METHOD_CAPSULE_VERSION_MISMATCH")
     if value.get("method_digest") != expected_method_digest:
         errors.append("METHOD_CAPSULE_DIGEST_MISMATCH")
+    if value.get("method_scope_digest") != expected_method_scope_digest:
+        errors.append("METHOD_CAPSULE_SCOPE_DIGEST_MISMATCH")
+    if value.get("builder_invariants") != expected["builder_invariants"]:
+        errors.append("METHOD_CAPSULE_INVARIANTS_MISMATCH")
+    if value.get("required_surfaces") != expected["required_surfaces"]:
+        errors.append("METHOD_CAPSULE_SURFACES_MISMATCH")
     if value.get("task_solution_present") is not False:
         errors.append("METHOD_CAPSULE_SOLUTION_BOUNDARY")
     if value.get("authorizes_mutation") is not False:
         errors.append("METHOD_CAPSULE_AUTHORITY_BOUNDARY")
     if value.get("blocking_gate") is not False:
         errors.append("METHOD_CAPSULE_GATE_BOUNDARY")
+    try:
+        actual_capsule_digest = sha256_json(value)
+    except CorridorKitError:
+        errors.append("METHOD_CAPSULE_CANONICAL_JSON")
+    else:
+        if actual_capsule_digest != expected_capsule_digest:
+            errors.append("METHOD_CAPSULE_STORED_DIGEST_MISMATCH")
     return errors
 
 
