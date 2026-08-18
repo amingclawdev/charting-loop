@@ -33,7 +33,8 @@ The frozen reusable layer is deliberately small:
 - atomic JSON/report writes;
 - isolated, shell-free argv execution with replayable stdout and stderr;
 - generic read-only ELF inventory, changed-range comparison, and replay binding; and
-- an honest starter whose acceptance, work, and capability surfaces begin uncompiled.
+- a digest-bound, solution-free Method capsule plus honest acceptance, evidence,
+  source-map, replay, work, and capability surfaces that begin uncompiled.
 
 Each Builder must still compile the current task's acceptance items, Rule/Fact map,
 coupled constraints, work rows, capability selections, domain checks, fixtures, and task adapter. Those bytes belong to
@@ -59,7 +60,13 @@ hidden tests or evaluator knowledge.
 From the repository root:
 
 ```sh
-python3 -m corridor_kit init /tmp/charting-loop/corridor
+python3 -m corridor_kit init /tmp/charting-loop/corridor \
+  --method-version charting-loop-method-v8 \
+  --method-digest sha256:METHOD_DIGEST \
+  --method-scope-digest sha256:SCOPE_DIGEST
+python3 -m corridor_kit validate-capsule \
+  /tmp/charting-loop/corridor/METHOD-CAPSULE.json \
+  --expected-method-digest sha256:METHOD_DIGEST
 python3 -m corridor_kit validate \
   /tmp/charting-loop/corridor/ACCEPTANCE.json --allow-draft
 python3 -m corridor_kit validate-capabilities \
@@ -136,6 +143,25 @@ QA then receive the same frozen bytes and digest. Both independently re-read pub
 task sources; QA audits Corridor evidence instead of assuming the Corridor proves
 itself.
 
+The compact capsule contains only Builder invariants, required surface names, and
+the frozen Method identities. It is not a substitute authority for the Method and
+contains no task Rule, Fact, candidate, or solution. `EVIDENCE.json`,
+`SOURCE-MAP.json`, and `REPLAY.json` remove repeated plumbing while remaining
+honestly uncompiled until the Builder maps the current public task.
+
+QA uses the same typed semantic validator before its raw assessment is frozen and
+again when the harness reads it:
+
+```sh
+python3 -m corridor_kit qa validate \
+  --path /tmp/charting-loop/qa/assessment.json \
+  --freeze /tmp/charting-loop/FREEZE.json
+```
+
+Contradictory or incomplete semantics normalize to `not_assessed`; the raw report is
+not rewritten and cannot trigger repair. This classification is advisory and never
+prevents benchmark grading.
+
 The bundled `corridor_kit.domain.binary` pack contains no benchmark identifier,
 opcode recipe, fixed offset, verifier knowledge, or candidate patch. Its descriptor
 digest identifies the declared contract, while the SDK tree digest binds its
@@ -164,6 +190,10 @@ immutable, content-addressed, and linked to the preceding role version; `latest`
 advances only after all declared regular-file bytes are closed. `submission list` and
 `submission verify` audit the stored versions. Verification binds a selected `latest`
 reference exactly to the manifest role, sequence, snapshot ID, and tree digest.
+Freeze and list output also distinguishes the initial checkpoint, a byte-changing
+content revision, and a byte-identical validation re-freeze. It reports sequence,
+parent, changed-file count, content-revision index, and last-freeze time without
+including solution bytes.
 
 `submission restore` validates every blob, destination, parent, mode, and staging
 write before changing a declared destination. It then performs one atomic replacement
@@ -181,6 +211,13 @@ paths, corrupt blobs, duplicate destinations, and incomplete references fail clo
 For database or service state that cannot be represented by regular files, a
 task-specific Corridor adapter must first materialize and restore an equivalent closed
 checkpoint.
+
+The benchmark adapter additionally copies the exact frozen Corridor, `FREEZE.json`,
+Position timeline, role transcripts, and submission manifests into the private job
+result directory before environment teardown. Its custody manifest records direct
+versus recovered provenance, file hashes, a tree digest, and whether the copied
+Corridor byte-matches the frozen digest. These artifacts may contain task solutions;
+they are private evidence and require a separate redaction decision before release.
 
 ## Extraction record
 

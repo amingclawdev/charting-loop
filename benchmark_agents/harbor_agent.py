@@ -37,6 +37,9 @@ from benchmark_agents.contract import (
     CAPABILITIES_PATH,
     FREEZE_PATH,
     METHOD_PATH,
+    METHOD_CONTENT_SHA256,
+    METHOD_SCOPE_SHA256,
+    METHOD_VERSION_ID,
     QA_PATH,
     POSITION_PATH,
     POSITION_ROOT,
@@ -50,6 +53,7 @@ from benchmark_agents.contract import (
     freeze_program,
     load_qa_json_text,
     qa_prompt,
+    private_custody_program,
     remote_json_read_program,
     repair_prompt,
     validate_qa_assessment,
@@ -59,16 +63,9 @@ from benchmark_agents.contract import (
 
 
 AGENT_VERSION = "0.9.0"
-METHOD_VERSION_ID = "charting-loop-method-v8"
 METHOD_SOURCE_COMMIT = "3c3813444a7d43d0a56837e9cb960be86ce26d06"
 METHOD_SOURCE_PATH = "method-paper/METHOD.md"
 METHOD_SCOPE_PATH = "method-paper/SCOPE-DATUM.md"
-METHOD_CONTENT_SHA256 = (
-    "sha256:85b5a7a8700312ec1e35b80df6e224221d44a48904247a8d6d32cfe940459446"
-)
-METHOD_SCOPE_SHA256 = (
-    "sha256:bd70498b2f75e039d88c80ae0c5b0a11fba15d12517820c27e8bccb28da987af"
-)
 ROLE_ORDER = ("builder", "worker", "qa")
 DEFAULT_TASK_TIMEOUT_SECONDS = 5400
 FINALIZATION_RESERVE_SECONDS = 30
@@ -90,6 +87,102 @@ def _task_timeout_seconds(instruction: str) -> int:
 
 def _remaining_seconds(deadline: float) -> int:
     return max(0, int(deadline - asyncio.get_running_loop().time()))
+
+
+def _role_metrics_program(role_dir: str, corridor_path: str) -> str:
+    """Return a private-log parser for construction latency and artifact size."""
+
+    return f"""
+import json
+from datetime import datetime
+from pathlib import Path
+
+role_dir = Path({role_dir!r})
+corridor = Path({corridor_path!r})
+
+def stamp(value):
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+tool_started = {{}}
+tool_wall = 0.0
+agent_messages = 0
+tool_calls = 0
+session_started = None
+session_completed = None
+for path in sorted((role_dir / "sessions").rglob("*.jsonl")):
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        when = stamp(event.get("timestamp"))
+        kind = payload.get("type")
+        if kind == "task_started":
+            session_started = stamp(payload.get("started_at")) or when
+        elif kind == "task_complete":
+            session_completed = stamp(payload.get("completed_at")) or when
+        elif kind == "agent_message":
+            agent_messages += 1
+        elif kind == "custom_tool_call":
+            tool_calls += 1
+            if isinstance(payload.get("call_id"), str) and when is not None:
+                tool_started[payload["call_id"]] = when
+        elif kind == "custom_tool_call_output":
+            call_id = payload.get("call_id")
+            if isinstance(call_id, str) and when is not None and call_id in tool_started:
+                tool_wall += max(0.0, when - tool_started.pop(call_id))
+
+generated_files = 0
+generated_bytes = 0
+if corridor.is_dir() and not corridor.is_symlink():
+    for path in corridor.rglob("*"):
+        if path.is_file() and not path.is_symlink():
+            generated_files += 1
+            generated_bytes += path.stat().st_size
+total_wall = (
+    max(0.0, session_completed - session_started)
+    if session_started is not None and session_completed is not None
+    else None
+)
+capsule = {{}}
+kit = {{}}
+for path, target in ((corridor / "METHOD-CAPSULE.json", capsule), (corridor / "KIT.json", kit)):
+    if path.is_file() and not path.is_symlink():
+        try:
+            target.update(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError):
+            pass
+print(json.dumps({{
+    "schema_version": "charting-loop/role-construction-metrics/v1",
+    "turn_count": agent_messages,
+    "tool_call_count": tool_calls,
+    "tool_wall_seconds": round(tool_wall, 3),
+    "inference_wall_seconds": (
+        round(max(0.0, total_wall - tool_wall), 3) if total_wall is not None else None
+    ),
+    "total_wall_seconds": round(total_wall, 3) if total_wall is not None else None,
+    "generated_file_count": generated_files,
+    "generated_bytes": generated_bytes,
+    "method_capsule": {{
+        "schema_version": capsule.get("schema_version"),
+        "binding_state": capsule.get("binding_state"),
+        "method_version": capsule.get("method_version"),
+        "method_digest": capsule.get("method_digest"),
+        "method_scope_digest": capsule.get("method_scope_digest"),
+        "capsule_digest": kit.get("method_capsule_digest"),
+        "scaffold_digest": kit.get("starter_digest"),
+    }},
+    "metrics_are_descriptive": True,
+}}, sort_keys=True))
+"""
 
 
 def _codex_runtime_discovery_command() -> str:
@@ -661,6 +754,27 @@ class ChartingLoopFullMethodAgent(Codex):
                 f"find {shlex.quote(SDK_ROOT)} -type f -exec chmod 0444 {{}} +"
             ),
         )
+        initialized = await self.exec_as_root(
+            environment,
+            command=(
+                f"rmdir {shlex.quote(corridor_dir)} && "
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                "python3 -m corridor_kit init "
+                f"{shlex.quote(corridor_dir)} "
+                f"--method-version {shlex.quote(METHOD_VERSION_ID)} "
+                f"--method-digest {shlex.quote(METHOD_CONTENT_SHA256)} "
+                f"--method-scope-digest {shlex.quote(METHOD_SCOPE_SHA256)} && "
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                "python3 -m corridor_kit validate-capsule "
+                f"{shlex.quote(corridor_dir + '/METHOD-CAPSULE.json')} "
+                f"--expected-method-digest {shlex.quote(METHOD_CONTENT_SHA256)}"
+            ),
+        )
+        if initialized.return_code != 0:
+            raise RuntimeError(
+                "Corridor SDK starter initialization failed: "
+                + (initialized.stderr or initialized.stdout or "no output")[-2000:]
+            )
         await self._append_position_event(
             environment,
             actor="runner",
@@ -713,6 +827,26 @@ class ChartingLoopFullMethodAgent(Codex):
         )
         await self.exec_as_agent(environment, command=command)
 
+    async def _collect_role_metrics(
+        self, environment: BaseEnvironment, *, role: str
+    ) -> dict[str, Any]:
+        agent_dir = PurePosixPath(EnvironmentPaths.agent_dir)
+        role_dir = (agent_dir / "phases" / role).as_posix()
+        result = await self.exec_as_agent(
+            environment,
+            command=(
+                "python3 -c "
+                + shlex.quote(_role_metrics_program(role_dir, CORRIDOR_PATH))
+            ),
+        )
+        lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
+        if result.return_code != 0 or not lines:
+            return {"available": False, "error": "role_metrics_unavailable"}
+        try:
+            return {"available": True, **json.loads(lines[-1])}
+        except json.JSONDecodeError:
+            return {"available": False, "error": "role_metrics_unreadable"}
+
     async def _restore_role(
         self,
         environment: BaseEnvironment,
@@ -761,6 +895,7 @@ class ChartingLoopFullMethodAgent(Codex):
             outcome["isolation_error"] = "phase_agent_has_no_identity_boundary"
             return phase_context, outcome
         begin_phase(role)
+        phase_started_at = asyncio.get_running_loop().time()
         try:
             async with asyncio.timeout_at(deadline):
                 await self._reset_live_session(environment)
@@ -792,6 +927,9 @@ class ChartingLoopFullMethodAgent(Codex):
                         agent._OUTPUT_FILENAME,
                     )
                     outcome["archived"] = True
+                    outcome["role_metrics"] = await self._collect_role_metrics(
+                        environment, role=role
+                    )
                 except Exception as exc:
                     outcome["archive_error_type"] = type(exc).__name__
             else:
@@ -799,6 +937,9 @@ class ChartingLoopFullMethodAgent(Codex):
                 outcome["status"] = "isolation_failed"
         if cancelled is not None:
             raise cancelled
+        outcome["elapsed_seconds"] = round(
+            asyncio.get_running_loop().time() - phase_started_at, 3
+        )
         return phase_context, outcome
 
     async def _resume_role(
@@ -960,6 +1101,49 @@ class ChartingLoopFullMethodAgent(Codex):
             }
         return {"status": "snapshot_created", **snapshot}
 
+    async def _validate_qa_presubmit(
+        self, environment: BaseEnvironment, *, path: str
+    ) -> dict[str, Any]:
+        """Run the SDK validator before custody; invalid QA remains advisory."""
+
+        result = await environment.exec(
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                "python3 -m corridor_kit qa validate "
+                f"--path {shlex.quote(path)} --freeze {shlex.quote(FREEZE_PATH)}"
+            ),
+            user=environment.default_user,
+        )
+        lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
+        if not lines:
+            return {
+                "schema_version": "charting-loop/qa-assessment-decision/v1",
+                "valid": False,
+                "errors": ["ASSESSMENT_PRESUBMIT_UNREADABLE"],
+                "reported_outcome": None,
+                "outcome": "not_assessed",
+                "repair_required": False,
+                "raw_preserved": True,
+                "advisory_only": True,
+                "blocking_gate": False,
+                "authorizes_mutation": False,
+            }
+        try:
+            return json.loads("\n".join(lines))
+        except json.JSONDecodeError:
+            return {
+                "schema_version": "charting-loop/qa-assessment-decision/v1",
+                "valid": False,
+                "errors": ["ASSESSMENT_PRESUBMIT_JSON"],
+                "reported_outcome": None,
+                "outcome": "not_assessed",
+                "repair_required": False,
+                "raw_preserved": True,
+                "advisory_only": True,
+                "blocking_gate": False,
+                "authorizes_mutation": False,
+            }
+
     async def _restore_latest_worker_submission(
         self, environment: BaseEnvironment
     ) -> dict[str, Any]:
@@ -986,6 +1170,39 @@ class ChartingLoopFullMethodAgent(Codex):
             return {"ok": False, "status": "worker_snapshot_restore_unreadable"}
         return {"status": "worker_snapshot_restored", **restored}
 
+    async def _worker_revision_progress(
+        self, environment: BaseEnvironment
+    ) -> dict[str, Any]:
+        """Return solution-free Worker checkpoint/revision telemetry."""
+
+        result = await environment.exec(
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                "python3 -m corridor_kit submission list "
+                f"--root {shlex.quote(SUBMISSION_ROOT)} --role worker"
+            ),
+            user=environment.default_user,
+        )
+        lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
+        if result.return_code != 0 or not lines:
+            return {
+                "available": False,
+                "snapshot_count": 0,
+                "checkpoint_advance_count": 0,
+                "content_revision_count": 0,
+                "validation_refreeze_count": 0,
+                "last_frozen_at": None,
+                "snapshots": [],
+            }
+        try:
+            history = json.loads("\n".join(lines))
+        except json.JSONDecodeError:
+            return {"available": False, "error": "revision_history_unreadable"}
+        progress = history.get("revision_progress")
+        if not isinstance(progress, dict):
+            return {"available": False, "error": "revision_progress_missing"}
+        return {"available": True, **progress}
+
     async def _verify_freeze(
         self,
         environment: BaseEnvironment,
@@ -1005,6 +1222,70 @@ class ChartingLoopFullMethodAgent(Codex):
         probe = json.loads(lines[-1])
         if not probe.get("ok") or probe.get("corridor_digest") != expected_digest:
             raise RuntimeError(f"Frozen Corridor identity changed: {probe}")
+
+    async def _archive_private_custody(
+        self, environment: BaseEnvironment, *, expected_digest: str
+    ) -> dict[str, Any]:
+        """Capture direct private evidence before Harbor releases the environment."""
+
+        agent_dir = PurePosixPath(EnvironmentPaths.agent_dir).as_posix()
+        result = await self.exec_as_root(
+            environment,
+            command="python3 -c "
+            + shlex.quote(
+                private_custody_program(
+                    agent_dir=agent_dir,
+                    expected_corridor_digest=expected_digest,
+                )
+            ),
+        )
+        lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
+        if not lines:
+            return {
+                "ok": False,
+                "source_kind": "direct_runtime_capture_failed",
+                "custody_status": "capture_failed",
+                "direct_byte_match": False,
+                "direct_download": False,
+                "recovered": False,
+                "error_type": "custody_program_unreadable",
+            }
+        try:
+            report = json.loads(lines[-1])
+        except json.JSONDecodeError:
+            return {
+                "ok": False,
+                "source_kind": "direct_runtime_capture_failed",
+                "custody_status": "capture_failed",
+                "direct_byte_match": False,
+                "direct_download": False,
+                "recovered": False,
+                "error_type": "custody_manifest_unreadable",
+            }
+        return {
+            key: report.get(key)
+            for key in (
+                "ok",
+                "schema_version",
+                "private",
+                "public_release_allowed",
+                "source_kind",
+                "custody_status",
+                "direct_byte_match",
+                "direct_download",
+                "recovered",
+                "expected_corridor_digest",
+                "copied_corridor_digest",
+                "tree_digest",
+                "captured_at",
+                "error_type",
+                "builder_recovery_evidence",
+            )
+            if key in report
+        } | {
+            "file_count": len(report.get("files", [])),
+            "corridor_file_count": len(report.get("corridor_files", [])),
+        }
 
     async def _read_assessment(
         self,
@@ -1079,7 +1360,7 @@ class ChartingLoopFullMethodAgent(Codex):
                 f"refusing to continue after {outcome['phase']}"
             )
 
-    async def run(
+    async def _run_task(
         self,
         instruction: str,
         environment: BaseEnvironment,
@@ -1145,6 +1426,12 @@ class ChartingLoopFullMethodAgent(Codex):
         freeze = await self._freeze_corridor(environment)
         digest = str(freeze["corridor_digest"])
         metadata["corridor_digest"] = digest
+        builder_metrics = dict(builder_run.get("role_metrics", {}))
+        builder_metrics["first_valid_freeze_elapsed_seconds"] = round(
+            loop.time() - started_at, 3
+        )
+        builder_metrics["frozen_corridor_digest"] = digest
+        metadata["builder_construction_metrics"] = builder_metrics
         metadata["builder_corridor_status"] = freeze.get("builder_corridor_status")
         acceptance_ledger_status = str(
             freeze.get("acceptance_ledger_status", "missing")
@@ -1225,6 +1512,9 @@ class ChartingLoopFullMethodAgent(Codex):
                 status=worker_run["status"],
                 details={"quiescent": bool(worker_run.get("quiescent"))},
             )
+            metadata["worker_revision_progress"] = await self._worker_revision_progress(
+                environment
+            )
         else:
             metadata["phase_events"].append("worker_skipped_task_deadline")
         qa_guide = await self._runtime_guide(environment)
@@ -1260,6 +1550,12 @@ class ChartingLoopFullMethodAgent(Codex):
                     ),
                     environment,
                     deadline=execution_deadline,
+                )
+                qa_presubmit = await self._validate_qa_presubmit(
+                    environment, path=QA_PATH
+                )
+                metadata.setdefault("qa_presubmit_validations", []).append(
+                    {"phase": "qa", **qa_presubmit}
                 )
                 qa_snapshot = await self._freeze_submission_paths(
                     environment, role="qa", paths=[QA_PATH]
@@ -1314,6 +1610,9 @@ class ChartingLoopFullMethodAgent(Codex):
                 status=repair_run["status"],
                 details={"quiescent": bool(repair_run.get("quiescent"))},
             )
+            metadata["worker_revision_progress"] = await self._worker_revision_progress(
+                environment
+            )
 
             if _remaining_seconds(execution_deadline) > 0:
                 await self._verify_freeze(environment, expected_digest=digest)
@@ -1339,6 +1638,12 @@ class ChartingLoopFullMethodAgent(Codex):
                         environment,
                         phase="closure",
                         deadline=execution_deadline,
+                    )
+                    closure_presubmit = await self._validate_qa_presubmit(
+                        environment, path=CLOSURE_PATH
+                    )
+                    metadata.setdefault("qa_presubmit_validations", []).append(
+                        {"phase": "closure", **closure_presubmit}
                     )
                     closure_snapshot = await self._freeze_submission_paths(
                         environment, role="qa", paths=[CLOSURE_PATH]
@@ -1375,6 +1680,9 @@ class ChartingLoopFullMethodAgent(Codex):
         await self._verify_freeze(environment, expected_digest=digest)
         submission_fallback = await self._restore_latest_worker_submission(environment)
         metadata["submission_fallback"] = submission_fallback
+        metadata["worker_revision_progress"] = await self._worker_revision_progress(
+            environment
+        )
         metadata["task_deadline_reached"] = loop.time() >= execution_deadline
         metadata["elapsed_seconds"] = round(loop.time() - started_at, 3)
         metadata["remaining_finalization_seconds"] = max(
@@ -1382,6 +1690,40 @@ class ChartingLoopFullMethodAgent(Codex):
         )
         metadata["phase_events"].append("agent_returned_for_grading")
         context.metadata = metadata
+
+    async def run(
+        self,
+        instruction: str,
+        environment: BaseEnvironment,
+        context: AgentContext,
+    ) -> None:
+        """Run the task and always attempt private custody before teardown."""
+
+        try:
+            await self._run_task(instruction, environment, context)
+        finally:
+            metadata = dict(context.metadata or {})
+            try:
+                custody = await self._archive_private_custody(
+                    environment,
+                    expected_digest=str(metadata.get("corridor_digest", "")),
+                )
+            except Exception as exc:
+                custody = {
+                    "ok": False,
+                    "source_kind": "direct_runtime_capture_failed",
+                    "custody_status": "capture_failed",
+                    "direct_byte_match": False,
+                    "direct_download": False,
+                    "recovered": False,
+                    "error_type": type(exc).__name__,
+                    "builder_recovery_evidence": "agent/phases/builder",
+                }
+            metadata["private_benchmark_custody"] = custody
+            metadata.setdefault("phase_events", []).append(
+                f"private_custody_{custody['custody_status']}"
+            )
+            context.metadata = metadata
 
     def _phase_trajectory(self, role: str) -> Trajectory | None:
         phase_dir = self.logs_dir / "phases" / role

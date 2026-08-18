@@ -11,6 +11,13 @@ from .core import CorridorKitError, load_json
 
 
 ACCEPTANCE_SCHEMA = "charting-loop/task-acceptance-ledger/v2"
+QA_ASSESSMENT_SCHEMA = "charting-loop/corridor-qa-assessment/v3"
+QA_OUTCOMES = frozenset({"pass", "fail", "blocked", "not_assessed"})
+QA_APPLICABILITY = frozenset({"applicable", "not_applicable", "unknown"})
+QA_ACCEPTANCE_STATES = frozenset({"pass", "fail", "unknown", "not_reached"})
+QA_CLOSURE_STATES = frozenset({"complete", "incomplete"})
+QA_SCOPE_STATES = frozenset({"complete", "partial"})
+SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 RELATION_TYPES = frozenset(
     {"requires", "subsumes", "overlaps", "conflicts", "derived_from"}
 )
@@ -480,3 +487,251 @@ def validate_acceptance_file(
         report.error("JSON_INPUT", str(path), str(exc))
         return report
     return validate_acceptance_ledger(value, allow_draft=allow_draft)
+
+
+def validate_qa_assessment(
+    value: Any,
+    *,
+    expected_corridor_digest: str,
+    acceptance_ledger_status: str,
+    expected_acceptance_ids: list[str],
+    required_acceptance_ids: list[str],
+    source_mapping_status: str = "complete",
+    definition_closure_status: str = "complete",
+    construction_readiness_status: str = "ready",
+) -> list[str]:
+    """Validate one advisory QA envelope against its frozen Corridor identity.
+
+    This is shared by the QA-side pre-submit command and harness intake.  It
+    classifies evidence but never authorizes mutation or blocks task grading.
+    ``assessed_scope=partial`` may close a declared subset, but it can never
+    establish a task-level pass.
+    """
+
+    errors: list[str] = []
+    if not isinstance(value, dict):
+        return ["ASSESSMENT_OBJECT_REQUIRED"]
+    if value.get("schema_version") != QA_ASSESSMENT_SCHEMA:
+        errors.append("ASSESSMENT_SCHEMA")
+    outcome = value.get("outcome")
+    if outcome not in QA_OUTCOMES:
+        errors.append("ASSESSMENT_OUTCOME")
+    summary = value.get("summary")
+    if not isinstance(summary, str) or not summary.strip():
+        errors.append("ASSESSMENT_SUMMARY")
+    digest = value.get("corridor_digest")
+    if digest != expected_corridor_digest or not isinstance(digest, str):
+        errors.append("ASSESSMENT_CORRIDOR_DIGEST")
+    elif not SHA256_RE.fullmatch(digest):
+        errors.append("ASSESSMENT_CORRIDOR_DIGEST_FORMAT")
+
+    source_mapping_complete = value.get("source_mapping_complete")
+    if not isinstance(source_mapping_complete, bool):
+        errors.append("ASSESSMENT_SOURCE_MAPPING_COMPLETE")
+    definition_closure_complete = value.get("definition_closure_complete")
+    if not isinstance(definition_closure_complete, bool):
+        errors.append("ASSESSMENT_DEFINITION_CLOSURE_COMPLETE")
+    assessment_closure = value.get("assessment_closure")
+    if assessment_closure not in QA_CLOSURE_STATES:
+        errors.append("ASSESSMENT_CLOSURE")
+    assessed_scope = value.get("assessed_scope", "complete")
+    if assessed_scope not in QA_SCOPE_STATES:
+        errors.append("ASSESSMENT_SCOPE")
+    scope_limitations = value.get("scope_limitations", [])
+    if not isinstance(scope_limitations, list) or any(
+        not isinstance(item, str) or not item.strip() for item in scope_limitations
+    ):
+        errors.append("ASSESSMENT_SCOPE_LIMITATIONS")
+        scope_limitations = []
+    if assessed_scope == "partial" and not scope_limitations:
+        errors.append("ASSESSMENT_PARTIAL_SCOPE_LIMITATION_REQUIRED")
+    if assessed_scope == "complete" and scope_limitations:
+        errors.append("ASSESSMENT_COMPLETE_SCOPE_LIMITATION_CONTRADICTION")
+    if (
+        definition_closure_complete is False
+        and assessment_closure == "complete"
+        and assessed_scope != "partial"
+    ):
+        errors.append("ASSESSMENT_DEFINITION_AND_CLOSURE_CONTRADICTION")
+
+    expected_ids = set(expected_acceptance_ids)
+    if len(expected_ids) != len(expected_acceptance_ids):
+        errors.append("EXPECTED_ACCEPTANCE_IDS_DUPLICATE")
+    required_ids = set(required_acceptance_ids)
+    if not required_ids.issubset(expected_ids):
+        errors.append("REQUIRED_ACCEPTANCE_IDS_UNKNOWN")
+
+    acceptance_results = value.get("acceptance_results")
+    results_by_id: dict[str, dict[str, Any]] = {}
+    if not isinstance(acceptance_results, list):
+        errors.append("ASSESSMENT_ACCEPTANCE_RESULTS")
+        acceptance_results = []
+    for index, result in enumerate(acceptance_results):
+        if not isinstance(result, dict):
+            errors.append(f"ASSESSMENT_ACCEPTANCE_RESULT_{index}")
+            continue
+        acceptance_id = result.get("acceptance_id")
+        if not isinstance(acceptance_id, str) or not acceptance_id.strip():
+            errors.append(f"ASSESSMENT_ACCEPTANCE_ID_{index}")
+            continue
+        if acceptance_id in results_by_id:
+            errors.append(f"ASSESSMENT_ACCEPTANCE_ID_DUPLICATE_{acceptance_id}")
+            continue
+        results_by_id[acceptance_id] = result
+        if result.get("applicability") not in QA_APPLICABILITY:
+            errors.append(f"ASSESSMENT_APPLICABILITY_{acceptance_id}")
+        if result.get("status") not in QA_ACCEPTANCE_STATES:
+            errors.append(f"ASSESSMENT_ACCEPTANCE_STATUS_{acceptance_id}")
+        for field_name in ("evidence", "replay"):
+            item = result.get(field_name)
+            if not isinstance(item, str) or not item.strip():
+                errors.append(
+                    f"ASSESSMENT_ACCEPTANCE_{field_name.upper()}_{acceptance_id}"
+                )
+
+    actual_ids = set(results_by_id)
+    for acceptance_id in sorted(expected_ids - actual_ids):
+        errors.append(f"ASSESSMENT_ACCEPTANCE_ID_MISSING_{acceptance_id}")
+    for acceptance_id in sorted(actual_ids - expected_ids):
+        errors.append(f"ASSESSMENT_ACCEPTANCE_ID_UNKNOWN_{acceptance_id}")
+
+    collections: dict[str, list[Any]] = {}
+    for field_name, code in (
+        ("unmapped_requirements", "ASSESSMENT_UNMAPPED_REQUIREMENTS"),
+        ("unresolved_relations", "ASSESSMENT_UNRESOLVED_RELATIONS"),
+    ):
+        items = value.get(field_name)
+        if not isinstance(items, list):
+            errors.append(code)
+            continue
+        collections[field_name] = items
+        for index, item in enumerate(items):
+            if not isinstance(item, str) or not item.strip():
+                errors.append(f"{code}_{index}")
+    if source_mapping_complete is True and collections.get("unmapped_requirements"):
+        errors.append("ASSESSMENT_SOURCE_MAPPING_CONTRADICTION")
+    if definition_closure_complete is True and collections.get("unresolved_relations"):
+        errors.append("ASSESSMENT_DEFINITION_CLOSURE_CONTRADICTION")
+    if source_mapping_complete is True and source_mapping_status != "complete":
+        errors.append("ASSESSMENT_SOURCE_MAPPING_EXCEEDS_FROZEN_LEDGER")
+    if definition_closure_complete is True and definition_closure_status != "complete":
+        errors.append("ASSESSMENT_DEFINITION_CLOSURE_EXCEEDS_FROZEN_LEDGER")
+
+    checks = value.get("checks")
+    if not isinstance(checks, list):
+        errors.append("ASSESSMENT_CHECKS")
+        checks = []
+    else:
+        for index, check in enumerate(checks):
+            if not isinstance(check, dict):
+                errors.append(f"ASSESSMENT_CHECK_{index}")
+                continue
+            if not isinstance(check.get("name"), str) or not check["name"].strip():
+                errors.append(f"ASSESSMENT_CHECK_NAME_{index}")
+            if check.get("status") not in {"pass", "fail", "unknown"}:
+                errors.append(f"ASSESSMENT_CHECK_STATUS_{index}")
+            if not isinstance(check.get("evidence"), str):
+                errors.append(f"ASSESSMENT_CHECK_EVIDENCE_{index}")
+
+    if assessment_closure == "complete":
+        unresolved = any(
+            result.get("applicability") == "unknown"
+            or (
+                result.get("applicability") == "applicable"
+                and result.get("status") in {"unknown", "not_reached"}
+            )
+            for result in results_by_id.values()
+        ) or any(
+            isinstance(check, dict) and check.get("status") == "unknown"
+            for check in checks
+        )
+        if unresolved or (assessed_scope == "complete" and actual_ids != expected_ids):
+            errors.append("ASSESSMENT_CLOSURE_CONTRADICTION")
+
+    witnesses = value.get("witnesses")
+    if not isinstance(witnesses, list):
+        errors.append("ASSESSMENT_WITNESSES")
+        witnesses = []
+    witness_acceptance_ids: set[str] = set()
+    for index, witness in enumerate(witnesses):
+        if not isinstance(witness, dict):
+            errors.append(f"ASSESSMENT_WITNESS_{index}")
+            continue
+        for field_name in ("constraint", "evidence", "replay"):
+            item = witness.get(field_name)
+            if not isinstance(item, str) or not item.strip():
+                errors.append(f"ASSESSMENT_WITNESS_{field_name.upper()}_{index}")
+        acceptance_id = witness.get("acceptance_id")
+        if not isinstance(acceptance_id, str) or not acceptance_id.strip():
+            errors.append(f"ASSESSMENT_WITNESS_ACCEPTANCE_ID_{index}")
+        elif acceptance_id not in expected_ids:
+            errors.append(f"ASSESSMENT_WITNESS_ACCEPTANCE_ID_UNKNOWN_{index}")
+        else:
+            witness_acceptance_ids.add(acceptance_id)
+
+    if outcome == "fail":
+        if not witnesses:
+            errors.append("FAIL_WITNESS_REQUIRED")
+        failed_ids = {
+            acceptance_id
+            for acceptance_id, result in results_by_id.items()
+            if result.get("status") == "fail"
+        }
+        if not failed_ids:
+            errors.append("FAIL_ACCEPTANCE_RESULT_REQUIRED")
+        elif not (failed_ids & witness_acceptance_ids):
+            errors.append("FAIL_WITNESS_ACCEPTANCE_MISMATCH")
+
+    if outcome == "pass":
+        if assessed_scope != "complete":
+            errors.append("PASS_COMPLETE_SCOPE_REQUIRED")
+        if construction_readiness_status != "ready":
+            errors.append("PASS_CONSTRUCTION_READINESS_REQUIRED")
+        if acceptance_ledger_status != "complete":
+            errors.append("PASS_ACCEPTANCE_LEDGER_COMPLETE_REQUIRED")
+        if source_mapping_status != "complete":
+            errors.append("PASS_FROZEN_SOURCE_MAPPING_REQUIRED")
+        if definition_closure_status != "complete":
+            errors.append("PASS_FROZEN_DEFINITION_CLOSURE_REQUIRED")
+        if not expected_ids:
+            errors.append("PASS_ACCEPTANCE_IDS_REQUIRED")
+        if source_mapping_complete is not True:
+            errors.append("PASS_SOURCE_MAPPING_COMPLETE_REQUIRED")
+        if definition_closure_complete is not True:
+            errors.append("PASS_DEFINITION_CLOSURE_COMPLETE_REQUIRED")
+        if assessment_closure != "complete":
+            errors.append("PASS_ASSESSMENT_CLOSURE_REQUIRED")
+        if value.get("unmapped_requirements") != []:
+            errors.append("PASS_UNMAPPED_REQUIREMENTS_EMPTY_REQUIRED")
+        if value.get("unresolved_relations") != []:
+            errors.append("PASS_UNRESOLVED_RELATIONS_EMPTY_REQUIRED")
+        for acceptance_id in sorted(expected_ids & actual_ids):
+            result = results_by_id[acceptance_id]
+            applicability = result.get("applicability")
+            state = result.get("status")
+            if applicability == "applicable" and state != "pass":
+                errors.append(f"PASS_ACCEPTANCE_NOT_PASS_{acceptance_id}")
+            elif applicability == "not_applicable" and state != "not_reached":
+                errors.append(f"PASS_INAPPLICABLE_NOT_NOT_REACHED_{acceptance_id}")
+            elif applicability == "unknown":
+                errors.append(f"PASS_APPLICABILITY_UNKNOWN_{acceptance_id}")
+    return errors
+
+
+def qa_assessment_decision(value: Any, **expected: Any) -> dict[str, Any]:
+    """Normalize validation into a non-authoritative intake decision."""
+
+    errors = validate_qa_assessment(value, **expected)
+    reported = value.get("outcome") if isinstance(value, dict) else None
+    return {
+        "schema_version": "charting-loop/qa-assessment-decision/v1",
+        "valid": not errors,
+        "errors": errors,
+        "reported_outcome": reported,
+        "outcome": reported if not errors else "not_assessed",
+        "repair_required": not errors and reported == "fail",
+        "raw_preserved": True,
+        "advisory_only": True,
+        "blocking_gate": False,
+        "authorizes_mutation": False,
+    }

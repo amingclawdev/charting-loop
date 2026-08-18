@@ -92,6 +92,8 @@ def complete_assessment(
         "source_mapping_complete": True,
         "definition_closure_complete": True,
         "assessment_closure": "complete",
+        "assessed_scope": "complete",
+        "scope_limitations": [],
         "acceptance_results": [
             {
                 "acceptance_id": acceptance_id,
@@ -306,8 +308,12 @@ class FullMethodContractTests(unittest.TestCase):
         )
         self.assertEqual(resolved, (REPOSITORY_ROOT / version["path"]).read_bytes())
 
-        source = (REPOSITORY_ROOT / "benchmark_agents" / "harbor_agent.py").read_text(
-            encoding="utf-8"
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (
+                REPOSITORY_ROOT / "benchmark_agents" / "harbor_agent.py",
+                REPOSITORY_ROOT / "benchmark_agents" / "contract.py",
+            )
         )
         for value in (
             "charting-loop-method-v8",
@@ -358,6 +364,9 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn('"source_mapping_complete"', qa)
         self.assertIn('"definition_closure_complete"', qa)
         self.assertIn('"assessment_closure"', qa)
+        self.assertIn('"assessed_scope"', qa)
+        self.assertIn('"scope_limitations"', qa)
+        self.assertIn("corridor_kit qa validate", qa)
         self.assertNotIn('"coverage_complete"', qa)
         self.assertIn("one task-level deadline", worker)
         self.assertIn("corridor_kit submission freeze", worker)
@@ -383,6 +392,11 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn(contract.SDK_PACKAGE_PATH, prompt)
         self.assertIn(contract.WORK_PATH, prompt)
         self.assertIn(contract.CAPABILITIES_PATH, prompt)
+        self.assertIn("METHOD-CAPSULE.json", prompt)
+        self.assertIn(contract.METHOD_CONTENT_SHA256, prompt)
+        self.assertIn("SOURCE-MAP.json", prompt)
+        self.assertIn("EVIDENCE.json", prompt)
+        self.assertIn("REPLAY.json", prompt)
         self.assertIn("python3 -m corridor_kit capabilities builtins", prompt)
         self.assertIn("Dependencies must be acyclic", prompt)
         self.assertIn("Reminders are advisory", prompt)
@@ -556,6 +570,19 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("ASSESSMENT_DEFINITION_CLOSURE_CONTRADICTION", errors)
         self.assertIn("ASSESSMENT_CLOSURE_CONTRADICTION", errors)
 
+        contradictory = complete_assessment(digest, outcome="not_assessed")
+        contradictory["definition_closure_complete"] = False
+        errors = contract.validate_qa_assessment(
+            contradictory,
+            expected_corridor_digest=digest,
+            acceptance_ledger_status="complete",
+            expected_acceptance_ids=["ACCEPT-1"],
+            required_acceptance_ids=["ACCEPT-1"],
+        )
+        self.assertIn(
+            "ASSESSMENT_DEFINITION_AND_CLOSURE_CONTRADICTION", errors
+        )
+
     def test_qa_json_rejects_duplicate_keys_and_non_finite_numbers(self) -> None:
         with self.assertRaisesRegex(ValueError, "duplicate QA JSON key"):
             contract.load_qa_json_text('{"outcome":"pass","outcome":"fail"}')
@@ -580,6 +607,163 @@ class FullMethodContractTests(unittest.TestCase):
                 contract.corridor_digest(plain_manifest),
                 contract.corridor_digest(executable_manifest),
             )
+
+    def test_private_custody_captures_frozen_bytes_before_teardown(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            agent_dir = root / "agent"
+            runtime_root = root / "runtime"
+            corridor = runtime_root / "corridor"
+            position = root / "position" / "POSITION.jsonl"
+            submissions = agent_dir / "submissions"
+            corridor.mkdir(parents=True)
+            (corridor / "tool.py").write_text("print('public probe')\n", encoding="utf-8")
+            os.chmod(corridor / "tool.py", 0o755)
+            digest = contract.corridor_digest(contract.corridor_manifest(corridor))
+            (runtime_root / "FREEZE.json").write_text(
+                json.dumps({"corridor_digest": digest}), encoding="utf-8"
+            )
+            position.parent.mkdir(parents=True)
+            position.write_text('{"event":"start"}\n', encoding="utf-8")
+            phase = agent_dir / "phases" / "builder" / "sessions"
+            phase.mkdir(parents=True)
+            (phase / "events.jsonl").write_text(
+                '{"payload":{"type":"task_complete"}}\n', encoding="utf-8"
+            )
+            latest = submissions / "latest"
+            manifest_dir = submissions / "snapshots" / "worker" / "snapshot-1"
+            blob_dir = submissions / "blobs"
+            latest.mkdir(parents=True)
+            manifest_dir.mkdir(parents=True)
+            blob_dir.mkdir(parents=True)
+            (latest / "worker.json").write_text(
+                '{"snapshot_id":"snapshot-1"}\n', encoding="utf-8"
+            )
+            (manifest_dir / "manifest.json").write_text(
+                '{"snapshot_id":"snapshot-1"}\n', encoding="utf-8"
+            )
+            (blob_dir / "private-solution-byte").write_bytes(b"do not duplicate")
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    contract.private_custody_program(
+                        agent_dir=str(agent_dir),
+                        expected_corridor_digest=digest,
+                        runtime_root=str(runtime_root),
+                        position_path=str(position),
+                        submission_root=str(submissions),
+                    ),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            report = json.loads(completed.stdout)
+            self.assertTrue(report["ok"])
+            self.assertEqual("direct", report["custody_status"])
+            self.assertTrue(report["direct_byte_match"])
+            custody = agent_dir / "corridor-custody"
+            self.assertEqual(
+                (corridor / "tool.py").read_bytes(),
+                (custody / "frozen-corridor" / "tool.py").read_bytes(),
+            )
+            self.assertTrue(
+                (custody / "submission-manifests" / "latest" / "worker.json").is_file()
+            )
+            self.assertFalse(
+                (custody / "submission-manifests" / "blobs").exists()
+            )
+
+        recovered = contract.custody_provenance(
+            "recovered_from_builder_events", direct_byte_match=False
+        )
+        self.assertEqual("recovered", recovered["custody_status"])
+        self.assertTrue(recovered["recovered"])
+        self.assertFalse(recovered["direct_download"])
+
+    def test_role_metrics_separate_tool_and_inference_wall_time(self) -> None:
+        adapter = load_harbor_agent_with_stubs()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            role_dir = root / "builder"
+            session_dir = role_dir / "sessions"
+            corridor = root / "corridor"
+            session_dir.mkdir(parents=True)
+            corridor.mkdir()
+            events = [
+                {
+                    "timestamp": "2026-08-18T12:00:00Z",
+                    "payload": {
+                        "type": "task_started",
+                        "started_at": "2026-08-18T12:00:00Z",
+                    },
+                },
+                {
+                    "timestamp": "2026-08-18T12:00:01Z",
+                    "payload": {"type": "custom_tool_call", "call_id": "call-1"},
+                },
+                {
+                    "timestamp": "2026-08-18T12:00:03Z",
+                    "payload": {
+                        "type": "custom_tool_call_output",
+                        "call_id": "call-1",
+                    },
+                },
+                {
+                    "timestamp": "2026-08-18T12:00:05Z",
+                    "payload": {"type": "agent_message"},
+                },
+                {
+                    "timestamp": "2026-08-18T12:00:10Z",
+                    "payload": {
+                        "type": "task_complete",
+                        "completed_at": "2026-08-18T12:00:10Z",
+                    },
+                },
+            ]
+            (session_dir / "events.jsonl").write_text(
+                "".join(json.dumps(event) + "\n" for event in events),
+                encoding="utf-8",
+            )
+            capsule = {
+                "schema_version": "charting-loop/method-capsule/v1",
+                "binding_state": "bound",
+                "method_version": "method-v-test",
+                "method_digest": "sha256:" + "a" * 64,
+                "method_scope_digest": "sha256:" + "b" * 64,
+            }
+            (corridor / "METHOD-CAPSULE.json").write_text(
+                json.dumps(capsule), encoding="utf-8"
+            )
+            (corridor / "KIT.json").write_text(
+                json.dumps({
+                    "method_capsule_digest": "sha256:" + "c" * 64,
+                    "starter_digest": "sha256:" + "d" * 64,
+                }),
+                encoding="utf-8",
+            )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    adapter._role_metrics_program(str(role_dir), str(corridor)),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            metrics = json.loads(completed.stdout)
+            self.assertEqual(1, metrics["turn_count"])
+            self.assertEqual(1, metrics["tool_call_count"])
+            self.assertEqual(2.0, metrics["tool_wall_seconds"])
+            self.assertEqual(8.0, metrics["inference_wall_seconds"])
+            self.assertEqual(10.0, metrics["total_wall_seconds"])
+            self.assertEqual("bound", metrics["method_capsule"]["binding_state"])
 
     def test_freezer_closes_bytes_and_falls_back_when_builder_is_empty(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -963,6 +1147,10 @@ class FullMethodContractTests(unittest.TestCase):
             "FINALIZATION_RESERVE_SECONDS",
             "_restore_latest_worker_submission",
             "submission restore",
+            "_validate_qa_presubmit",
+            "_worker_revision_progress",
+            "_archive_private_custody",
+            "private_custody_",
         ):
             self.assertIn(marker, source)
         self.assertNotIn("PHASE_TIMEOUT_SECONDS", source)

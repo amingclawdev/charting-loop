@@ -11,9 +11,15 @@ from pathlib import Path
 import re
 from typing import Any
 
-from .acceptance import validate_acceptance_ledger
+from .acceptance import qa_assessment_decision, validate_acceptance_ledger
 from .capabilities import validate_capability_registry
-from .core import CorridorKitError, canonical_json_bytes, load_json, sha256_json
+from .core import (
+    CorridorKitError,
+    canonical_json_bytes,
+    load_json,
+    sha256_bytes,
+    sha256_json,
+)
 
 
 WORK_BACKLOG_SCHEMA = "charting-loop/task-work-backlog/v1"
@@ -684,6 +690,16 @@ def _guide_from_position(
             "hypothetical": hypothetical,
         },
         "capabilities": direction["capabilities"],
+        "work_row_guidance": {
+            "row_id": current_id,
+            "acceptance_ids": row["acceptance_ids"] if row else [],
+            "scope": row["scope"] if row else None,
+            "done_when": row["done_when"] if row else [],
+            "selected_capability_ids": direction["capability_ids"],
+            "selected_capabilities": direction["capabilities"],
+            "position_ref": position["position_ref"],
+            "timeline_head": position["timeline_head"],
+        },
         "reminders": reminders,
         "hypothetical": hypothetical,
         "advisory_only": True,
@@ -792,3 +808,51 @@ def load_runtime_guide(
         load_json(capability_path),
         load_position_timeline(timeline_path),
     )
+
+
+def validate_qa_assessment_path(
+    assessment_path: Path, freeze_path: Path
+) -> dict[str, Any]:
+    """Run the shared advisory QA validator without rewriting the raw report."""
+
+    assessment_path = Path(assessment_path)
+    raw = assessment_path.read_bytes()
+    try:
+        value = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return {
+            "schema_version": "charting-loop/qa-assessment-decision/v1",
+            "valid": False,
+            "errors": ["ASSESSMENT_JSON"],
+            "reported_outcome": None,
+            "outcome": "not_assessed",
+            "repair_required": False,
+            "raw_preserved": True,
+            "raw_sha256": sha256_bytes(raw),
+            "advisory_only": True,
+            "blocking_gate": False,
+            "authorizes_mutation": False,
+        }
+    freeze = load_json(Path(freeze_path))
+    report = qa_assessment_decision(
+        value,
+        expected_corridor_digest=str(freeze.get("corridor_digest", "")),
+        acceptance_ledger_status=str(
+            freeze.get("acceptance_ledger_status", "missing")
+        ),
+        expected_acceptance_ids=[
+            str(item) for item in freeze.get("acceptance_ids", [])
+        ],
+        required_acceptance_ids=[
+            str(item) for item in freeze.get("required_acceptance_ids", [])
+        ],
+        source_mapping_status=str(freeze.get("source_mapping_status", "unknown")),
+        definition_closure_status=str(
+            freeze.get("definition_closure_status", "unknown")
+        ),
+        construction_readiness_status=str(
+            freeze.get("construction_readiness_status", "unknown")
+        ),
+    )
+    report["raw_sha256"] = sha256_bytes(raw)
+    return report

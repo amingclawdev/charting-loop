@@ -15,6 +15,11 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
+from corridor_kit.acceptance import (
+    QA_ASSESSMENT_SCHEMA,
+    validate_qa_assessment as validate_corridor_qa_assessment,
+)
+
 
 RUNTIME_ROOT = "/tmp/charting-loop"
 SDK_ROOT = "/opt/charting-loop-sdk"
@@ -33,7 +38,7 @@ SUBMISSION_ROOT = "/logs/agent/submissions"
 
 FREEZE_SCHEMA = "charting-loop/frozen-task-corridor/v1"
 ACCEPTANCE_SCHEMA = "charting-loop/task-acceptance-ledger/v2"
-ASSESSMENT_SCHEMA = "charting-loop/corridor-qa-assessment/v3"
+ASSESSMENT_SCHEMA = QA_ASSESSMENT_SCHEMA
 QA_OUTCOMES = frozenset({"pass", "fail", "blocked", "not_assessed"})
 ACCEPTANCE_APPLICABILITY = frozenset(
     {"applicable", "not_applicable", "unknown"}
@@ -43,6 +48,13 @@ CONSTRUCTION_READINESS_STATES = frozenset({"ready", "unresolved"})
 ASSESSMENT_CLOSURE_STATES = frozenset({"complete", "incomplete"})
 SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 MAX_QA_JSON_BYTES = 256 * 1024
+METHOD_VERSION_ID = "charting-loop-method-v8"
+METHOD_CONTENT_SHA256 = (
+    "sha256:85b5a7a8700312ec1e35b80df6e224221d44a48904247a8d6d32cfe940459446"
+)
+METHOD_SCOPE_SHA256 = (
+    "sha256:bd70498b2f75e039d88c80ae0c5b0a11fba15d12517820c27e8bccb28da987af"
+)
 
 
 def canonical_json_bytes(value: Any) -> bytes:
@@ -59,6 +71,170 @@ def canonical_json_bytes(value: Any) -> bytes:
 
 def sha256_bytes(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def custody_provenance(source_kind: str, *, direct_byte_match: bool) -> dict[str, Any]:
+    """Classify custody honestly; reconstruction is never called a download."""
+
+    direct = source_kind == "direct_runtime_capture"
+    recovered = source_kind == "recovered_from_builder_events"
+    return {
+        "source_kind": source_kind,
+        "custody_status": (
+            "direct"
+            if direct and direct_byte_match
+            else "digest_mismatch"
+            if direct
+            else "recovered"
+            if recovered
+            else "capture_failed"
+        ),
+        "direct_byte_match": direct and direct_byte_match,
+        "recovered": recovered,
+        "direct_download": direct and direct_byte_match,
+    }
+
+
+def private_custody_program(
+    *,
+    agent_dir: str,
+    expected_corridor_digest: str,
+    runtime_root: str = RUNTIME_ROOT,
+    position_path: str = POSITION_PATH,
+    submission_root: str = SUBMISSION_ROOT,
+) -> str:
+    """Return a teardown-safe private capture program for benchmark evidence."""
+
+    return textwrap.dedent(
+        f"""
+        import hashlib
+        import json
+        import os
+        import shutil
+        import stat
+        import tempfile
+        from datetime import datetime, timezone
+        from pathlib import Path
+
+        agent_dir = Path({agent_dir!r})
+        runtime_root = Path({runtime_root!r})
+        position_path = Path({position_path!r})
+        submission_root = Path({submission_root!r})
+        expected_digest = {expected_corridor_digest!r}
+        target = agent_dir / "corridor-custody"
+        staging = Path(tempfile.mkdtemp(prefix=".corridor-custody-", dir=agent_dir))
+
+        def digest(data):
+            return "sha256:" + hashlib.sha256(data).hexdigest()
+
+        def canonical(value):
+            return json.dumps(
+                value, sort_keys=True, separators=(",", ":"),
+                ensure_ascii=False, allow_nan=False,
+            ).encode("utf-8")
+
+        def copy_regular_tree(source, destination, predicate=lambda path: True):
+            if source.is_symlink() or not source.is_dir():
+                raise ValueError(f"custody source must be a real directory: {{source}}")
+            destination.mkdir(parents=True, exist_ok=True)
+            for path in sorted(source.rglob("*"), key=lambda item: item.as_posix()):
+                if path.is_symlink():
+                    raise ValueError(f"custody symlink is forbidden: {{path}}")
+                relative = path.relative_to(source)
+                if path.is_dir():
+                    continue
+                if not path.is_file():
+                    raise ValueError(f"custody special file is forbidden: {{path}}")
+                if not predicate(path):
+                    continue
+                output = destination / relative
+                output.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(path, output)
+                os.chmod(output, stat.S_IMODE(path.stat().st_mode) & 0o777)
+
+        def corridor_identity(root):
+            records = []
+            for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
+                if path.is_dir():
+                    continue
+                data = path.read_bytes()
+                records.append({{
+                    "path": path.relative_to(root).as_posix(),
+                    "bytes": len(data),
+                    "sha256": digest(data),
+                    "executable": bool(stat.S_IMODE(path.stat().st_mode) & 0o111),
+                }})
+            return records, digest(canonical(records))
+
+        def file_manifest(root):
+            records = []
+            for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
+                if path.is_dir() or path.name == "custody-manifest.json":
+                    continue
+                data = path.read_bytes()
+                records.append({{
+                    "path": path.relative_to(root).as_posix(),
+                    "bytes": len(data),
+                    "sha256": digest(data),
+                }})
+            return records
+
+        try:
+            copy_regular_tree(runtime_root / "corridor", staging / "frozen-corridor")
+            shutil.copyfile(runtime_root / "FREEZE.json", staging / "FREEZE.json")
+            shutil.copyfile(position_path, staging / "POSITION.jsonl")
+            copy_regular_tree(agent_dir / "phases", staging / "roles")
+            copy_regular_tree(
+                submission_root,
+                staging / "submission-manifests",
+                lambda path: path.name == "manifest.json"
+                or (path.parent.name == "latest" and path.suffix == ".json"),
+            )
+            corridor_files, copied_digest = corridor_identity(staging / "frozen-corridor")
+            direct_match = copied_digest == expected_digest
+            records = file_manifest(staging)
+            manifest = {{
+                "schema_version": "charting-loop/benchmark-private-custody/v1",
+                "private": True,
+                "public_release_allowed": False,
+                "source_kind": "direct_runtime_capture",
+                "custody_status": "direct" if direct_match else "digest_mismatch",
+                "direct_byte_match": direct_match,
+                "direct_download": direct_match,
+                "recovered": False,
+                "expected_corridor_digest": expected_digest,
+                "copied_corridor_digest": copied_digest,
+                "corridor_files": corridor_files,
+                "files": records,
+                "tree_digest": digest(canonical(records)),
+                "builder_recovery_evidence": "roles/builder",
+                "captured_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            }}
+            (staging / "custody-manifest.json").write_bytes(canonical(manifest) + b"\\n")
+            if target.exists():
+                raise ValueError("private custody target already exists")
+            os.replace(staging, target)
+            print(json.dumps({{"ok": direct_match, **manifest}}, sort_keys=True))
+        except Exception as exc:
+            shutil.rmtree(staging, ignore_errors=True)
+            target.mkdir(parents=True, exist_ok=True)
+            failure = {{
+                "schema_version": "charting-loop/benchmark-private-custody/v1",
+                "private": True,
+                "public_release_allowed": False,
+                "source_kind": "direct_runtime_capture_failed",
+                "custody_status": "capture_failed",
+                "direct_byte_match": False,
+                "direct_download": False,
+                "recovered": False,
+                "expected_corridor_digest": expected_digest,
+                "error_type": type(exc).__name__,
+                "builder_recovery_evidence": "../phases/builder",
+            }}
+            (target / "custody-manifest.json").write_bytes(canonical(failure) + b"\\n")
+            print(json.dumps({{"ok": False, **failure}}, sort_keys=True))
+        """
+    )
 
 
 def corridor_manifest(corridor: Path) -> list[dict[str, Any]]:
@@ -651,113 +827,24 @@ def _task_block(task_instruction: str) -> str:
 def builder_prompt(task_instruction: str) -> str:
     """Prompt the construction role with the method and official task goal."""
 
-    acceptance_template = json.dumps(
-        {
-            "schema_version": ACCEPTANCE_SCHEMA,
-            "coverage": {
-                "status": "complete|incomplete",
-                "unmapped_clauses": [],
-                "ambiguous_clauses": [],
-            },
-            "construction_readiness": {
-                "status": "ready|unresolved",
-                "coupled_acceptance_ids": ["ACCEPT-..."],
-                "replay_entrypoint": "./validate-or-plan ...",
-                "unresolved_constraints": [],
-            },
-            "items": [
-                {
-                    "acceptance_id": "ACCEPT-...",
-                    "source_ref": "public-source#locator",
-                    "statement": "one atomic normative requirement",
-                    "required": True,
-                    "definition_state": "defined|ambiguous",
-                    "scope": {"kind": "task-specific scope"},
-                    "rule": {"kind": "task-specific decision rule"},
-                    "relations": [
-                        {"type": "requires", "target_id": "ACCEPT-..."}
-                    ],
-                    "verification_obligations": {
-                        "positive": ["expected success witness"],
-                        "negative": ["expected rejection or failure witness"],
-                        "boundary": ["limit/equality/off-by-one witness or explicit not-applicable reason"],
-                        "state": ["required before/after state witness or explicit not-applicable reason"],
-                        "temporal": ["ordering/duration/replay witness or explicit not-applicable reason"],
-                        "coupled": ["joint-constraint witness or explicit not-applicable reason"],
-                    },
-                }
-            ],
-        },
-        indent=2,
-        ensure_ascii=False,
-    )
-    work_template = json.dumps(
-        {
-            "schema_version": "charting-loop/task-work-backlog/v1",
-            "state": "compiled",
-            "acceptance_ledger_digest": "sha256:<canonical ACCEPTANCE.json digest>",
-            "rows": [
-                {
-                    "row_id": "ROW-...",
-                    "title": "bounded work outcome",
-                    "acceptance_ids": ["ACCEPT-..."],
-                    "depends_on": [],
-                    "scope": {"kind": "task-specific scope"},
-                    "done_when": ["replayable condition"],
-                    "capability_ids": ["selected.capability-id"],
-                    "reminders": [
-                        {
-                            "reminder_id": "REM-...",
-                            "when": "on_ready|on_enter|before_mutation|before_complete|on_blocked",
-                            "message": "advisory task reminder",
-                            "acceptance_ids": ["ACCEPT-..."],
-                        }
-                    ],
-                }
-            ],
-        },
-        indent=2,
-        ensure_ascii=False,
-    )
-    capability_template = json.dumps(
-        {
-            "schema_version": "charting-loop/capability-registry/v1",
-            "state": "compiled",
-            "registry_version": "1.0.0",
-            "capabilities": [
-                {
-                    "capability_id": "selected.capability-id",
-                    "version": "1.0.0",
-                    "digest": "sha256:<64 lowercase hex>",
-                    "summary": "bounded reusable operation",
-                    "entrypoint": "shell-free documented entrypoint",
-                    "input_contract": {"input": "declared input"},
-                    "output_contract": {"output": "declared output"},
-                    "side_effects": "none|read_only|mutating",
-                    "applicability": {
-                        "domains": ["declared domain"],
-                        "signals": ["public applicability signal"],
-                    },
-                }
-            ],
-        },
-        indent=2,
-        ensure_ascii=False,
-    )
 
     return f"""You are the Builder for one fresh Terminal-Bench trial.
 
-Read the frozen method at {METHOD_PATH}. The official task is included below because
-this is a task-conditioned Corridor: without the goal and public task environment,
-you cannot compile the relevant constraints into a useful navigation aid.
+Start with the runner-generated compact Method capsule at
+{CORRIDOR_PATH}/METHOD-CAPSULE.json. It is bound to Method digest
+{METHOD_CONTENT_SHA256} and scope digest {METHOD_SCOPE_SHA256}. Use its Builder
+invariants and generated schemas first; consult the full frozen Method at
+{METHOD_PATH} only when the capsule or public task leaves a genuine ambiguity. The
+official task is included below because the Builder must compile task-specific Rules,
+not reuse a stored answer.
 
 The runner uploaded a frozen task-neutral Corridor SDK read-only at
-{SDK_PACKAGE_PATH}. Initialize its honest starter under Builder scratch with
-`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit init <new-scratch-path>`, inspect
-`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit capabilities builtins`, and copy only
-selected task-neutral mechanics plus task-specific adapters into the Corridor. Do not
-rebuild generic hashing, work-row, timeline, ELF inventory, binary-diff, or replay
-plumbing when the frozen SDK already provides it.
+{SDK_PACKAGE_PATH} and initialized the honest starter directly under
+{CORRIDOR_PATH}. Extend those files in place. Inspect
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit capabilities builtins`; do not rebuild
+generic hashing, acceptance obligations, evidence records, source maps, unprivileged
+replay, work-row, timeline, ELF inventory, binary-diff, or snapshot plumbing when the
+SDK already provides it.
 
 {_task_block(task_instruction)}
 
@@ -767,21 +854,15 @@ public task environment as needed, but do not carry out the official task or mut
 its target state. Do not read verifier/oracle material that the official task does
 not expose to ordinary agents.
 
-Create {ACCEPTANCE_PATH} using this exact field contract (replace example values,
-never field names):
+Compile the generated {ACCEPTANCE_PATH}, {WORK_PATH}, {CAPABILITIES_PATH},
+{CORRIDOR_PATH}/SOURCE-MAP.json, {CORRIDOR_PATH}/EVIDENCE.json, and
+{CORRIDOR_PATH}/REPLAY.json in place. Preserve their schema field names. Bind every
+acceptance ID to work and replay evidence, and include only capabilities selected by
+a row. Reusable mechanics may never contain a task answer, fixed task offset, hidden
+verifier Fact, or outcome-derived repair.
 
-{acceptance_template}
-
-Create {WORK_PATH} using this exact field contract. Bind every acceptance ID without
-leaving an item unbound:
-
-{work_template}
-
-Create {CAPABILITIES_PATH} using this exact field contract. Include only capabilities
-selected by a row. Reusable mechanics may never contain a task answer, fixed task
-offset, hidden verifier Fact, or outcome-derived repair:
-
-{capability_template}
+The generated acceptance schema is `{ACCEPTANCE_SCHEMA}` and its six obligation keys
+are exactly "positive", "negative", "boundary", "state", "temporal", and "coupled".
 
 The top-level field is exactly `schema_version`, never `schema`. Every relation
 target field is exactly `target_id`, never `target_acceptance_id` or another alias.
@@ -970,6 +1051,8 @@ Diagnostic reads are allowed. Your only write is {QA_PATH}. Write one JSON objec
   "source_mapping_complete": true,
   "definition_closure_complete": true,
   "assessment_closure": "complete|incomplete",
+  "assessed_scope": "complete|partial",
+  "scope_limitations": [],
   "acceptance_results": [{{
     "acceptance_id": "...",
     "applicability": "applicable|not_applicable|unknown",
@@ -999,6 +1082,9 @@ unambiguous. `definition_closure_complete` means no required definition or relat
 remains ambiguous. `assessment_closure` means QA has reached a supported
 applicability and status for every expected item. Do not collapse these three
 claims. Source mapping is not proof of joint feasibility or objective optimality.
+`assessment_closure=complete` with `definition_closure_complete=false` is a
+contradiction unless `assessed_scope=partial` names non-empty
+`scope_limitations`; a partial assessment can never pass the whole task.
 If definition closure or readiness is unresolved, or a required coupled check
 remains unknown, you may not pass the task. Emit exactly one result
 for every expected ID. Independently re-read the original public task sources to
@@ -1018,9 +1104,14 @@ ledger, an unresolved required coupled check, or one concrete failure witness, w
 a schema-valid provisional assessment covering every expected ID. Write it to a
 temporary file in the QA directory and atomically rename it to {QA_PATH}; continue
 deepening the audit only after that durable checkpoint, and atomically replace it
-with richer evidence. Do not postpone the first valid assessment until the end of
-your session. QA is advisory: your verdict must never prevent the official verifier
-from running.
+with richer evidence. Before finishing, run the same advisory semantic check used
+by harness intake:
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit qa validate --path {QA_PATH} --freeze {FREEZE_PATH}`
+
+If it reports invalid, correct the report when evidence permits; otherwise preserve
+the raw report and accept `not_assessed`. QA is advisory: validator failure must
+never prevent the official verifier from running or trigger repair.
 """
 
 
@@ -1095,6 +1186,10 @@ there is no closure-owned time slice. Write a complete atomic closure assessment
 early. The runner freezes it as audit evidence and then restores/promotes the newest
 complete Worker submission for official grading regardless of the QA verdict.
 
+Before finishing, run `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit qa validate
+--path {CLOSURE_PATH} --freeze {FREEZE_PATH}`. Invalid closure semantics normalize
+to `not_assessed`, remain raw audit evidence, and never trigger another repair.
+
 Re-query the same runtime Guide and Position timeline at {POSITION_PATH}; row progress
 and reminders remain RAW, advisory evidence rather than acceptance authority.
 """
@@ -1111,211 +1206,15 @@ def validate_qa_assessment(
     definition_closure_status: str = "complete",
     construction_readiness_status: str = "ready",
 ) -> list[str]:
-    """Validate the QA artifact and return stable error codes.
+    """Use the SDK validator shared by QA pre-submit and harness intake."""
 
-    The decision to repair is ``not errors and outcome == 'fail'``.  Invalid or
-    witness-free failures therefore cannot silently trigger mutation.
-    """
-
-    errors: list[str] = []
-    if not isinstance(value, dict):
-        return ["ASSESSMENT_OBJECT_REQUIRED"]
-    if value.get("schema_version") != ASSESSMENT_SCHEMA:
-        errors.append("ASSESSMENT_SCHEMA")
-    outcome = value.get("outcome")
-    if outcome not in QA_OUTCOMES:
-        errors.append("ASSESSMENT_OUTCOME")
-    summary = value.get("summary")
-    if not isinstance(summary, str) or not summary.strip():
-        errors.append("ASSESSMENT_SUMMARY")
-    digest = value.get("corridor_digest")
-    if digest != expected_corridor_digest or not isinstance(digest, str):
-        errors.append("ASSESSMENT_CORRIDOR_DIGEST")
-    elif not SHA256_RE.fullmatch(digest):
-        errors.append("ASSESSMENT_CORRIDOR_DIGEST_FORMAT")
-
-    source_mapping_complete = value.get("source_mapping_complete")
-    if not isinstance(source_mapping_complete, bool):
-        errors.append("ASSESSMENT_SOURCE_MAPPING_COMPLETE")
-    definition_closure_complete = value.get("definition_closure_complete")
-    if not isinstance(definition_closure_complete, bool):
-        errors.append("ASSESSMENT_DEFINITION_CLOSURE_COMPLETE")
-    assessment_closure = value.get("assessment_closure")
-    if assessment_closure not in ASSESSMENT_CLOSURE_STATES:
-        errors.append("ASSESSMENT_CLOSURE")
-
-    expected_ids = set(expected_acceptance_ids)
-    if len(expected_ids) != len(expected_acceptance_ids):
-        errors.append("EXPECTED_ACCEPTANCE_IDS_DUPLICATE")
-    required_ids = set(required_acceptance_ids)
-    if not required_ids.issubset(expected_ids):
-        errors.append("REQUIRED_ACCEPTANCE_IDS_UNKNOWN")
-
-    acceptance_results = value.get("acceptance_results")
-    results_by_id: dict[str, dict[str, Any]] = {}
-    if not isinstance(acceptance_results, list):
-        errors.append("ASSESSMENT_ACCEPTANCE_RESULTS")
-        acceptance_results = []
-    for index, result in enumerate(acceptance_results):
-        if not isinstance(result, dict):
-            errors.append(f"ASSESSMENT_ACCEPTANCE_RESULT_{index}")
-            continue
-        acceptance_id = result.get("acceptance_id")
-        if not isinstance(acceptance_id, str) or not acceptance_id.strip():
-            errors.append(f"ASSESSMENT_ACCEPTANCE_ID_{index}")
-            continue
-        if acceptance_id in results_by_id:
-            errors.append(f"ASSESSMENT_ACCEPTANCE_ID_DUPLICATE_{acceptance_id}")
-            continue
-        results_by_id[acceptance_id] = result
-        if result.get("applicability") not in ACCEPTANCE_APPLICABILITY:
-            errors.append(f"ASSESSMENT_APPLICABILITY_{acceptance_id}")
-        if result.get("status") not in ACCEPTANCE_STATES:
-            errors.append(f"ASSESSMENT_ACCEPTANCE_STATUS_{acceptance_id}")
-        for field in ("evidence", "replay"):
-            item = result.get(field)
-            if not isinstance(item, str) or not item.strip():
-                errors.append(
-                    f"ASSESSMENT_ACCEPTANCE_{field.upper()}_{acceptance_id}"
-                )
-
-    actual_ids = set(results_by_id)
-    for acceptance_id in sorted(expected_ids - actual_ids):
-        errors.append(f"ASSESSMENT_ACCEPTANCE_ID_MISSING_{acceptance_id}")
-    for acceptance_id in sorted(actual_ids - expected_ids):
-        errors.append(f"ASSESSMENT_ACCEPTANCE_ID_UNKNOWN_{acceptance_id}")
-
-    collection_values: dict[str, list[Any]] = {}
-    for field, code in (
-        ("unmapped_requirements", "ASSESSMENT_UNMAPPED_REQUIREMENTS"),
-        ("unresolved_relations", "ASSESSMENT_UNRESOLVED_RELATIONS"),
-    ):
-        items = value.get(field)
-        if not isinstance(items, list):
-            errors.append(code)
-            continue
-        collection_values[field] = items
-        for index, item in enumerate(items):
-            if not isinstance(item, str) or not item.strip():
-                errors.append(f"{code}_{index}")
-    if source_mapping_complete is True and collection_values.get(
-        "unmapped_requirements"
-    ):
-        errors.append("ASSESSMENT_SOURCE_MAPPING_CONTRADICTION")
-    if definition_closure_complete is True and collection_values.get(
-        "unresolved_relations"
-    ):
-        errors.append("ASSESSMENT_DEFINITION_CLOSURE_CONTRADICTION")
-    if source_mapping_complete is True and source_mapping_status != "complete":
-        errors.append("ASSESSMENT_SOURCE_MAPPING_EXCEEDS_FROZEN_LEDGER")
-    if (
-        definition_closure_complete is True
-        and definition_closure_status != "complete"
-    ):
-        errors.append("ASSESSMENT_DEFINITION_CLOSURE_EXCEEDS_FROZEN_LEDGER")
-
-    checks = value.get("checks")
-    if not isinstance(checks, list):
-        errors.append("ASSESSMENT_CHECKS")
-        checks = []
-    else:
-        for index, check in enumerate(checks):
-            if not isinstance(check, dict):
-                errors.append(f"ASSESSMENT_CHECK_{index}")
-                continue
-            if not isinstance(check.get("name"), str) or not check["name"].strip():
-                errors.append(f"ASSESSMENT_CHECK_NAME_{index}")
-            if check.get("status") not in {"pass", "fail", "unknown"}:
-                errors.append(f"ASSESSMENT_CHECK_STATUS_{index}")
-            if not isinstance(check.get("evidence"), str):
-                errors.append(f"ASSESSMENT_CHECK_EVIDENCE_{index}")
-
-    if assessment_closure == "complete":
-        closure_unresolved = any(
-            result.get("applicability") == "unknown"
-            or (
-                result.get("applicability") == "applicable"
-                and result.get("status") in {"unknown", "not_reached"}
-            )
-            for result in results_by_id.values()
-        ) or any(
-            isinstance(check, dict) and check.get("status") == "unknown"
-            for check in checks
-        )
-        if closure_unresolved or actual_ids != expected_ids:
-            errors.append("ASSESSMENT_CLOSURE_CONTRADICTION")
-
-    witnesses = value.get("witnesses")
-    if not isinstance(witnesses, list):
-        errors.append("ASSESSMENT_WITNESSES")
-        witnesses = []
-    for index, witness in enumerate(witnesses):
-        if not isinstance(witness, dict):
-            errors.append(f"ASSESSMENT_WITNESS_{index}")
-            continue
-        for field in ("constraint", "evidence", "replay"):
-            item = witness.get(field)
-            if not isinstance(item, str) or not item.strip():
-                errors.append(f"ASSESSMENT_WITNESS_{field.upper()}_{index}")
-    witness_acceptance_ids: set[str] = set()
-    for index, witness in enumerate(witnesses):
-        if not isinstance(witness, dict):
-            continue
-        acceptance_id = witness.get("acceptance_id")
-        if not isinstance(acceptance_id, str) or not acceptance_id.strip():
-            errors.append(f"ASSESSMENT_WITNESS_ACCEPTANCE_ID_{index}")
-        elif acceptance_id not in expected_ids:
-            errors.append(f"ASSESSMENT_WITNESS_ACCEPTANCE_ID_UNKNOWN_{index}")
-        else:
-            witness_acceptance_ids.add(acceptance_id)
-
-    if outcome == "fail":
-        if not witnesses:
-            errors.append("FAIL_WITNESS_REQUIRED")
-        failed_acceptance_ids = {
-            acceptance_id
-            for acceptance_id, result in results_by_id.items()
-            if result.get("status") == "fail"
-        }
-        if not failed_acceptance_ids:
-            errors.append("FAIL_ACCEPTANCE_RESULT_REQUIRED")
-        elif not (failed_acceptance_ids & witness_acceptance_ids):
-            errors.append("FAIL_WITNESS_ACCEPTANCE_MISMATCH")
-
-    if outcome == "pass":
-        if construction_readiness_status != "ready":
-            errors.append("PASS_CONSTRUCTION_READINESS_REQUIRED")
-        if acceptance_ledger_status != "complete":
-            errors.append("PASS_ACCEPTANCE_LEDGER_COMPLETE_REQUIRED")
-        if source_mapping_status != "complete":
-            errors.append("PASS_FROZEN_SOURCE_MAPPING_REQUIRED")
-        if definition_closure_status != "complete":
-            errors.append("PASS_FROZEN_DEFINITION_CLOSURE_REQUIRED")
-        if not expected_ids:
-            errors.append("PASS_ACCEPTANCE_IDS_REQUIRED")
-        if source_mapping_complete is not True:
-            errors.append("PASS_SOURCE_MAPPING_COMPLETE_REQUIRED")
-        if definition_closure_complete is not True:
-            errors.append("PASS_DEFINITION_CLOSURE_COMPLETE_REQUIRED")
-        if assessment_closure != "complete":
-            errors.append("PASS_ASSESSMENT_CLOSURE_REQUIRED")
-        if value.get("unmapped_requirements") != []:
-            errors.append("PASS_UNMAPPED_REQUIREMENTS_EMPTY_REQUIRED")
-        if value.get("unresolved_relations") != []:
-            errors.append("PASS_UNRESOLVED_RELATIONS_EMPTY_REQUIRED")
-        for acceptance_id in sorted(expected_ids & actual_ids):
-            result = results_by_id[acceptance_id]
-            applicability = result.get("applicability")
-            state = result.get("status")
-            if applicability == "applicable" and state != "pass":
-                errors.append(f"PASS_ACCEPTANCE_NOT_PASS_{acceptance_id}")
-            elif (
-                applicability == "not_applicable"
-                and state != "not_reached"
-            ):
-                errors.append(
-                    f"PASS_INAPPLICABLE_NOT_NOT_REACHED_{acceptance_id}"
-                )
-            elif applicability == "unknown":
-                errors.append(f"PASS_APPLICABILITY_UNKNOWN_{acceptance_id}")
-    return errors
+    return validate_corridor_qa_assessment(
+        value,
+        expected_corridor_digest=expected_corridor_digest,
+        acceptance_ledger_status=acceptance_ledger_status,
+        expected_acceptance_ids=expected_acceptance_ids,
+        required_acceptance_ids=required_acceptance_ids,
+        source_mapping_status=source_mapping_status,
+        definition_closure_status=definition_closure_status,
+        construction_readiness_status=construction_readiness_status,
+    )

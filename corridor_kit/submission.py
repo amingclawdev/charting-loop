@@ -38,6 +38,97 @@ SUBMISSION_ROLES = frozenset({"worker", "qa"})
 MAX_SUBMISSION_FILES = 4096
 
 
+def _content_records(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the solution-free identity used to compare two frozen versions."""
+
+    return [
+        {
+            "destination": item["destination"],
+            "bytes": item["bytes"],
+            "sha256": item["sha256"],
+            "mode": item["mode"],
+        }
+        for item in manifest["files"]
+    ]
+
+
+def _revision_delta(
+    manifest: dict[str, Any], previous_manifest: dict[str, Any] | None
+) -> dict[str, Any]:
+    current = {
+        item["destination"]: (item["bytes"], item["sha256"], item["mode"])
+        for item in _content_records(manifest)
+    }
+    previous = (
+        {
+            item["destination"]: (item["bytes"], item["sha256"], item["mode"])
+            for item in _content_records(previous_manifest)
+        }
+        if previous_manifest is not None
+        else {}
+    )
+    changed = sorted(
+        destination
+        for destination in set(current) | set(previous)
+        if current.get(destination) != previous.get(destination)
+    )
+    initial = previous_manifest is None
+    content_changed = initial or bool(changed)
+    return {
+        "has_parent": not initial,
+        "content_changed": content_changed,
+        "changed_file_count": len(changed),
+        "revision_kind": (
+            "initial"
+            if initial
+            else "content_revision"
+            if content_changed
+            else "validation_refreeze"
+        ),
+    }
+
+
+def _annotate_revision_history(snapshots: list[dict[str, Any]]) -> dict[str, Any]:
+    previous_manifest: dict[str, Any] | None = None
+    content_revision_index = 0
+    validation_refreeze_count = 0
+    compact: list[dict[str, Any]] = []
+    for snapshot in snapshots:
+        delta = _revision_delta(snapshot["manifest"], previous_manifest)
+        if delta["revision_kind"] == "content_revision":
+            content_revision_index += 1
+        elif delta["revision_kind"] == "validation_refreeze":
+            validation_refreeze_count += 1
+        snapshot.update(
+            {
+                **delta,
+                "content_revision_index": content_revision_index,
+                "last_frozen_at": snapshot["manifest"]["created_at"],
+            }
+        )
+        compact.append(
+            {
+                "sequence": snapshot["sequence"],
+                "snapshot_id": snapshot["snapshot_id"],
+                "parent_snapshot_id": snapshot["manifest"]["parent_snapshot_id"],
+                "content_changed": snapshot["content_changed"],
+                "changed_file_count": snapshot["changed_file_count"],
+                "content_revision_index": content_revision_index,
+                "revision_kind": snapshot["revision_kind"],
+                "last_frozen_at": snapshot["last_frozen_at"],
+            }
+        )
+        previous_manifest = snapshot["manifest"]
+    return {
+        "snapshot_count": len(snapshots),
+        "checkpoint_advance_count": max(0, len(snapshots) - 1),
+        "content_revision_count": content_revision_index,
+        "validation_refreeze_count": validation_refreeze_count,
+        "last_frozen_at": compact[-1]["last_frozen_at"] if compact else None,
+        "snapshots": compact,
+    }
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -162,6 +253,11 @@ def freeze_submission(root: Path, *, role: str, paths: Iterable[Path]) -> dict[s
     staging: Path | None = None
     try:
         previous = _load_latest_optional(root, role)
+        previous_report = (
+            verify_submission(root, role=role, snapshot_id=previous["snapshot_id"])
+            if previous is not None
+            else None
+        )
         sequence = 1 if previous is None else int(previous["sequence"]) + 1
         staging = role_root / f".staging-{uuid.uuid4().hex}"
         staging.mkdir(mode=0o700)
@@ -211,7 +307,21 @@ def freeze_submission(root: Path, *, role: str, paths: Iterable[Path]) -> dict[s
             "tree_digest": tree_digest,
         }
         atomic_write_json(_latest_path(root, role), latest, mode=0o600)
-        return {**latest, "file_count": len(records), "complete": True}
+        delta = _revision_delta(
+            manifest,
+            previous_report["manifest"] if previous_report is not None else None,
+        )
+        history = list_submissions(root, role=role)["revision_progress"]
+        current = history["snapshots"][-1]
+        return {
+            **latest,
+            "file_count": len(records),
+            "complete": True,
+            **delta,
+            "content_revision_index": current["content_revision_index"],
+            "revision_kind": current["revision_kind"],
+            "last_frozen_at": current["last_frozen_at"],
+        }
     finally:
         if staging is not None and staging.exists():
             for path in sorted(staging.rglob("*"), reverse=True):
@@ -319,7 +429,13 @@ def list_submissions(root: Path, *, role: str) -> dict[str, Any]:
     root = _real_directory(root)
     role_root = root / "snapshots" / role
     if not role_root.exists():
-        return {"ok": True, "role": role, "latest": None, "snapshots": []}
+        return {
+            "ok": True,
+            "role": role,
+            "latest": None,
+            "snapshots": [],
+            "revision_progress": _annotate_revision_history([]),
+        }
     _real_directory(role_root)
     snapshots = []
     for path in sorted(role_root.iterdir(), key=lambda item: item.name):
@@ -331,7 +447,14 @@ def list_submissions(root: Path, *, role: str) -> dict[str, Any]:
     if latest is not None:
         if not snapshots or snapshots[-1]["snapshot_id"] != latest["snapshot_id"]:
             raise CorridorKitError("latest submission reference is not the highest complete version")
-    return {"ok": True, "role": role, "latest": latest, "snapshots": snapshots}
+    progress = _annotate_revision_history(snapshots)
+    return {
+        "ok": True,
+        "role": role,
+        "latest": latest,
+        "snapshots": snapshots,
+        "revision_progress": progress,
+    }
 
 
 def restore_submission(

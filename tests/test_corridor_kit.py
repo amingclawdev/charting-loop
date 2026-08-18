@@ -40,6 +40,9 @@ from corridor_kit.domain.binary import (
 )
 from corridor_kit.runtime import load_position_timeline, project_position
 from corridor_kit.core import load_json
+from corridor_kit.acceptance import qa_assessment_decision
+from corridor_kit.runtime import validate_qa_assessment_path
+from corridor_kit.scaffold import validate_method_capsule
 
 
 def valid_ledger() -> dict[str, object]:
@@ -290,6 +293,45 @@ class ScaffoldTests(unittest.TestCase):
             with self.assertRaises(CorridorKitError):
                 create_scaffold(first)
 
+    def test_bound_method_capsule_and_evidence_scaffold_are_deterministic(self) -> None:
+        digest = "sha256:" + "a" * 64
+        scope_digest = "sha256:" + "b" * 64
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            kwargs = {
+                "method_version": "method-v-test",
+                "method_digest": digest,
+                "method_scope_digest": scope_digest,
+            }
+            first = create_scaffold(root / "first", **kwargs)
+            second = create_scaffold(root / "second", **kwargs)
+            capsule = load_json(first / "METHOD-CAPSULE.json")
+            self.assertEqual([], validate_method_capsule(
+                capsule, expected_method_digest=digest
+            ))
+            self.assertIn(
+                "METHOD_CAPSULE_DIGEST_MISMATCH",
+                validate_method_capsule(
+                    capsule, expected_method_digest="sha256:" + "c" * 64
+                ),
+            )
+            for name in ("EVIDENCE.json", "SOURCE-MAP.json", "REPLAY.json"):
+                self.assertTrue((first / name).is_file())
+                self.assertEqual((first / name).read_bytes(), (second / name).read_bytes())
+            generated = "\n".join(
+                path.read_text(encoding="utf-8", errors="ignore")
+                for path in first.rglob("*")
+                if path.is_file()
+            ).lower()
+            for task_specific_marker in (
+                "production-planning",
+                "ico-path-patch",
+                "erp/mes/wms",
+                "wo-wip-001",
+            ):
+                self.assertNotIn(task_specific_marker, generated)
+            self.assertIs(capsule["task_solution_present"], False)
+
     def test_generated_adapter_is_advisory_and_unresolved(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = create_scaffold(Path(raw) / "corridor")
@@ -303,6 +345,110 @@ class ScaffoldTests(unittest.TestCase):
             report = json.loads(run.stdout)
             self.assertEqual(report["status"], "unresolved")
             self.assertIs(report["authorizes_mutation"], False)
+
+
+class QaAssessmentSemanticTests(unittest.TestCase):
+    @staticmethod
+    def assessment(digest: str, *, outcome: str = "pass") -> dict[str, object]:
+        return {
+            "schema_version": "charting-loop/corridor-qa-assessment/v3",
+            "outcome": outcome,
+            "summary": "Audited the complete acceptance set.",
+            "corridor_digest": digest,
+            "source_mapping_complete": True,
+            "definition_closure_complete": True,
+            "assessment_closure": "complete",
+            "assessed_scope": "complete",
+            "scope_limitations": [],
+            "acceptance_results": [{
+                "acceptance_id": "ACCEPT-1",
+                "applicability": "applicable",
+                "status": "pass",
+                "evidence": "Observed the required behavior.",
+                "replay": "Repeat the public check.",
+            }],
+            "unmapped_requirements": [],
+            "unresolved_relations": [],
+            "checks": [{
+                "name": "public check",
+                "status": "pass",
+                "evidence": "The public check passed.",
+            }],
+            "witnesses": [],
+        }
+
+    @staticmethod
+    def expected(digest: str) -> dict[str, object]:
+        return {
+            "expected_corridor_digest": digest,
+            "acceptance_ledger_status": "complete",
+            "expected_acceptance_ids": ["ACCEPT-1"],
+            "required_acceptance_ids": ["ACCEPT-1"],
+            "source_mapping_status": "complete",
+            "definition_closure_status": "complete",
+            "construction_readiness_status": "ready",
+        }
+
+    def test_contradiction_normalizes_to_not_assessed_and_partial_scope_is_explicit(self) -> None:
+        digest = "sha256:" + "d" * 64
+        contradictory = self.assessment(digest, outcome="not_assessed")
+        contradictory["definition_closure_complete"] = False
+        decision = qa_assessment_decision(contradictory, **self.expected(digest))
+        self.assertFalse(decision["valid"])
+        self.assertEqual("not_assessed", decision["outcome"])
+        self.assertFalse(decision["repair_required"])
+        self.assertIn(
+            "ASSESSMENT_DEFINITION_AND_CLOSURE_CONTRADICTION",
+            decision["errors"],
+        )
+
+        partial = dict(contradictory)
+        partial["assessed_scope"] = "partial"
+        partial["scope_limitations"] = ["One public relation remains unresolved."]
+        partial["unresolved_relations"] = ["ACCEPT-1 relation remains unresolved."]
+        decision = qa_assessment_decision(partial, **self.expected(digest))
+        self.assertTrue(decision["valid"], decision["errors"])
+        self.assertEqual("not_assessed", decision["outcome"])
+
+    def test_presubmit_path_uses_freeze_identity_and_preserves_raw_report(self) -> None:
+        digest = "sha256:" + "e" * 64
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            assessment_path = root / "assessment.json"
+            freeze_path = root / "FREEZE.json"
+            assessment_path.write_text(
+                json.dumps(self.assessment(digest)), encoding="utf-8"
+            )
+            before = assessment_path.read_bytes()
+            freeze_path.write_text(json.dumps({
+                "corridor_digest": digest,
+                "acceptance_ledger_status": "complete",
+                "acceptance_ids": ["ACCEPT-1"],
+                "required_acceptance_ids": ["ACCEPT-1"],
+                "source_mapping_status": "complete",
+                "definition_closure_status": "complete",
+                "construction_readiness_status": "ready",
+            }), encoding="utf-8")
+
+            report = validate_qa_assessment_path(assessment_path, freeze_path)
+            self.assertTrue(report["valid"], report["errors"])
+            self.assertTrue(report["raw_preserved"])
+            self.assertEqual(before, assessment_path.read_bytes())
+            self.assertRegex(report["raw_sha256"], r"^sha256:[0-9a-f]{64}$")
+
+    def test_witnessed_failure_can_request_repair(self) -> None:
+        digest = "sha256:" + "f" * 64
+        value = self.assessment(digest, outcome="fail")
+        value["acceptance_results"][0]["status"] = "fail"
+        value["witnesses"] = [{
+            "acceptance_id": "ACCEPT-1",
+            "constraint": "The public output must retain its identity.",
+            "evidence": "The observed identity changed.",
+            "replay": "Read the public before/after identity.",
+        }]
+        decision = qa_assessment_decision(value, **self.expected(digest))
+        self.assertTrue(decision["valid"], decision["errors"])
+        self.assertTrue(decision["repair_required"])
 
 
 class CoreMechanicsTests(unittest.TestCase):
@@ -473,6 +619,11 @@ class WorkRowsAndRuntimeTests(unittest.TestCase):
             self.assertEqual("compiled", guide["capability_state"])
             self.assertEqual("ROW-2", guide["current_row"]["row_id"])
             self.assertEqual(["binary.diff-ranges"], [item["capability_id"] for item in guide["capabilities"]])
+            self.assertEqual("ROW-2", guide["work_row_guidance"]["row_id"])
+            self.assertEqual(
+                ["binary.diff-ranges"],
+                guide["work_row_guidance"]["selected_capability_ids"],
+            )
             self.assertIn("REM-2", {item["reminder_id"] for item in guide["reminders"]})
             self.assertIs(guide["advisory_only"], True)
             self.assertIs(guide["authorizes_mutation"], False)
@@ -652,6 +803,30 @@ class SubmissionSnapshotTests(unittest.TestCase):
                 / "0000.bin"
             )
             self.assertEqual(b"version-one", first_blob.read_bytes())
+
+    def test_revision_telemetry_distinguishes_change_from_validation_refreeze(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            store = base / "store"
+            output = base / "answer"
+            output.write_text("one", encoding="utf-8")
+            first = freeze_submission(store, role="worker", paths=[output])
+            output.write_text("two", encoding="utf-8")
+            second = freeze_submission(store, role="worker", paths=[output])
+            third = freeze_submission(store, role="worker", paths=[output])
+
+            self.assertEqual("initial", first["revision_kind"])
+            self.assertEqual("content_revision", second["revision_kind"])
+            self.assertEqual(1, second["content_revision_index"])
+            self.assertEqual("validation_refreeze", third["revision_kind"])
+            self.assertFalse(third["content_changed"])
+            self.assertEqual(0, third["changed_file_count"])
+            history = list_submissions(store, role="worker")["revision_progress"]
+            self.assertEqual(3, history["snapshot_count"])
+            self.assertEqual(2, history["checkpoint_advance_count"])
+            self.assertEqual(1, history["content_revision_count"])
+            self.assertEqual(1, history["validation_refreeze_count"])
+            self.assertEqual(third["last_frozen_at"], history["last_frozen_at"])
 
     def test_corrupt_or_unsafe_snapshots_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

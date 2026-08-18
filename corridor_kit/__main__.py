@@ -19,7 +19,7 @@ from .core import (
     public_world_inventory,
     regular_tree_manifest,
 )
-from .scaffold import create_scaffold
+from .scaffold import create_scaffold, validate_method_capsule
 from .domain.binary import (
     binary_diff,
     binary_replay_record,
@@ -31,6 +31,7 @@ from .runtime import (
     counterfactual_transition,
     load_position_timeline,
     load_runtime_guide,
+    validate_qa_assessment_path,
     validate_work_files,
 )
 from .submission import (
@@ -81,6 +82,23 @@ def _parser() -> argparse.ArgumentParser:
 
     init = commands.add_parser("init", help="create an honest uncompiled starter")
     init.add_argument("output", type=Path)
+    init.add_argument("--method-version")
+    init.add_argument("--method-digest")
+    init.add_argument("--method-scope-digest")
+
+    capsule = commands.add_parser("validate-capsule", help="verify a Method capsule binding")
+    capsule.add_argument("capsule", type=Path)
+    capsule.add_argument("--expected-method-digest", required=True)
+    capsule.add_argument("--output", type=Path)
+
+    qa = commands.add_parser("qa", help="validate an advisory QA assessment")
+    qa_commands = qa.add_subparsers(dest="qa_command", required=True)
+    qa_validate = qa_commands.add_parser(
+        "validate", help="classify a QA report against the frozen Corridor manifest"
+    )
+    qa_validate.add_argument("--path", required=True, type=Path)
+    qa_validate.add_argument("--freeze", required=True, type=Path)
+    qa_validate.add_argument("--output", type=Path)
 
     validate = commands.add_parser("validate", help="validate an acceptance ledger")
     validate.add_argument("ledger", type=Path)
@@ -188,9 +206,26 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         if args.command == "init":
-            created = create_scaffold(args.output)
+            created = create_scaffold(
+                args.output,
+                method_version=args.method_version,
+                method_digest=args.method_digest,
+                method_scope_digest=args.method_scope_digest,
+            )
             _emit({"ok": True, "kit_version": KIT_VERSION, "output": str(created)})
             return 0
+        if args.command == "validate-capsule":
+            errors = validate_method_capsule(
+                load_json(args.capsule),
+                expected_method_digest=args.expected_method_digest,
+            )
+            report = {"ok": not errors, "errors": errors}
+            _emit(report, args.output)
+            return 0 if not errors else 1
+        if args.command == "qa" and args.qa_command == "validate":
+            report = validate_qa_assessment_path(args.path, args.freeze)
+            _emit(report, args.output)
+            return 0 if report["valid"] else 1
         if args.command == "validate":
             report = validate_acceptance_file(
                 args.ledger, allow_draft=args.allow_draft
