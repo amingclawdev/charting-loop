@@ -10,7 +10,7 @@ from typing import Any
 from .core import CorridorKitError, load_json
 
 
-ACCEPTANCE_SCHEMA = "charting-loop/task-acceptance-ledger/v1"
+ACCEPTANCE_SCHEMA = "charting-loop/task-acceptance-ledger/v2"
 RELATION_TYPES = frozenset(
     {"requires", "subsumes", "overlaps", "conflicts", "derived_from"}
 )
@@ -18,6 +18,14 @@ DEFINITION_STATES = frozenset({"defined", "ambiguous"})
 COVERAGE_STATES = frozenset({"complete", "incomplete"})
 READINESS_STATES = frozenset({"ready", "unresolved"})
 ACCEPTANCE_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*\Z")
+VERIFICATION_OBLIGATION_KINDS = (
+    "positive",
+    "negative",
+    "boundary",
+    "state",
+    "temporal",
+    "coupled",
+)
 
 
 @dataclass
@@ -209,6 +217,7 @@ def validate_acceptance_ledger(
         "scope",
         "rule",
         "relations",
+        "verification_obligations",
     }
     relation_fields = {"type", "target_id"}
     item_ids: list[str] = []
@@ -302,6 +311,25 @@ def validate_acceptance_ledger(
                         "an acceptance item cannot relate to itself",
                     )
                 relation_targets.append((acceptance_id, target_id, relation_location))
+
+        obligations = _object(
+            item.get("verification_obligations"),
+            exact_keys=set(VERIFICATION_OBLIGATION_KINDS),
+            report=report,
+            location=f"{location}.verification_obligations",
+        ) or {}
+        for kind in VERIFICATION_OBLIGATION_KINDS:
+            entries = _string_list(
+                obligations.get(kind),
+                report=report,
+                location=f"{location}.verification_obligations.{kind}",
+            )
+            if item.get("required") is True and not entries:
+                report.error(
+                    "REQUIRED_VERIFICATION_OBLIGATION",
+                    f"{location}.verification_obligations.{kind}",
+                    "required acceptance must explicitly declare at least one obligation; use an explicit not-applicable reason when the partition does not apply",
+                )
 
     if len(item_ids) != len(set(item_ids)):
         report.error("DUPLICATE_ACCEPTANCE_ID", "$.items", "acceptance IDs must be unique")
@@ -417,6 +445,7 @@ def validate_acceptance_ledger(
         "required_acceptance_ids": required_ids,
         "ambiguous_acceptance_ids": ambiguous_item_ids,
         "coupled_acceptance_ids": coupled_ids,
+        "verification_obligation_kinds": list(VERIFICATION_OBLIGATION_KINDS),
         "unmapped_count": len(unmapped),
         "ambiguous_clause_count": len(ambiguous_clauses),
         "unresolved_constraints": unresolved_constraints,

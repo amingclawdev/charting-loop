@@ -5,10 +5,11 @@ part of U → C. It lets a fresh Builder start from known-good evidence plumbing
 than rebuilding JSON parsing, hashing, manifests, scratch isolation, and command
 capture on every task.
 
-The kit has three deliberately separate execution surfaces: frozen task-specific
-`WORK_ITEMS.json`, frozen selected `CAPABILITIES.json`, and a runner-owned hash-linked
-Position timeline outside the Corridor. Current-row Guide and reminder views are
-deterministic projections over those surfaces; they do not create authority.
+The kit has four deliberately separate execution surfaces: frozen task-specific
+`ACCEPTANCE.json`, frozen `WORK_ITEMS.json`, frozen selected `CAPABILITIES.json`, and
+a runner-owned hash-linked Position timeline outside the Corridor. Position,
+Direction, Entrance, Guide, and reminder views are deterministic projections over
+those surfaces; they do not create authority.
 
 It is not a Corridor for any particular task. It contains no Rule or Fact supplied by
 a benchmark, no domain validator, no candidate answer, no evaluator fixture, and no
@@ -20,7 +21,8 @@ choose to run.
 
 The frozen reusable layer is deliberately small:
 
-- strict `charting-loop/task-acceptance-ledger/v1` parsing and validation;
+- strict `charting-loop/task-acceptance-ledger/v2` parsing and validation, including
+  positive, negative, boundary, state, temporal, and coupled verification obligations;
 - strict `charting-loop/task-work-backlog/v1` row, dependency, and join validation;
 - strict `charting-loop/capability-registry/v1` version, digest, contract,
   applicability, and side-effect validation;
@@ -44,6 +46,13 @@ items are unambiguous. `construction_readiness_status` says whether the coupled
 requirements can be replayed together. A clause may therefore be mapped while its
 meaning remains explicitly ambiguous; that is complete source mapping but incomplete
 definition closure, and it cannot produce task readiness.
+
+Each required acceptance item also carries six explicit behavioral verification
+partitions: positive behavior, prohibited or negative behavior, boundary cases,
+state transitions, temporal behavior, and coupled interactions. A partition that is
+truly inapplicable still contains an explicit reason; an omitted or empty partition
+is not silently treated as covered. These are Rule-derived audit obligations, not
+hidden tests or evaluator knowledge.
 
 ## Commands
 
@@ -86,12 +95,35 @@ python3 -m corridor_kit timeline append /tmp/charting-loop-position/POSITION.jso
   --actor runner --event-type run_initialized --status observed
 python3 -m corridor_kit runtime guide \
   --work /tmp/charting-loop/corridor/WORK_ITEMS.json \
+  --acceptance /tmp/charting-loop/corridor/ACCEPTANCE.json \
   --capabilities /tmp/charting-loop/corridor/CAPABILITIES.json \
   --timeline /tmp/charting-loop-position/POSITION.jsonl
 python3 -m corridor_kit runtime reminders \
   --work /tmp/charting-loop/corridor/WORK_ITEMS.json \
+  --acceptance /tmp/charting-loop/corridor/ACCEPTANCE.json \
   --capabilities /tmp/charting-loop/corridor/CAPABILITIES.json \
   --timeline /tmp/charting-loop-position/POSITION.jsonl
+```
+
+The runtime first computes a content-addressed `PositionRef` checkpoint from the
+frozen work digest and visible timeline prefix. It then projects `Direction` from
+that PositionRef, the transitive frozen Rule closure selected by the current row,
+and the applicable frozen capabilities. `Entrance` and `Guide` are derived from that
+Direction rather than acting as independent authority. Worker and QA therefore see
+the same position-relative acceptance boundary.
+
+For diagnosis, a caller may request a read-only counterfactual projection by
+substituting a Position or acceptance ledger. The result is explicitly
+`hypothetical=true`; it cannot admit Facts, replace Position, mutate acceptance,
+append a real timeline transition, establish authority, certify PASS, or close work:
+
+```sh
+python3 -m corridor_kit runtime counterfactual \
+  --work /tmp/charting-loop/corridor/WORK_ITEMS.json \
+  --acceptance /tmp/charting-loop/corridor/ACCEPTANCE.json \
+  --capabilities /tmp/charting-loop/corridor/CAPABILITIES.json \
+  --timeline /tmp/charting-loop-position/POSITION.jsonl \
+  --substitute-position /tmp/hypothetical-position.json
 ```
 
 Draft validation exists only so the initial scaffold can state its incompleteness

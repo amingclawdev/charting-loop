@@ -332,7 +332,7 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         self.assertTrue(
             all(
                 call[2].startswith(
-                    "c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d:method-paper/"
+                    "3c3813444a7d43d0a56837e9cb960be86ce26d06:method-paper/"
                 )
                 for call in git_show_calls
             )

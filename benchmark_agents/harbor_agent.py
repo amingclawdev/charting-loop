@@ -58,16 +58,16 @@ from benchmark_agents.contract import (
 )
 
 
-AGENT_VERSION = "0.8.1"
-METHOD_VERSION_ID = "charting-loop-method-v7"
-METHOD_SOURCE_COMMIT = "c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d"
+AGENT_VERSION = "0.9.0"
+METHOD_VERSION_ID = "charting-loop-method-v8"
+METHOD_SOURCE_COMMIT = "3c3813444a7d43d0a56837e9cb960be86ce26d06"
 METHOD_SOURCE_PATH = "method-paper/METHOD.md"
 METHOD_SCOPE_PATH = "method-paper/SCOPE-DATUM.md"
 METHOD_CONTENT_SHA256 = (
-    "sha256:35590e6a3adddcfc5e210a52045c473d286fdbf256db8c47f951a754d7477fb6"
+    "sha256:85b5a7a8700312ec1e35b80df6e224221d44a48904247a8d6d32cfe940459446"
 )
 METHOD_SCOPE_SHA256 = (
-    "sha256:8e5daca8d7e880521b37fdf1ac63b0e7a919d4bab2446d4aca7e135689f11c35"
+    "sha256:bd70498b2f75e039d88c80ae0c5b0a11fba15d12517820c27e8bccb28da987af"
 )
 ROLE_ORDER = ("builder", "worker", "qa")
 DEFAULT_TASK_TIMEOUT_SECONDS = 5400
@@ -490,6 +490,7 @@ class ChartingLoopFullMethodAgent(Codex):
                 f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
                 "python3 -m corridor_kit runtime guide "
                 f"--work {shlex.quote(WORK_PATH)} "
+                f"--acceptance {shlex.quote(ACCEPTANCE_PATH)} "
                 f"--capabilities {shlex.quote(CAPABILITIES_PATH)} "
                 f"--timeline {shlex.quote(POSITION_PATH)}"
             ),
@@ -531,6 +532,14 @@ class ChartingLoopFullMethodAgent(Codex):
                 "work_backlog_digest"
             ),
             "timeline_head": guide.get("position", {}).get("timeline_head"),
+            "position_ref": guide.get("position", {}).get("position_ref"),
+            "direction_digest": guide.get("direction", {}).get(
+                "direction_digest"
+            ),
+            "rule_closure_digest": guide.get("direction", {}).get(
+                "rule_closure_digest"
+            ),
+            "entrance_ref": guide.get("entrance", {}).get("entrance_ref"),
             "reminder_count": len(guide.get("reminders", [])),
             "capability_ids": [
                 item.get("capability_id")
@@ -1200,6 +1209,8 @@ class ChartingLoopFullMethodAgent(Codex):
                     construction_readiness_status=construction_readiness_status,
                     work_backlog_status=str(worker_guide["status"]),
                     current_row_id=worker_guide.get("current_row_id"),
+                    position_ref=worker_guide.get("position_ref"),
+                    direction_digest=worker_guide.get("direction_digest"),
                     remaining_seconds=_remaining_seconds(execution_deadline),
                 ),
                 environment,
@@ -1243,6 +1254,8 @@ class ChartingLoopFullMethodAgent(Codex):
                         construction_readiness_status=construction_readiness_status,
                         work_backlog_status=str(qa_guide["status"]),
                         current_row_id=qa_guide.get("current_row_id"),
+                        position_ref=qa_guide.get("position_ref"),
+                        direction_digest=qa_guide.get("direction_digest"),
                         remaining_seconds=_remaining_seconds(execution_deadline),
                     ),
                     environment,

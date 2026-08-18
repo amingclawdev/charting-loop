@@ -235,7 +235,7 @@ class FullMethodContractTests(unittest.TestCase):
             "hash-linked append-only Position timeline",
             "Reminder delivery and use are observable process facts, not Gates",
             "restores the latest verified complete Worker snapshot by per-file atomic replacement",
-            "charting-loop-method-v7",
+            "charting-loop-method-v8",
             "namespace/provenance label, not a credential",
             "one end-to-end deadline",
             "not a Gate",
@@ -253,7 +253,7 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertIn(marker, runbook)
         self.assertNotIn("--ae CODEX_FORCE_AUTH_JSON=1", runbook)
 
-    def test_agent_is_bound_to_the_exact_frozen_v7_method(self) -> None:
+    def test_agent_is_bound_to_the_exact_frozen_v8_method(self) -> None:
         index = json.loads(
             (REPOSITORY_ROOT / "method-paper" / "VERSIONS.json").read_text(
                 encoding="utf-8"
@@ -262,7 +262,7 @@ class FullMethodContractTests(unittest.TestCase):
         versions = [
             version
             for version in index["versions"]
-            if version["version_id"] == "charting-loop-method-v7"
+            if version["version_id"] == "charting-loop-method-v8"
         ]
         self.assertEqual(1, len(versions))
         version = versions[0]
@@ -270,7 +270,7 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertTrue(version["study_eligible"])
         self.assertFalse(version["adoption_eligible"])
         self.assertEqual(
-            "c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d",
+            "3c3813444a7d43d0a56837e9cb960be86ce26d06",
             version["source_commit"],
         )
         for path_key, digest_key in (
@@ -290,16 +290,12 @@ class FullMethodContractTests(unittest.TestCase):
             actual = "sha256:" + hashlib.sha256(shown.stdout).hexdigest()
             self.assertEqual(version[digest_key], actual)
 
-        v8 = next(
+        v7 = next(
             item
             for item in index["versions"]
-            if item["version_id"] == "charting-loop-method-v8"
+            if item["version_id"] == "charting-loop-method-v7"
         )
-        self.assertEqual(
-            "3c3813444a7d43d0a56837e9cb960be86ce26d06",
-            v8["source_commit"],
-        )
-        self.assertNotEqual(version["content_sha256"], v8["content_sha256"])
+        self.assertNotEqual(version["content_sha256"], v7["content_sha256"])
 
         module = load_harbor_agent_with_stubs()
         resolved = module._resolve_frozen_method(REPOSITORY_ROOT)
@@ -308,16 +304,13 @@ class FullMethodContractTests(unittest.TestCase):
             version["content_sha256"],
             "sha256:" + hashlib.sha256(resolved).hexdigest(),
         )
-        self.assertNotEqual(
-            resolved,
-            (REPOSITORY_ROOT / version["path"]).read_bytes(),
-        )
+        self.assertEqual(resolved, (REPOSITORY_ROOT / version["path"]).read_bytes())
 
         source = (REPOSITORY_ROOT / "benchmark_agents" / "harbor_agent.py").read_text(
             encoding="utf-8"
         )
         for value in (
-            "charting-loop-method-v7",
+            "charting-loop-method-v8",
             version["source_commit"],
             version["content_sha256"],
             version["scope_datum_sha256"],
@@ -329,12 +322,19 @@ class FullMethodContractTests(unittest.TestCase):
     def test_worker_and_qa_receive_same_corridor_identity(self) -> None:
         digest = "sha256:" + "a" * 64
         task = "Repair the live system and leave it verifiable."
-        worker = contract.worker_prompt(task, digest)
+        worker = contract.worker_prompt(
+            task,
+            digest,
+            position_ref="sha256:" + "1" * 64,
+            direction_digest="sha256:" + "2" * 64,
+        )
         qa = contract.qa_prompt(
             task,
             digest,
             acceptance_ledger_status="complete",
             expected_acceptance_ids=["ACCEPT-1"],
+            position_ref="sha256:" + "3" * 64,
+            direction_digest="sha256:" + "4" * 64,
         )
 
         for prompt in (worker, qa):
@@ -346,6 +346,9 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertIn(contract.CAPABILITIES_PATH, prompt)
             self.assertIn(contract.POSITION_PATH, prompt)
             self.assertIn("python3 -m corridor_kit runtime guide", prompt)
+            self.assertIn(f"--acceptance {contract.ACCEPTANCE_PATH}", prompt)
+            self.assertIn("PositionRef", prompt)
+            self.assertIn("Direction digest", prompt)
         self.assertIn("independent QA", qa)
         self.assertIn("Do not mutate", qa)
         self.assertIn(contract.QA_PATH, qa)
@@ -383,6 +386,9 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("python3 -m corridor_kit capabilities builtins", prompt)
         self.assertIn("Dependencies must be acyclic", prompt)
         self.assertIn("Reminders are advisory", prompt)
+        self.assertIn("verification_obligations", prompt)
+        for partition in ("positive", "negative", "boundary", "state", "temporal", "coupled"):
+            self.assertIn(f'"{partition}"', prompt)
 
     def test_fail_requires_a_replayable_witness(self) -> None:
         digest = "sha256:" + "b" * 64
@@ -684,6 +690,14 @@ class FullMethodContractTests(unittest.TestCase):
                         "scope": {"path": "/app/output.json"},
                         "rule": {"kind": "file_exists"},
                         "relations": [],
+                        "verification_obligations": {
+                            "positive": ["file exists"],
+                            "negative": ["missing file is rejected"],
+                            "boundary": ["empty file boundary is checked"],
+                            "state": ["before/after file state is checked"],
+                            "temporal": ["write precedes verification"],
+                            "coupled": ["single requirement; explicit not applicable"],
+                        },
                     }
                 ],
             }
@@ -744,6 +758,14 @@ class FullMethodContractTests(unittest.TestCase):
                         "scope": {"path": "/app/output.json"},
                         "rule": {"kind": "file_exists"},
                         "relations": [],
+                        "verification_obligations": {
+                            "positive": ["file exists"],
+                            "negative": ["missing file is rejected"],
+                            "boundary": ["empty file boundary is checked"],
+                            "state": ["before/after file state is checked"],
+                            "temporal": ["write precedes verification"],
+                            "coupled": ["single requirement; explicit not applicable"],
+                        },
                     }
                 ],
             }

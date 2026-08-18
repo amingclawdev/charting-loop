@@ -18,8 +18,11 @@ from .core import CorridorKitError, canonical_json_bytes, load_json, sha256_json
 
 WORK_BACKLOG_SCHEMA = "charting-loop/task-work-backlog/v1"
 POSITION_EVENT_SCHEMA = "charting-loop/position-event/v1"
-POSITION_PROJECTION_SCHEMA = "charting-loop/position-projection/v1"
-RUNTIME_GUIDE_SCHEMA = "charting-loop/runtime-guide/v1"
+POSITION_PROJECTION_SCHEMA = "charting-loop/position-projection/v2"
+POSITION_REF_SCHEMA = "charting-loop/position-ref/v1"
+DIRECTION_PROJECTION_SCHEMA = "charting-loop/direction-projection/v1"
+RUNTIME_GUIDE_SCHEMA = "charting-loop/runtime-guide/v2"
+COUNTERFACTUAL_TRANSITION_SCHEMA = "charting-loop/counterfactual-transition/v1"
 ROW_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*\Z")
 SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 BACKLOG_STATES = frozenset({"compiled", "uncompiled"})
@@ -469,11 +472,22 @@ def project_position(work: dict[str, Any], events: list[dict[str, Any]]) -> dict
         warnings.append("multiple_active_rows_observed")
     if unknown_event_rows:
         warnings.append("timeline_references_unknown_rows")
-    return {
-        "schema_version": POSITION_PROJECTION_SCHEMA,
+    checkpoint = {
+        "schema_version": POSITION_REF_SCHEMA,
         "work_backlog_digest": sha256_json(work),
         "timeline_head": events[-1]["event_hash"] if events else None,
         "event_count": len(events),
+        "current_row_id": current["row_id"] if current else None,
+        "row_state_digest": sha256_json(projected_rows),
+        "warnings_digest": sha256_json(warnings),
+    }
+    return {
+        "schema_version": POSITION_PROJECTION_SCHEMA,
+        "work_backlog_digest": checkpoint["work_backlog_digest"],
+        "timeline_head": checkpoint["timeline_head"],
+        "event_count": checkpoint["event_count"],
+        "checkpoint": checkpoint,
+        "position_ref": sha256_json(checkpoint),
         "rows": projected_rows,
         "current_row_id": current["row_id"] if current else None,
         "complete": bool(projected_rows) and all(
@@ -485,16 +499,148 @@ def project_position(work: dict[str, Any], events: list[dict[str, Any]]) -> dict
     }
 
 
-def runtime_guide(
-    work: dict[str, Any],
-    capabilities: dict[str, Any],
-    events: list[dict[str, Any]],
+def project_rule_closure(
+    acceptance: dict[str, Any], root_acceptance_ids: list[str]
 ) -> dict[str, Any]:
-    """Return the current row, bounded reusable operations, and reminders."""
+    """Close the current row's Rule references over typed acceptance relations."""
 
+    report = validate_acceptance_ledger(acceptance, allow_draft=True)
+    if not report.ok:
+        raise CorridorKitError(f"invalid acceptance ledger: {report.errors}")
+    by_id = {
+        item["acceptance_id"]: item
+        for item in acceptance.get("items", [])
+    }
+    missing = sorted(set(root_acceptance_ids) - set(by_id))
+    if missing:
+        raise CorridorKitError(f"unknown root acceptance IDs: {missing}")
+    pending = list(root_acceptance_ids)
+    closure_ids: set[str] = set()
+    while pending:
+        acceptance_id = pending.pop()
+        if acceptance_id in closure_ids:
+            continue
+        closure_ids.add(acceptance_id)
+        pending.extend(
+            relation["target_id"]
+            for relation in by_id[acceptance_id].get("relations", [])
+            if relation["target_id"] not in closure_ids
+        )
+    ordered_ids = [
+        item["acceptance_id"]
+        for item in acceptance.get("items", [])
+        if item["acceptance_id"] in closure_ids
+    ]
+    rules = [by_id[acceptance_id] for acceptance_id in ordered_ids]
+    identity = {
+        "schema_version": "charting-loop/rule-closure/v1",
+        "acceptance_ledger_digest": sha256_json(acceptance),
+        "root_acceptance_ids": list(root_acceptance_ids),
+        "closure_acceptance_ids": ordered_ids,
+        "rules": rules,
+    }
+    return {**identity, "rule_closure_digest": sha256_json(identity)}
+
+
+def project_direction(
+    work: dict[str, Any],
+    acceptance: dict[str, Any],
+    capabilities: dict[str, Any],
+    position: dict[str, Any],
+    *,
+    hypothetical: bool = False,
+) -> dict[str, Any]:
+    """Project Direction from frozen Rule closure at one explicit PositionRef."""
+
+    work_report = validate_work_backlog(work, allow_draft=True)
+    acceptance_report = validate_acceptance_ledger(acceptance, allow_draft=True)
+    capability_report = validate_capability_registry(capabilities, allow_draft=True)
+    if not work_report.ok or not acceptance_report.ok or not capability_report.ok:
+        raise CorridorKitError(
+            "invalid direction inputs: "
+            f"work={work_report.errors}; acceptance={acceptance_report.errors}; "
+            f"capabilities={capability_report.errors}"
+        )
+    if position.get("schema_version") != POSITION_PROJECTION_SCHEMA:
+        raise CorridorKitError("substituted Position has the wrong schema")
+    checkpoint = position.get("checkpoint")
+    if not isinstance(checkpoint, dict) or position.get("position_ref") != sha256_json(checkpoint):
+        raise CorridorKitError("PositionRef does not bind its checkpoint")
+    if checkpoint.get("schema_version") != POSITION_REF_SCHEMA:
+        raise CorridorKitError("PositionRef checkpoint has the wrong schema")
+    if checkpoint.get("work_backlog_digest") != sha256_json(work):
+        raise CorridorKitError("PositionRef does not bind the supplied work backlog")
+    for field in (
+        "work_backlog_digest",
+        "timeline_head",
+        "event_count",
+        "current_row_id",
+    ):
+        if position.get(field) != checkpoint.get(field):
+            raise CorridorKitError(f"PositionRef does not bind projected field: {field}")
+    projected_rows = position.get("rows")
+    warnings = position.get("warnings")
+    if not isinstance(projected_rows, list) or checkpoint.get(
+        "row_state_digest"
+    ) != sha256_json(projected_rows):
+        raise CorridorKitError("PositionRef does not bind projected row states")
+    if not isinstance(warnings, list) or checkpoint.get("warnings_digest") != sha256_json(
+        warnings
+    ):
+        raise CorridorKitError("PositionRef does not bind projection warnings")
+    if (
+        not hypothetical
+        and work.get("state") == "compiled"
+        and work.get("acceptance_ledger_digest") != sha256_json(acceptance)
+    ):
+        raise CorridorKitError("work backlog does not bind the supplied acceptance ledger")
+
+    current_id = position.get("current_row_id")
+    row = next((item for item in work.get("rows", []) if item["row_id"] == current_id), None)
+    root_acceptance_ids = list(row["acceptance_ids"]) if row else []
+    closure = project_rule_closure(acceptance, root_acceptance_ids)
+    by_capability = {
+        item["capability_id"]: item for item in capabilities.get("capabilities", [])
+    }
+    selected = [by_capability[item] for item in row["capability_ids"]] if row else []
+    direction_identity = {
+        "base_position_ref": position["position_ref"],
+        "current_row_id": current_id,
+        "rule_closure_digest": closure["rule_closure_digest"],
+        "root_acceptance_ids": root_acceptance_ids,
+        "capability_registry_digest": capability_report.facts.get("registry_digest"),
+        "capability_ids": [item["capability_id"] for item in selected],
+        "position_warnings": list(position.get("warnings", [])),
+    }
+    return {
+        "schema_version": DIRECTION_PROJECTION_SCHEMA,
+        **direction_identity,
+        "direction_digest": sha256_json(direction_identity),
+        "rule_closure": closure,
+        "capabilities": selected,
+        "hypothetical": hypothetical,
+        "advisory_only": True,
+        "authorizes_mutation": False,
+        "blocking_gate": False,
+    }
+
+
+def _guide_from_position(
+    work: dict[str, Any],
+    acceptance: dict[str, Any],
+    capabilities: dict[str, Any],
+    position: dict[str, Any],
+    *,
+    hypothetical: bool = False,
+) -> dict[str, Any]:
     capability_report = validate_capability_registry(capabilities, allow_draft=True)
     work_report = validate_work_backlog(
         work,
+        acceptance_ids=set(
+            validate_acceptance_ledger(acceptance, allow_draft=True).facts.get(
+                "acceptance_ids", []
+            )
+        ),
         capability_ids=set(capability_report.facts.get("capability_ids", [])),
         allow_draft=True,
     )
@@ -502,34 +648,147 @@ def runtime_guide(
         raise CorridorKitError(
             f"invalid runtime inputs: work={work_report.errors}; capabilities={capability_report.errors}"
         )
-    projection = project_position(work, events)
-    current_id = projection["current_row_id"]
+    direction = project_direction(
+        work, acceptance, capabilities, position, hypothetical=hypothetical
+    )
+    current_id = position["current_row_id"]
     row = next((item for item in work.get("rows", []) if item["row_id"] == current_id), None)
-    by_capability = {item["capability_id"]: item for item in capabilities.get("capabilities", [])}
-    selected = [by_capability[item] for item in row["capability_ids"]] if row else []
-    reminders = []
+    reminders: list[dict[str, Any]] = []
     if row:
         reminders.append({
             "reminder_id": "runtime.recheck-acceptance",
             "when": "on_enter",
-            "message": "Re-read the bound acceptance items and live state before acting.",
+            "message": "Re-read the bound acceptance Rules, all six verification partitions, and live state before acting.",
             "acceptance_ids": row["acceptance_ids"],
             "source": "runtime",
         })
         reminders.extend({**item, "source": "work_row"} for item in row["reminders"])
-    return {
+    entrance_identity = {
+        "position_ref": position["position_ref"],
+        "direction_digest": direction["direction_digest"],
+        "current_row_id": current_id,
+        "scope": row["scope"] if row else None,
+        "done_when": row["done_when"] if row else [],
+        "capability_ids": direction["capability_ids"],
+    }
+    guide = {
         "schema_version": RUNTIME_GUIDE_SCHEMA,
         "work_state": work_report.facts.get("state"),
         "capability_state": capability_report.facts.get("state"),
         "current_row": row,
-        "position": projection,
-        "capabilities": selected,
+        "position": position,
+        "direction": direction,
+        "entrance": {
+            **entrance_identity,
+            "entrance_ref": sha256_json(entrance_identity),
+            "hypothetical": hypothetical,
+        },
+        "capabilities": direction["capabilities"],
         "reminders": reminders,
+        "hypothetical": hypothetical,
         "advisory_only": True,
         "authorizes_mutation": False,
         "blocking_gate": False,
     }
+    guide["guide_digest"] = sha256_json(guide)
+    return guide
 
 
-def load_runtime_guide(work_path: Path, capability_path: Path, timeline_path: Path) -> dict[str, Any]:
-    return runtime_guide(load_json(work_path), load_json(capability_path), load_position_timeline(timeline_path))
+def runtime_guide(
+    work: dict[str, Any],
+    acceptance: dict[str, Any],
+    capabilities: dict[str, Any],
+    events: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Return the Position-bound Direction, derived Entrance, and reminders."""
+
+    return _guide_from_position(
+        work, acceptance, capabilities, project_position(work, events)
+    )
+
+
+def counterfactual_transition(
+    work: dict[str, Any],
+    acceptance: dict[str, Any],
+    capabilities: dict[str, Any],
+    events: list[dict[str, Any]],
+    *,
+    substituted_position: dict[str, Any] | None = None,
+    substituted_acceptance: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Replay a hypothetical Direction without changing admitted runtime state."""
+
+    if substituted_position is None and substituted_acceptance is None:
+        raise CorridorKitError(
+            "counterfactual transition requires a substituted Position and/or Rule closure"
+        )
+    before = {
+        "work": sha256_json(work),
+        "acceptance": sha256_json(acceptance),
+        "capabilities": sha256_json(capabilities),
+        "events": sha256_json(events),
+    }
+    base_guide = runtime_guide(work, acceptance, capabilities, events)
+    alternate_position = substituted_position or base_guide["position"]
+    alternate_acceptance = substituted_acceptance or acceptance
+    hypothetical_guide = _guide_from_position(
+        work,
+        alternate_acceptance,
+        capabilities,
+        alternate_position,
+        hypothetical=True,
+    )
+    after = {
+        "work": sha256_json(work),
+        "acceptance": sha256_json(acceptance),
+        "capabilities": sha256_json(capabilities),
+        "events": sha256_json(events),
+    }
+    if before != after:
+        raise CorridorKitError("counterfactual replay mutated a real input")
+    substitution = {
+        "position_ref": (
+            alternate_position["position_ref"]
+            if substituted_position is not None
+            else None
+        ),
+        "rule_closure_digest": (
+            hypothetical_guide["direction"]["rule_closure_digest"]
+            if substituted_acceptance is not None
+            else None
+        ),
+    }
+    return {
+        "schema_version": COUNTERFACTUAL_TRANSITION_SCHEMA,
+        "base_position_ref": base_guide["position"]["position_ref"],
+        "base_direction_digest": base_guide["direction"]["direction_digest"],
+        "substituted": substitution,
+        "unchanged_input_digests": before,
+        "projected_direction": hypothetical_guide["direction"],
+        "hypothetical_guide": hypothetical_guide,
+        "hypothetical": True,
+        "read_only": True,
+        "advisory_only": True,
+        "authorizes_mutation": False,
+        "blocking_gate": False,
+        "may_admit_fact": False,
+        "may_advance_position": False,
+        "may_mutate_acceptance": False,
+        "may_append_timeline": False,
+        "may_establish_authority": False,
+        "may_establish_pass_or_closure": False,
+    }
+
+
+def load_runtime_guide(
+    work_path: Path,
+    acceptance_path: Path,
+    capability_path: Path,
+    timeline_path: Path,
+) -> dict[str, Any]:
+    return runtime_guide(
+        load_json(work_path),
+        load_json(acceptance_path),
+        load_json(capability_path),
+        load_position_timeline(timeline_path),
+    )

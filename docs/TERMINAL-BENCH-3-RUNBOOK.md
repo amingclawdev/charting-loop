@@ -12,13 +12,14 @@ local checks, an authenticated Modal workspace, and a Codex login on the launch
 host. Never paste subscription, Harbor, Modal, or Codex tokens into a command,
 configuration committed to Git, task prompt, or result artifact.
 
-This run is bound to `charting-loop-method-v7` at
-`c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d`, METHOD digest
-`sha256:35590e6a3adddcfc5e210a52045c473d286fdbf256db8c47f951a754d7477fb6`,
+This run is bound to `charting-loop-method-v8` at
+`3c3813444a7d43d0a56837e9cb960be86ce26d06`, METHOD digest
+`sha256:85b5a7a8700312ec1e35b80df6e224221d44a48904247a8d6d32cfe940459446`,
 and SCOPE-DATUM digest
-`sha256:8e5daca8d7e880521b37fdf1ac63b0e7a919d4bab2446d4aca7e135689f11c35`.
-Agent v0.8.1 resolves this identity and rejects changed catalog or method bytes before
-any paid model call.
+`sha256:bd70498b2f75e039d88c80ae0c5b0a11fba15d12517820c27e8bccb28da987af`.
+Agent v0.9.0 resolves this identity and rejects changed catalog or method bytes before
+any paid model call. The frozen reusable SDK condition is `corridor_kit` v0.4.0 plus
+its per-run canonical source-tree digest.
 
 The agent computes the local `corridor_kit` source-tree digest, uploads that exact SDK
 read-only before Builder, verifies the remote digest, and records it in trial metadata.
@@ -109,7 +110,7 @@ It verifies all of the following before returning `ready: true`:
 - Codex login, `~/.codex/auth.json`, `CODEX_FORCE_AUTH_JSON=1`, and the explicit
   Trusted Cyber Access attestation;
 - exactly the canonical `terminal-bench/<task>` filter derived from the explicit
-  supported `--task` name, one task, one concurrent trial, Modal, Agent v0.8.1,
+  supported `--task` name, one task, one concurrent trial, Modal, Agent v0.9.0,
   `gpt-5.6-sol` at max effort, zero automatic retries, and private upload;
 - the selected task's pinned cache digest and manifest; for `ico-path-patch`, also
   the cached x86-64 binary that rules out a local arm64 execution substitute;

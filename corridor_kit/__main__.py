@@ -28,6 +28,7 @@ from .domain.binary import (
 )
 from .runtime import (
     append_position_event,
+    counterfactual_transition,
     load_position_timeline,
     load_runtime_guide,
     validate_work_files,
@@ -141,11 +142,15 @@ def _parser() -> argparse.ArgumentParser:
 
     runtime = commands.add_parser("runtime", help="project current row, Guide, or reminders")
     runtime_commands = runtime.add_subparsers(dest="runtime_command", required=True)
-    for command_name in ("current", "guide", "reminders"):
+    for command_name in ("current", "guide", "reminders", "counterfactual"):
         command = runtime_commands.add_parser(command_name)
         command.add_argument("--work", required=True, type=Path)
+        command.add_argument("--acceptance", required=True, type=Path)
         command.add_argument("--capabilities", required=True, type=Path)
         command.add_argument("--timeline", required=True, type=Path)
+        if command_name == "counterfactual":
+            command.add_argument("--substitute-position", type=Path)
+            command.add_argument("--substitute-acceptance", type=Path)
 
     binary = commands.add_parser("binary", help="generic read-only binary capability pack")
     binary_commands = binary.add_subparsers(dest="binary_command", required=True)
@@ -254,7 +259,28 @@ def main(argv: list[str] | None = None) -> int:
             _emit({"ok": True, "event_count": len(events), "events": events})
             return 0
         if args.command == "runtime":
-            guide = load_runtime_guide(args.work, args.capabilities, args.timeline)
+            if args.runtime_command == "counterfactual":
+                report = counterfactual_transition(
+                    load_json(args.work),
+                    load_json(args.acceptance),
+                    load_json(args.capabilities),
+                    load_position_timeline(args.timeline),
+                    substituted_position=(
+                        load_json(args.substitute_position)
+                        if args.substitute_position is not None
+                        else None
+                    ),
+                    substituted_acceptance=(
+                        load_json(args.substitute_acceptance)
+                        if args.substitute_acceptance is not None
+                        else None
+                    ),
+                )
+                _emit(report)
+                return 0
+            guide = load_runtime_guide(
+                args.work, args.acceptance, args.capabilities, args.timeline
+            )
             if args.runtime_command == "guide":
                 _emit(guide)
             elif args.runtime_command == "current":

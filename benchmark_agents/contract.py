@@ -32,7 +32,7 @@ CLOSURE_PATH = f"{RUNTIME_ROOT}/qa/closure.json"
 SUBMISSION_ROOT = "/logs/agent/submissions"
 
 FREEZE_SCHEMA = "charting-loop/frozen-task-corridor/v1"
-ACCEPTANCE_SCHEMA = "charting-loop/task-acceptance-ledger/v1"
+ACCEPTANCE_SCHEMA = "charting-loop/task-acceptance-ledger/v2"
 ASSESSMENT_SCHEMA = "charting-loop/corridor-qa-assessment/v3"
 QA_OUTCOMES = frozenset({"pass", "fail", "blocked", "not_assessed"})
 ACCEPTANCE_APPLICABILITY = frozenset(
@@ -287,6 +287,29 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
                     if not isinstance(value, dict) or not value:
                         summary["errors"].append(
                             f"ACCEPTANCE_{{field.upper()}}:{{acceptance_id}}"
+                        )
+                obligations = item.get("verification_obligations")
+                obligation_kinds = (
+                    "positive",
+                    "negative",
+                    "boundary",
+                    "state",
+                    "temporal",
+                    "coupled",
+                )
+                if not isinstance(obligations, dict) or set(obligations) != set(obligation_kinds):
+                    summary["errors"].append(
+                        f"ACCEPTANCE_VERIFICATION_OBLIGATIONS:{{acceptance_id}}"
+                    )
+                    obligations = {{}}
+                for obligation_kind in obligation_kinds:
+                    values = obligations.get(obligation_kind)
+                    if not isinstance(values, list) or not values or any(
+                        not isinstance(value, str) or not value.strip()
+                        for value in values
+                    ):
+                        summary["errors"].append(
+                            f"ACCEPTANCE_VERIFICATION_{{obligation_kind.upper()}}:{{acceptance_id}}"
                         )
                 relations = item.get("relations")
                 if not isinstance(relations, list):
@@ -654,6 +677,14 @@ def builder_prompt(task_instruction: str) -> str:
                     "relations": [
                         {"type": "requires", "target_id": "ACCEPT-..."}
                     ],
+                    "verification_obligations": {
+                        "positive": ["expected success witness"],
+                        "negative": ["expected rejection or failure witness"],
+                        "boundary": ["limit/equality/off-by-one witness or explicit not-applicable reason"],
+                        "state": ["required before/after state witness or explicit not-applicable reason"],
+                        "temporal": ["ordering/duration/replay witness or explicit not-applicable reason"],
+                        "coupled": ["joint-constraint witness or explicit not-applicable reason"],
+                    },
                 }
             ],
         },
@@ -759,7 +790,10 @@ clause in the public task instruction and public task specification into an atom
 item with a stable `acceptance_id`, exact `source_ref`, normalized `statement`,
 `required` boolean, `definition_state` (`defined|ambiguous`), non-empty task
 `scope`, non-empty decision `rule`, and typed `relations` (`requires`,
-`subsumes`, `overlaps`, `conflicts`, or `derived_from`). The top-level
+`subsumes`, `overlaps`, `conflicts`, or `derived_from`). Every required item must
+also declare non-empty `verification_obligations` for `positive`, `negative`,
+`boundary`, `state`, `temporal`, and `coupled`. If a partition truly does not apply,
+write an explicit reason; never omit it or leave it empty. The top-level
 `coverage` object must declare `status` and list all `unmapped_clauses` and
 `ambiguous_clauses`, each with source_ref, statement, and reason. Mark coverage
 complete only after re-reading the original public sources and mapping every
@@ -816,6 +850,8 @@ def worker_prompt(
     construction_readiness_status: str = "unknown",
     work_backlog_status: str = "unknown",
     current_row_id: str | None = None,
+    position_ref: str | None = None,
+    direction_digest: str | None = None,
     remaining_seconds: int | None = None,
 ) -> str:
     """Prompt the execution role with the exact frozen Corridor identity."""
@@ -841,14 +877,19 @@ returns unknown, do not trust a recommended candidate as globally valid. Complet
 the missing live reasoning yourself and require replayable evidence before mutation.
 
 The frozen work-backlog status is `{work_backlog_status}` and the runner's initial
-current-row projection is {json.dumps(current_row_id)}. When the work and capability
-files validate, query the same runner-owned Position timeline and advisory Guide with:
+current-row projection is {json.dumps(current_row_id)}. Its PositionRef is
+{json.dumps(position_ref)} and its Direction digest is
+{json.dumps(direction_digest)}. These identities can change after new observations;
+when the work and capability files validate, re-query the same runner-owned Position
+timeline and advisory Guide with:
 
-`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit runtime guide --work {WORK_PATH} --capabilities {CAPABILITIES_PATH} --timeline {POSITION_PATH}`
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit runtime guide --work {WORK_PATH} --acceptance {ACCEPTANCE_PATH} --capabilities {CAPABILITIES_PATH} --timeline {POSITION_PATH}`
 
-Use row acceptance bindings, dependencies, done-when conditions, bounded capabilities,
-and reminders to avoid losing place. Re-check live state: row events and reminders are
-RAW observations, not authority or proof of completion.
+Use the returned `position_ref`, `direction.direction_digest`, Rule closure, row
+acceptance bindings, dependencies, done-when conditions, bounded capabilities, and
+reminders to avoid losing place. Direction is a projection at that Position, not a
+stored answer. Re-check live state: row events and reminders are RAW observations,
+not authority or proof of completion.
 
 All roles share one task-level deadline. At this handoff the runner reports about
 {json.dumps(remaining_seconds)} seconds remaining; this is a progress signal, not a
@@ -880,6 +921,8 @@ def qa_prompt(
     construction_readiness_status: str = "unknown",
     work_backlog_status: str = "unknown",
     current_row_id: str | None = None,
+    position_ref: str | None = None,
+    direction_digest: str | None = None,
     remaining_seconds: int | None = None,
 ) -> str:
     """Prompt an independent QA session that can use the same frozen Corridor."""
@@ -894,13 +937,18 @@ The freeze manifest is {FREEZE_PATH}; the expected digest is
 counterfactual validation, not merely as prose context.
 
 The frozen work-backlog status is `{work_backlog_status}` and the runner's current-row
-projection before QA is {json.dumps(current_row_id)}. Query the same read-only rows,
-capabilities, Position timeline, Guide, and reminders used by Worker with:
+projection before QA is {json.dumps(current_row_id)}. Its PositionRef is
+{json.dumps(position_ref)} and its Direction digest is
+{json.dumps(direction_digest)}. Query the same read-only rows, capabilities, Position
+timeline, Guide, and reminders used by Worker with:
 
-`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit runtime guide --work {WORK_PATH} --capabilities {CAPABILITIES_PATH} --timeline {POSITION_PATH}`
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit runtime guide --work {WORK_PATH} --acceptance {ACCEPTANCE_PATH} --capabilities {CAPABILITIES_PATH} --timeline {POSITION_PATH}`
 
-Audit row done-when evidence and replay applicable capabilities, but never treat a
-row state or reminder as sufficient acceptance evidence.
+Confirm the PositionRef and Direction digest you audited, inspect all six verification
+partitions, audit row done-when evidence, and replay applicable capabilities. The SDK's
+`runtime counterfactual` command may test an explicitly substituted Position or
+acceptance Rule set, but its output is hypothetical and read-only. Never treat a row
+state, Direction, counterfactual, or reminder as sufficient acceptance evidence.
 
 All roles share one task-level deadline. At this handoff the runner reports about
 {json.dumps(remaining_seconds)} seconds remaining; this is not a QA-owned time

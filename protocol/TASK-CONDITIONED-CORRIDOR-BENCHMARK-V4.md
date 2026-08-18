@@ -27,14 +27,15 @@ distinguish method attribution from the general benefit of building a tool first
   `sha256:a32a61879ea94eb9dc16fa1fbeb398759f0c07ca633d9d1f6aec760207036da3`.
 - Population: 74 scored tasks in 7 domains; 4 tasks require GPU-capable execution.
 - Agent: `benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent`.
-- Method: `charting-loop-method-v7` at
-  `c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d`.
+- Method: `charting-loop-method-v8` at
+  `3c3813444a7d43d0a56837e9cb960be86ce26d06`.
 - Method digest:
-  `sha256:35590e6a3adddcfc5e210a52045c473d286fdbf256db8c47f951a754d7477fb6`.
+  `sha256:85b5a7a8700312ec1e35b80df6e224221d44a48904247a8d6d32cfe940459446`.
 - Scope-datum digest:
-  `sha256:8e5daca8d7e880521b37fdf1ac63b0e7a919d4bab2446d4aca7e135689f11c35`.
-- SDK: `corridor_kit`, resolved by `KIT_VERSION` plus the canonical source-tree digest
-  recorded in each trial before Builder starts.
+  `sha256:bd70498b2f75e039d88c80ae0c5b0a11fba15d12517820c27e8bccb28da987af`.
+- Agent: version `0.9.0`.
+- SDK: `corridor_kit` version `0.4.0`, resolved by `KIT_VERSION` plus the canonical
+  source-tree digest recorded in each trial before Builder starts.
 
 A branch tip, `@latest`, mutable SDK directory, or post-task module update is not an
 identity. Any byte change creates a new condition.
@@ -78,7 +79,8 @@ The Builder must first establish the complete public task acceptance surface, th
 compile executable decomposition:
 
 - `ACCEPTANCE.json` maps every public normative clause to a stable acceptance ID,
-  source, scope, Rule, definition state, and typed relations;
+  source, scope, Rule, definition state, typed relations, and explicit positive,
+  negative, boundary, state, temporal, and coupled verification obligations;
 - `WORK_ITEMS.json` binds every acceptance ID to bounded, acyclic rows with scope,
   dependencies, done-when conditions, selected capability IDs, and reminders; and
 - `CAPABILITIES.json` declares only selected operations with exact version, digest,
@@ -90,17 +92,22 @@ runner closes the complete task Corridor byte set, rejects symlinks and special 
 records relative paths/sizes/digests/executable modes, computes one tree digest, makes
 the tree root-owned and read-only, and verifies it before every downstream phase.
 
-## Position timeline, current row, and reminders
+## Position checkpoint, Direction, Guide, and reminders
 
 The runner initializes a hash-linked append-only Position timeline outside the frozen
 Corridor before Builder. Each event binds its predecessor and exact content digest.
 After Corridor freeze, the runtime deterministically projects row states and one
-current row from frozen work definitions plus the visible timeline prefix. Worker and
-QA receive the same timeline path and can query the same Guide:
+current row from frozen work definitions plus the visible timeline prefix. That
+projection is content-addressed as a PositionRef checkpoint. Direction is then
+projected from the PositionRef, the transitive frozen Rule closure named by the
+current row's acceptance IDs, and applicable frozen capabilities. Entrance and Guide
+are derived from Direction; neither is an additional authority plane. Worker and QA
+receive the same acceptance ledger, timeline path, and Guide:
 
 ```text
-Guide(frozen work rows, frozen capabilities, Position prefix)
-  -> current row + bounded capability descriptors + reminders
+PositionRef(frozen work rows, Position prefix)
+Direction(PositionRef, frozen Rule closure, frozen capabilities)
+Guide(Direction) -> Entrance + current row + bounded capabilities + reminders
 ```
 
 The projection reports inconsistencies such as multiple active rows or unknown row
@@ -108,6 +115,13 @@ references. It does not rewrite history, synthesize missing done-when evidence, 
 block execution. Reminder delivery and use are observable process facts, not Gates.
 Missing timeline evidence is reported as evidence loss and never suppresses Harbor
 grading.
+
+A read-only counterfactual may substitute an explicitly identified hypothetical
+Position and/or Rule closure input, hold the other inputs fixed, and project the
+resulting Direction and Guide. It must be labeled hypothetical and cannot admit a
+Fact, advance or replace the real Position, mutate acceptance, append a real timeline
+transition, establish authority, certify PASS, or close a row. Counterfactual replay
+is diagnostic evidence, not a Gate or mutation path.
 
 ## One task deadline and monotonic submission custody
 
@@ -147,7 +161,7 @@ permits work after the task deadline.
 3. A fresh Builder receives method, task goal, public environment, and SDK. It builds
    only the current task Corridor and does not execute the final task.
 4. The runner freezes the Corridor, records acceptance/work/capability status, and
-   projects the initial current row and reminders.
+   projects the initial PositionRef, Direction, Entrance, current row, and reminders.
 5. A fresh Worker reads the Corridor and runtime Guide, executes the official task,
    independently verifies all mutations against the acceptance ledger, and freezes
    its first complete official task state plus every verified improvement.

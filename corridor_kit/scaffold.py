@@ -53,8 +53,10 @@ advisory aid, not an answer, an authority source, or a mandatory workflow gate.
 Before the Corridor is frozen, the Builder must:
 
 1. Re-read every public task source and replace the starter gap in `ACCEPTANCE.json`
-   with atomic acceptance items using exact source references, scope, Rule, and typed
-   relations.
+   with atomic acceptance items using exact source references, scope, Rule, typed
+   relations, and explicit positive, negative, boundary, state, temporal, and coupled
+   verification obligations. When a partition does not apply, record that reason
+   explicitly instead of leaving it absent.
 2. Record interacting hard requirements in `construction_readiness`, then implement
    one replayable task adapter that evaluates those requirements together.
 3. Compile `WORK_ITEMS.json` into bounded rows that cover every acceptance ID. Give

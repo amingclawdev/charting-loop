@@ -15,6 +15,7 @@ from corridor_kit import (
     WORK_BACKLOG_SCHEMA,
     CorridorKitError,
     append_position_event,
+    counterfactual_transition,
     capture_command,
     create_scaffold,
     freeze_submission,
@@ -42,6 +43,14 @@ from corridor_kit.core import load_json
 
 
 def valid_ledger() -> dict[str, object]:
+    obligations = {
+        "positive": ["success witness"],
+        "negative": ["rejection witness"],
+        "boundary": ["limit witness"],
+        "state": ["before/after witness"],
+        "temporal": ["ordering witness"],
+        "coupled": ["joint-rule witness"],
+    }
     return {
         "schema_version": ACCEPTANCE_SCHEMA,
         "coverage": {
@@ -65,6 +74,7 @@ def valid_ledger() -> dict[str, object]:
                 "scope": {"kind": "whole-task"},
                 "rule": {"predicate": "first_requirement_holds"},
                 "relations": [{"type": "requires", "target_id": "AC-2"}],
+                "verification_obligations": obligations,
             },
             {
                 "acceptance_id": "AC-2",
@@ -75,6 +85,7 @@ def valid_ledger() -> dict[str, object]:
                 "scope": {"kind": "whole-task"},
                 "rule": {"predicate": "second_requirement_holds"},
                 "relations": [],
+                "verification_obligations": obligations,
             },
         ],
     }
@@ -134,6 +145,15 @@ class AcceptanceLedgerTests(unittest.TestCase):
         self.assertTrue(report.ok, report.errors)
         self.assertTrue(report.facts["task_ready"])
         self.assertEqual(report.facts["required_acceptance_ids"], ["AC-1", "AC-2"])
+
+    def test_required_items_need_all_behavioral_verification_partitions(self) -> None:
+        ledger = valid_ledger()
+        ledger["items"][0]["verification_obligations"]["negative"] = []
+        report = validate_acceptance_ledger(ledger)
+        self.assertIn(
+            "REQUIRED_VERIFICATION_OBLIGATION",
+            {item["code"] for item in report.errors},
+        )
 
     def test_aliases_and_unknown_targets_are_rejected(self) -> None:
         ledger = valid_ledger()
@@ -436,7 +456,10 @@ class WorkRowsAndRuntimeTests(unittest.TestCase):
                 row_id="ROW-1",
                 details={"evidence_ref": "artifact:row-1"},
             )
-            guide = runtime_guide(work, capabilities, load_position_timeline(timeline))
+            ledger = valid_ledger()
+            guide = runtime_guide(
+                work, ledger, capabilities, load_position_timeline(timeline)
+            )
             self.assertEqual("compiled", guide["work_state"])
             self.assertEqual("compiled", guide["capability_state"])
             self.assertEqual("ROW-2", guide["current_row"]["row_id"])
@@ -445,6 +468,71 @@ class WorkRowsAndRuntimeTests(unittest.TestCase):
             self.assertIs(guide["advisory_only"], True)
             self.assertIs(guide["authorizes_mutation"], False)
             self.assertIs(guide["blocking_gate"], False)
+            self.assertEqual(
+                guide["position"]["position_ref"],
+                sha256_json(guide["position"]["checkpoint"]),
+            )
+            self.assertEqual(
+                guide["position"]["position_ref"],
+                guide["direction"]["base_position_ref"],
+            )
+            self.assertEqual(
+                guide["direction"]["direction_digest"],
+                guide["entrance"]["direction_digest"],
+            )
+            self.assertFalse(guide["direction"]["hypothetical"])
+
+            tampered_position = json.loads(json.dumps(guide["position"]))
+            tampered_position["current_row_id"] = "ROW-1"
+            with self.assertRaises(CorridorKitError):
+                counterfactual_transition(
+                    work,
+                    ledger,
+                    capabilities,
+                    load_position_timeline(timeline),
+                    substituted_position=tampered_position,
+                )
+
+            unbound_ledger = valid_ledger()
+            unbound_ledger["items"][0]["rule"] = {"predicate": "unbound_rule"}
+            with self.assertRaises(CorridorKitError):
+                runtime_guide(
+                    work,
+                    unbound_ledger,
+                    capabilities,
+                    load_position_timeline(timeline),
+                )
+
+            alternate_ledger = valid_ledger()
+            alternate_ledger["items"][0]["rule"] = {"predicate": "alternate_rule"}
+            transition = counterfactual_transition(
+                work,
+                ledger,
+                capabilities,
+                load_position_timeline(timeline),
+                substituted_acceptance=alternate_ledger,
+            )
+            repeated = counterfactual_transition(
+                work,
+                ledger,
+                capabilities,
+                load_position_timeline(timeline),
+                substituted_acceptance=alternate_ledger,
+            )
+            self.assertEqual(transition, repeated)
+            self.assertTrue(transition["hypothetical"])
+            self.assertTrue(transition["read_only"])
+            for field in (
+                "authorizes_mutation",
+                "blocking_gate",
+                "may_admit_fact",
+                "may_advance_position",
+                "may_mutate_acceptance",
+                "may_append_timeline",
+                "may_establish_authority",
+                "may_establish_pass_or_closure",
+            ):
+                self.assertFalse(transition[field])
 
             with self.assertRaises(CorridorKitError):
                 append_position_event(
