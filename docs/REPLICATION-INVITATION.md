@@ -18,12 +18,18 @@ access and the other works without Corridor access. The comparison tests whether
 converting the diagnostic theory into task-specific executable guidance changes
 observable task performance or recovery.
 
-The first authorized public release is now live. It publishes six sanitized arm
-summaries—Treatment and Control for each of CL-030, CL-031, and CL-032—plus their
-machine-readable manifests and registry records. The underlying databases, SQL,
-detailed logs, raw sessions, trajectories, solution-bearing service, credentials, and
-internal Git history remain sealed. These are descriptive research records on one
-benchmark task, not a published benchmark submission or leaderboard result.
+The first authorized public release is now live. It publishes six current sanitized
+matched-arm summaries—Treatment and Control for each of CL-030, CL-031, and CL-032—
+plus a separate `ico-path-patch` job-009 engineering summary. The machine registry
+contains thirteen append-only rows: six historical arm records, six superseding
+matched-arm records, and the separate engineering record. The public index therefore
+covers two distinct tasks, but only `production-planning` has a matched comparison.
+In short, the current matched package has six sanitized arm summaries; the job-009
+engineering record is separate rather than a seventh causal-evidence arm.
+The underlying databases, SQL, detailed logs, raw sessions, trajectories,
+solution-bearing services, credentials, and internal Git history remain sealed. These
+are descriptive research records, not accepted benchmark submissions or leaderboard
+results.
 
 We invite independent teams to test the idea on a fresh multi-step task. The useful
 question is not whether a team can reproduce one of this repository's solutions. It is
@@ -61,14 +67,16 @@ arm begins.
 2. Give a fresh builder only those frozen public inputs and a neutral objective. Freeze
    the Corridor service it constructs and record construction cost separately.
 3. Start a matched Docker pair. Each arm gets a fresh Worker and a separate fresh QA
-   session. Treatment alone can access the frozen Corridor; control receives the task
-   only.
+   session. In Treatment, both Worker and QA can access the same exact frozen Corridor.
+   In Control, neither Worker nor QA can access any Corridor; both receive the task-only
+   condition.
 4. Hold the task bytes, model, tools, budgets, QA instruction, one bounded rework rule,
    and official evaluator fixed across arms. Preserve every completed, failed, blocked,
    timeout, and infrastructure-invalid attempt.
 
-The builder is not a treatment arm. Independent QA is the same intervention in both
-arms, not part of the Corridor treatment. The intended difference is Corridor access.
+The builder is not a treatment arm. Independent QA is the same role and policy in both
+arms; its Corridor visibility follows its arm. The intended difference is whether both
+task roles can use the exact frozen Corridor.
 
 ## What an independent report should answer
 
@@ -82,6 +90,14 @@ Review the current descriptive observations in
 boundaries, not a target that a replication should reproduce.
 
 ## Running or publishing a study
+
+Start with the public
+[`REPLICATION-QUICKSTART.md`](REPLICATION-QUICKSTART.md). It pins a starter kit and
+Method identity, states prerequisites and participant-paid cost boundaries, and links
+the public-safe
+[Corridor replication report](https://github.com/amingclawdev/charting-loop/issues/new?template=replication-report.md).
+That report is the Charting Loop project's research intake. It does not upload a job to
+Harbor, confer benchmark acceptance, or create a leaderboard entry.
 
 The authoritative prospective runner contract is
 [`protocol/TASK-CONDITIONED-CORRIDOR-EXPERIMENT-V2.md`](../protocol/TASK-CONDITIONED-CORRIDOR-EXPERIMENT-V2.md).

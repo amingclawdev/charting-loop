@@ -245,6 +245,81 @@ class PublicReleaseTests(unittest.TestCase):
         self.assertNotIn(f"{pinned_verifier}#L147-L157", results)
         self.assertNotIn(f"{pinned_verifier}#L626-L638", results)
 
+    def test_replication_participation_entry_is_complete_and_bounded(self) -> None:
+        readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+        invitation = (
+            REPOSITORY_ROOT / "docs" / "REPLICATION-INVITATION.md"
+        ).read_text(encoding="utf-8")
+        quickstart = (
+            REPOSITORY_ROOT / "docs" / "REPLICATION-QUICKSTART.md"
+        ).read_text(encoding="utf-8")
+        results = (
+            REPOSITORY_ROOT / "docs" / "EXPERIMENT-RESULTS.md"
+        ).read_text(encoding="utf-8")
+        report_template = (
+            REPOSITORY_ROOT
+            / ".github"
+            / "ISSUE_TEMPLATE"
+            / "replication-report.md"
+        ).read_text(encoding="utf-8")
+
+        quickstart_words = " ".join(quickstart.split())
+        for marker in (
+            "# Join a Corridor replication pilot",
+            "fresh, distinct, unseen multi-step task",
+            "both the Worker and its separate QA can read and use the same exact frozen Corridor",
+            "neither the Worker nor its separate QA can access a Corridor",
+            "Record its time, model/API usage, and compute cost separately",
+            "positive, null, negative, blocked, timeout, invalid, and unscored outcomes",
+            "9ba540e2359545b1ae44684315d13c3601ac7713",
+            "charting-loop-method-v8",
+            "3c3813444a7d43d0a56837e9cb960be86ce26d06",
+            "sha256:85b5a7a8700312ec1e35b80df6e224221d44a48904247a8d6d32cfe940459446",
+            "sha256:bd70498b2f75e039d88c80ae0c5b0a11fba15d12517820c27e8bccb28da987af",
+            "The participant pays their own model, benchmark, storage, and compute costs",
+            "one total arm-time constraint",
+            "latest complete frozen version",
+            "Do not provide this repository's completed task results",
+            "Filing the issue starts project triage only",
+            "does not make a Harbor job public",
+        ):
+            self.assertIn(marker, quickstart_words)
+
+        report_words = " ".join(report_template.split())
+        for marker in (
+            "name: Corridor replication report",
+            "completed, null, negative, blocked, timeout, invalid, or unscored pilot",
+            "Treatment Worker and Treatment QA used the same exact frozen Corridor",
+            "Control Worker and Control QA had no Corridor access",
+            "I included every attempt",
+            "## Exact frozen identities",
+            "Task and evaluator commit/digest",
+            "Method version, source commit, Method digest, and Scope Datum digest",
+            "Total arm-time constraint, compute limits, network policy, and QA instruction digest",
+            "## All attempts",
+            "Builder and Corridor construction",
+            "Observable mechanism and QA evidence",
+            "Contamination, network, and custody",
+            "Smallest evidence-supported conclusion",
+            "Optional official benchmark/Harbor URL and acceptance status",
+        ):
+            self.assertIn(marker, report_words)
+
+        report_url = (
+            "https://github.com/amingclawdev/charting-loop/issues/new?"
+            "template=replication-report.md"
+        )
+        for page in (readme, invitation, quickstart, results):
+            self.assertIn(report_url, page)
+        self.assertIn("docs/REPLICATION-QUICKSTART.md", readme)
+        self.assertIn("project report intake", " ".join(results.split()))
+        self.assertIn("thirteen append-only rows", " ".join(invitation.split()))
+        self.assertNotIn("intake not opened", results)
+        self.assertNotIn(
+            "The project does not currently advertise a live external submission endpoint",
+            results,
+        )
+
     def test_result_index_human_detail_and_ai_analysis_are_separate(self) -> None:
         readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
         invitation = (
@@ -268,6 +343,7 @@ class PublicReleaseTests(unittest.TestCase):
 
         audience_paths = (
             "docs/REPLICATION-INVITATION.md",
+            "docs/REPLICATION-QUICKSTART.md",
             "docs/EXPERIMENT-RESULTS.md",
             "docs/PRODUCTION-PLANNING-RESULT.md",
             "docs/ICO-PATH-PATCH-RESULT.md",
@@ -279,6 +355,7 @@ class PublicReleaseTests(unittest.TestCase):
         for path in audience_paths:
             self.assertIn(path, readme)
         for label in (
+            "Participate",
             "Human result index",
             "Human task results",
             "Post-hoc AI result analysis",
@@ -311,10 +388,12 @@ class PublicReleaseTests(unittest.TestCase):
             "one arm works with Corridor access and the other works without Corridor access",
             "task-specific executable guidance",
             "The first authorized public release is now live",
-            "six sanitized arm summaries",
+            "six current sanitized matched-arm summaries",
+            "separate `ico-path-patch` job-009 engineering summary",
+            "thirteen append-only rows",
             "underlying databases, SQL, detailed logs, raw sessions",
-            "descriptive research records on one benchmark task",
-            "not a published benchmark submission or leaderboard result",
+            "public index therefore covers two distinct tasks",
+            "not accepted benchmark submissions or leaderboard results",
         ):
             self.assertIn(marker, invitation_words)
         for stale_marker in (
@@ -357,18 +436,22 @@ class PublicReleaseTests(unittest.TestCase):
             "| Public release registry | Thirteen validated append-only rows |",
             "thirteenth row binds the job-009 engineering summary",
             "Every row binds its branch to a commit, tree, manifest digest",
-            "| Public remote and submission channel | Repository live; intake not opened |",
+            "| Public remote and project report intake | Open |",
+            "[`replication quickstart`](REPLICATION-QUICKSTART.md)",
+            "Corridor replication report",
+            "This is not an official benchmark upload",
             "| Official benchmark leaderboard | No accepted project entry |",
-            "reader, runner, and sanitized result package is public",
+            "reader, runner, sanitized result package, and project report intake are public",
             "index now contains two task pages",
             "counted causal package still concerns one task",
-            "not an open submission programme or an official leaderboard entry",
+            "not an official benchmark submission programme or leaderboard entry",
             "### Join the next multi-task study",
             "Select an unseen, distinct multi-step task",
             "Repeating `production-planning` adds an attempt to its task page",
             "Do not expose this result page or the post-hoc result-analysis prompts",
             "Preserve completed, failed, blocked, timeout, invalid, and unscored attempts",
-            "The project does not currently advertise a live external submission endpoint",
+            "The issue is the project's research-intake endpoint",
+            "does not itself add a result to this index or machine registry",
             "### How a released result enters this index",
             "python3 tools/public_release.py validate-registry",
             "python3 tools/public_release.py summarize-registry",
@@ -402,6 +485,7 @@ class PublicReleaseTests(unittest.TestCase):
             self.assertNotIn(marker, index)
         for link in (
             "human [`replication invitation`](REPLICATION-INVITATION.md)",
+            "[`replication quickstart`](REPLICATION-QUICKSTART.md)",
             "[`AI replication runbook`](AI-REPLICATION-RUNBOOK.md)",
             "[`prospective protocol`](../protocol/TASK-CONDITIONED-CORRIDOR-EXPERIMENT-V2.md)",
             "[`public release checklist`](PUBLIC-RELEASE-CHECKLIST.md)",

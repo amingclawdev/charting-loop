@@ -32,6 +32,10 @@ Choose the page for your audience:
 
 - **Human invitation:** [`docs/REPLICATION-INVITATION.md`](docs/REPLICATION-INVITATION.md)
   explains the motivation, hypothesis, Corridor, and simple matched design.
+- **Participate:** [`docs/REPLICATION-QUICKSTART.md`](docs/REPLICATION-QUICKSTART.md)
+  pins the starter identities, role-visibility rules, cost boundary, and reporting
+  sequence. File a public-safe result through the
+  [Corridor replication report](https://github.com/amingclawdev/charting-loop/issues/new?template=replication-report.md).
 - **Human result index:**
   [`docs/EXPERIMENT-RESULTS.md`](docs/EXPERIMENT-RESULTS.md) lists one row per distinct
   benchmark task and keeps repeated attempts grouped under that task.
@@ -39,8 +43,8 @@ Choose the page for your audience:
   [`docs/PRODUCTION-PLANNING-RESULT.md`](docs/PRODUCTION-PLANNING-RESULT.md) explains the
   matched-arm evidence, while
   [`docs/ICO-PATH-PATCH-RESULT.md`](docs/ICO-PATH-PATCH-RESULT.md) records the separate
-  full-method smoke sequence, its 15/19 partial score, the protocol/SDK adjustments,
-  and its publication boundary.
+  jobs 002–009 sequence, including the earlier 15/19 partial score, the later 19/19
+  same-task recovery, the protocol/SDK adjustments, and its publication boundary.
 - **Post-hoc AI result analysis:**
   [`docs/AI-RESULT-ANALYSIS-RUNBOOK.md`](docs/AI-RESULT-ANALYSIS-RUNBOOK.md) contains the
   step-by-step case-analysis procedure and complete copy-ready prompts. It is a reading
@@ -63,6 +67,9 @@ and internal Git history remain embargoed or restricted under
 
 The public repository is
 [amingclawdev/charting-loop](https://github.com/amingclawdev/charting-loop).
+The project report intake is not a Harbor upload, accepted benchmark submission, or
+leaderboard entry; participants must use the benchmark owner's official channel for
+those separate outcomes.
 
 ## Authority map
 

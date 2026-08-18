@@ -33,8 +33,9 @@ benchmark-wide efficacy evidence, or a production-readiness claim.
 inspect six current causal-evidence arm packages and one engineering-result package,
 validate their exact Git and digest identities,
 follow the observable event chain, use the bounded AI review prompts, and follow the
-prospective replication protocol. Publication does not mean that a benchmark
-submission, leaderboard run, or external intake channel already exists.
+prospective replication protocol. A public project-level replication-report intake is
+now open. It is separate from benchmark submission, Harbor job visibility, and
+leaderboard acceptance.
 
 | Surface | Status | What that means |
 | --- | --- | --- |
@@ -43,12 +44,13 @@ submission, leaderboard run, or external intake channel already exists.
 | Prospective replication instructions | Ready for a frozen pilot | The human invitation, operator runbook, and authoritative protocol define how to add distinct tasks without treating repetitions as new tasks. |
 | Current result artifacts | Six causal-evidence arm releases plus one engineering-result release | Treatment and Control for CL-030/031/032 each have an immutable `public-v2` branch. The separate `ico-path-patch` job-009 `public-v1` branch records an official pass with incomplete Method conformance and same-task adaptive provenance; it is not a causal-evidence arm release. |
 | Public release registry | Thirteen validated append-only rows | Six historical `public-v1` arm rows and six superseding `public-v2` arm rows remain immutable. The thirteenth row binds the job-009 engineering summary. Every row binds its branch to a commit, tree, manifest digest, typed identity, outcome, and sealed-source digests. |
-| Public remote and submission channel | Repository live; intake not opened | The repository is public at [`amingclawdev/charting-loop`](https://github.com/amingclawdev/charting-loop), but no project submission endpoint is advertised yet. |
+| Public remote and project report intake | Open | The repository is public at [`amingclawdev/charting-loop`](https://github.com/amingclawdev/charting-loop). Participants can follow the [`replication quickstart`](REPLICATION-QUICKSTART.md) and file a public-safe [Corridor replication report](https://github.com/amingclawdev/charting-loop/issues/new?template=replication-report.md). This is not an official benchmark upload. |
 | Official benchmark leaderboard | No accepted project entry | The matched pairs are not a complete eligible run. The passing `ico-path-patch` job has not been accepted as a Harbor submission, so no rank or accepted submission is claimed. |
 
-In short, the **reader, runner, and sanitized result package is public**. The index now
-contains two task pages, while the counted causal package still concerns one task. It
-is not an open submission programme or an official leaderboard entry.
+In short, the **reader, runner, sanitized result package, and project report intake are
+public**. The index now contains two task pages, while the counted causal package still
+concerns one task. The intake accepts bounded research reports; it is not an official
+benchmark submission programme or leaderboard entry.
 
 ### Join the next multi-task study
 
@@ -56,6 +58,8 @@ For a prospective independent test:
 
 1. Read the human [`replication invitation`](REPLICATION-INVITATION.md) to understand
    the hypothesis, eligibility boundary, and matched design.
+   Then use the [`replication quickstart`](REPLICATION-QUICKSTART.md) for the pinned
+   starter identities and report sequence.
 2. Select an unseen, distinct multi-step task. Repeating `production-planning` adds an
    attempt to its task page; it does not add a new task or create multi-task evidence.
 3. Before any experimental role runs, freeze the task, evaluator, model/runtime,
@@ -74,11 +78,16 @@ For a prospective independent test:
    attach a database, raw SQL, a credential-bearing full log, raw session,
    trajectory, hidden evaluator material, credential value, or solution-bearing
    service. Preserve their exact digests and controlled source locators instead.
+7. Submit the bounded summary through the public
+   [Corridor replication report](https://github.com/amingclawdev/charting-loop/issues/new?template=replication-report.md).
+   Report positive, null, negative, blocked, timeout, invalid, and unscored outcomes on
+   equal terms. Do not paste sealed bytes into the issue.
 
-The project does not currently advertise a live external submission endpoint. Once
-the repository owner publishes and authorizes one, that endpoint—not an informal file
-transfer—must define how a participant submits the exact summary, digests, identities,
-and independent-review evidence.
+The issue is the project's research-intake endpoint. It collects summaries, exact
+identities, digests, and review evidence for triage; it does not itself add a result to
+this index or machine registry. Repository-owner authorization, independent review,
+and the release checklist still govern publication. An official benchmark upload,
+public Harbor job, accepted submission, or leaderboard row remains a separate process.
 
 ### How a released result enters this index
 
@@ -238,6 +247,9 @@ predecessors for that task belong on its task page rather than becoming extra ro
   post-hoc [`AI result-analysis runbook`](AI-RESULT-ANALYSIS-RUNBOOK.md).
 - To understand the proposed next study, read the human
   [`REPLICATION-INVITATION.md`](REPLICATION-INVITATION.md).
+- To run a fresh pilot and report any outcome, use the
+  [`REPLICATION-QUICKSTART.md`](REPLICATION-QUICKSTART.md) and then file a public-safe
+  [Corridor replication report](https://github.com/amingclawdev/charting-loop/issues/new?template=replication-report.md).
 
 The AI result-analysis runbook is a reading aid for completed public-safe results. It
 is not experiment input and must not be shown to an experimental builder, Worker, QA,
