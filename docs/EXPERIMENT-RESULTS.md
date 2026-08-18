@@ -15,14 +15,15 @@ attempts on one task as new tasks.
   Only three count: the fourth belongs to CL-032 attempt-003, whose Control QA timed
   out and made the whole matched attempt infrastructure-invalid. It has no standalone
   public arm manifest and is not used in the effect pattern.
-- On the second task, `ico-path-patch`, one valid full-method smoke run passed 15/19
-  verifier checks but received official reward 0.0; it was not a matched experiment or
-  an accepted leaderboard submission.
+- On the second task, `ico-path-patch`, the latest valid full-method recovery run
+  passed 19/19 verifier checks and received official reward 1.0 within the original
+  5,400-second condition. It was not a matched experiment or an accepted leaderboard
+  submission.
 
 The matched pattern remains a repeated descriptive result on one task. Adding a
-non-passing engineering observation on a second task gives two-task coverage, but it
-is **not multi-task efficacy evidence**, a causal estimate, benchmark-wide efficacy
-evidence, or a production-readiness claim.
+passing same-task recovery observation on a second task gives two-task engineering
+coverage, but it is **not multi-task efficacy evidence**, a causal estimate,
+benchmark-wide efficacy evidence, or a production-readiness claim.
 
 ## Publication and participation status
 
@@ -37,10 +38,10 @@ submission, leaderboard run, or external intake channel already exists.
 | Human explanation and result navigation | Ready | This index and the two task pages explain the design, attempts, scores, mechanism evidence, adjustments, and limitations. |
 | Post-hoc AI review | Ready | Complete evidence-bound prompts are available for the whole task and CL-030/031/032. They are not experiment input. |
 | Prospective replication instructions | Ready for a frozen pilot | The human invitation, operator runbook, and authoritative protocol define how to add distinct tasks without treating repetitions as new tasks. |
-| Current result artifacts | Six causal-evidence arm releases plus one engineering result | Treatment and Control for CL-030/031/032 each have an immutable `public-v2` branch. The `ico-path-patch` page is a public-safe main-branch summary with sealed raw artifacts; it is not registered as a causal-evidence arm release. |
+| Current result artifacts | Six causal-evidence arm releases plus one passing engineering result | Treatment and Control for CL-030/031/032 each have an immutable `public-v2` branch. The `ico-path-patch` page is a public-safe main-branch summary with sealed raw artifacts; it is not registered as a causal-evidence arm release. |
 | Public release registry | Twelve validated append-only rows | Six `public-v1` rows remain immutable; six `public-v2` rows supersede them without deletion. The registry binds every branch to its commit, tree, manifest digest, typed identity, outcome, and sealed-source digests. |
 | Public remote and submission channel | Repository live; intake not opened | The repository is public at [`amingclawdev/charting-loop`](https://github.com/amingclawdev/charting-loop), but no project submission endpoint is advertised yet. |
-| Official benchmark leaderboard | No accepted project entry | The matched pairs are not a complete eligible run. The `ico-path-patch` private upload failed on Harbor profile identity after scoring, so no rank or accepted submission is claimed. |
+| Official benchmark leaderboard | No accepted project entry | The matched pairs are not a complete eligible run. The passing `ico-path-patch` job has not been accepted as a Harbor submission, so no rank or accepted submission is claimed. |
 
 In short, the **reader, runner, and sanitized result package is public**. The index now
 contains two task pages, while the counted causal package still concerns one task. It
@@ -203,17 +204,19 @@ locator](PRODUCTION-PLANNING-RESULT.md#cl-030).
 on this task, an executable, replayable global constraint model appears to help a
 Worker evaluate counterfactual repairs and resist locally plausible mistakes. They do
 not identify a causal effect, establish multi-task efficacy, or make official 20/20
-equivalent to unqualified semantic correctness. The separate `ico-path-patch` smoke
-run broadens engineering coverage but failed and had no matched Control, so it does not
-upgrade this causal claim. Testing the stronger claim requires distinct tasks with
-matched arms, more pairs, and evaluators whose objectives match their written tasks.
+equivalent to unqualified semantic correctness. The separate `ico-path-patch` sequence
+now contains a 19/19 same-task recovery after an earlier 15/19 failure, but it had no
+matched Control and changed the Method, SDK, Agent, Builder artifact, and model sample.
+It therefore broadens engineering coverage without upgrading this causal claim.
+Testing the stronger claim requires distinct tasks with matched arms, more pairs, and
+evaluators whose objectives match their written tasks.
 
 ## Result index
 
 | Benchmark task | Release | Attempts represented | Headline | Human detail |
 | --- | --- | --- | --- | --- |
 | `production-planning` | Terminal-Bench 3.0 | Three counted completed pairs and two invalid predecessors | Four observed Treatment 20/20 executions, of which three belong to counted pairs; counted Controls were 16/20, 16/20, and 15/20 | [Open the task result](PRODUCTION-PLANNING-RESULT.md) |
-| `ico-path-patch` | Terminal-Bench 3.0 | Jobs 002–008: four launcher/runtime-invalid identities and three valid method failures | Latest valid run passed 15/19 checks but received reward 0.0; official maintainer triage had reported 10/19 as its best result under the original 90-minute condition | [Open the task result](ICO-PATH-PATCH-RESULT.md) |
+| `ico-path-patch` | Terminal-Bench 3.0 | Jobs 002–009: four launcher/runtime-invalid identities, three valid method failures, and one valid method pass | Latest valid run passed 19/19 checks with reward 1.0 within the original 5,400-second condition; official maintainer triage had previously reported 10/19 as its best result under that condition | [Open the task result](ICO-PATH-PATCH-RESULT.md) |
 
 Each row is one distinct task. Repeated runs, repairs, verifier replays, or invalid
 predecessors for that task belong on its task page rather than becoming extra rows.
@@ -223,8 +226,8 @@ predecessors for that task belong on its task page rather than becoming extra ro
 - To understand the result, compare attempts, and follow the immutable summary
   locators for the matched experiment, read the human
   [`production-planning` task result](PRODUCTION-PLANNING-RESULT.md).
-- To inspect the second task's smoke-run chronology, partial score, adjustments, and
-  sealed-evidence boundary, read the human
+- To inspect the second task's attempt chronology, 15/19-to-19/19 recovery,
+  adjustments, and sealed-evidence boundary, read the human
   [`ico-path-patch` task result](ICO-PATH-PATCH-RESULT.md).
 - To ask an AI to summarize the task or audit CL-030, CL-031, or CL-032, use the
   post-hoc [`AI result-analysis runbook`](AI-RESULT-ANALYSIS-RUNBOOK.md).

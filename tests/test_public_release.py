@@ -335,6 +335,9 @@ class PublicReleaseTests(unittest.TestCase):
             "whole matched attempt infrastructure-invalid",
             "not used in the effect pattern",
             "**not multi-task efficacy evidence**",
+            "passing same-task recovery observation",
+            "19/19 verifier checks and received official reward 1.0",
+            "not a matched experiment or an accepted leaderboard submission",
             "## Result index",
             "Each row is one distinct task",
             "[Open the task result](PRODUCTION-PLANNING-RESULT.md)",
@@ -349,7 +352,7 @@ class PublicReleaseTests(unittest.TestCase):
         publication_markers = (
             "## Publication and participation status",
             "**Current status: the public result and causal-evidence release is live.**",
-            "| Current result artifacts | Six causal-evidence arm releases plus one engineering result |",
+            "| Current result artifacts | Six causal-evidence arm releases plus one passing engineering result |",
             "| Public release registry | Twelve validated append-only rows |",
             "six `public-v2` rows supersede them without deletion",
             "binds every branch to its commit, tree, manifest digest",
@@ -521,30 +524,40 @@ class PublicReleaseTests(unittest.TestCase):
         for marker in (
             "# `ico-path-patch` engineering result",
             "second distinct benchmark task represented",
-            "**15/19 verifier checks passed; official reward 0.0**",
-            "**valid method failure**",
+            "**19/19 verifier checks passed; official reward 1.0**",
+            "**valid method pass**",
+            "Job `008` remains an independently valid 15/19 failure",
             "Best grader result: 10/19",
             "https://github.com/harbor-framework/terminal-bench/issues/1453",
-            "original 90-minute setting",
+            "original 5,400-second task limit",
+            "first independently documented 19/19 completion we can verify",
             "not a current eight-hour leaderboard maximum",
-            "charting-loop-tb3-ico-path-patch-008",
-            "Jobs `005`, `006`, and `008` are valid method observations",
+            "charting-loop-tb3-ico-path-patch-009",
+            "job `009` is a valid method pass",
             "one absolute task deadline instead of fixed Builder/Worker/QA allocations",
             "shared Corridor access for both Worker and QA",
-            "Job `008` completed in 4,684.975 seconds wall time",
-            "Builder used 1,495.443 seconds",
-            "Worker 1,945.286 seconds",
-            "QA 1,154.560 seconds",
-            "charting-loop-method-v7",
-            "sha256:1ce413d06b67d1f1b878c4159d5f4787acae03ae427d1626a2dfeb5f8f9a0695",
-            "task_ready` was false",
+            "Position is an evidence-bound checkpoint",
+            "Direction is the projection of the applicable Rule closure",
+            "all six required obligation partitions",
+            "Job `009` completed in 5,194 seconds wall time",
+            "agent phases consumed 5,107.230 seconds",
+            "Builder used about 1,350.758 seconds",
+            "Worker 2,912.605 seconds",
+            "runner finalization 843.867 seconds",
+            "charting-loop-method-v8",
+            "3c3813444a7d43d0a56837e9cb960be86ce26d06",
+            "execution code condition was HEAD `9e4aa1acda90ebbd366c3039166ac3c9c79596b3`",
+            "sha256:b8b8f2853ffc9cb30372af08dcd6ef1a652235243d822b9998f9bff2aa08ce7d",
+            "Worker froze six complete snapshots",
+            "worker-000006-458931fa489a7207",
             "effective outcome was `not_assessed`",
+            "recovered byte-identical custody, not a direct container download",
             "two-task engineering coverage, not multi-task efficacy",
             "Four Treatment executions were observed at 20/20",
             "infrastructure-invalid pair and remains noncounting",
         ):
             self.assertIn(marker, ico_words)
-        for job_id in range(2, 9):
+        for job_id in range(2, 10):
             self.assertEqual(ico_result.count(f"| `00{job_id}` |"), 1)
         for forbidden in (
             "style_index",
@@ -557,6 +570,8 @@ class PublicReleaseTests(unittest.TestCase):
             "session_token",
         ):
             self.assertNotIn(forbidden, ico_result)
+        self.assertNotRegex(ico_result, r"/(?:Users|home)/[^/\s]+/")
+        self.assertNotRegex(ico_result, r"\bico-path-patch__[A-Za-z0-9]+\b")
 
         for human_page in (index, task_result, ico_result):
             self.assertNotIn("```text", human_page)

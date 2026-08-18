@@ -10,19 +10,19 @@ role transcripts, credentials, or solution-bearing failure details.
 ## At a glance
 
 - Task: `terminal-bench/ico-path-patch` from Terminal-Bench 3.0.
-- Latest valid run: `charting-loop-tb3-ico-path-patch-008`.
+- Latest valid run: `charting-loop-tb3-ico-path-patch-009`.
 - Agent condition: `gpt-5.6-sol`, maximum reasoning effort, Modal, zero automatic
-  retries, Charting Loop method v7, Agent v0.8.1.
-- Result: **15/19 verifier checks passed; official reward 0.0**.
-- Classification: **valid method failure**. There was one completed trial, no trial
+  retries, Charting Loop method v8, SDK v0.4.0, Agent v0.9.0.
+- Result: **19/19 verifier checks passed; official reward 1.0**.
+- Classification: **valid method pass**. There was one completed trial, no trial
   exception, and no retry.
 - Scope: a same-task engineering and recovery observation. It is not a matched
-  Treatment/Control experiment, a new-task sample, a passing benchmark result, an
-  accepted leaderboard submission, or evidence that the complete method caused the
-  score.
+  Treatment/Control experiment, a new-task sample, an accepted leaderboard
+  submission, or evidence that the complete method caused the score.
 
-Fifteen passing checks are useful diagnostic signal, but the benchmark's binary
-outcome remains failure. This page never converts the partial check count into a pass.
+Job `008` remains an independently valid 15/19 failure. Job `009` is a later 19/19
+pass; it does not retroactively turn the earlier outcome into a pass or make the
+same-task sequence a controlled comparison.
 
 ## External comparison, with its boundary
 
@@ -33,11 +33,13 @@ also said that no observed agent had combined the requested repairs into one
 reproducible passing patch within that condition. On 2026-08-09, a maintainer closed
 the issue by stating that all tasks were being moved to an eight-hour timeout.
 
-Our 15/19 is therefore above the maintainers' reported 10/19 reference under the
-original 90-minute setting. This is a comparison of verifier subchecks, not a current
-eight-hour leaderboard maximum, not a matched same-model Control, and not a rank. The
-project's Harbor upload failed on a profile-identity requirement after local scoring,
-so the run has no accepted official leaderboard entry.
+Job `009` completed all 19 verifier checks in 1 hour, 26 minutes, and 34 seconds. Its
+agent elapsed time was 5,107.230 seconds, below the original 5,400-second task limit.
+It therefore directly answers the former public reproducibility question. From the
+official public issue history currently available, it is the first independently
+documented 19/19 completion we can verify under that original limit. This bounded
+statement is not a current eight-hour leaderboard maximum, a matched same-model
+Control, or a rank. The job has not been accepted as an official Harbor submission.
 
 ## Attempt chronology
 
@@ -50,10 +52,12 @@ so the run has no accepted official leaderboard entry.
 | `006` | Valid method failure, reward 0.0 | Method v5's fixed per-phase allocation stopped Worker before a complete deliverable entered custody. | Replace phase budgets with one task deadline and freeze every complete Worker improvement for final restore. |
 | `007` | Runtime-invalid | Builder and Worker produced frozen state, but importing a read-only adapter created an undeclared byte before QA and grading. | Suppress Python bytecode creation in every role while retaining strict frozen-tree digest checks. |
 | `008` | Valid method failure, **15/19**, reward 0.0 | Builder, Worker, and QA completed under one deadline; both task roles used the same frozen Corridor. The remaining miss was an internal acceptance-boundary completeness failure, not a launcher, account, timeout, or evaluator crash. | Keep the failure as method evidence; next iterations should reduce construction volume and require boundary-complete acceptance witnesses without embedding a task-specific repair. |
+| `009` | Valid method pass, **19/19**, reward 1.0 | Method v8 completed under the original 5,400-second limit. Worker and QA queried the same frozen Corridor; six Worker snapshots preserved complete states, and the sixth was restored for grading. | Index the pass without treating the changed Method, SDK, Agent, Builder artifact, and model sample as a matched causal comparison. |
 
 The four launcher/runtime-invalid identities are evidence about the harness, not agent
 task performance. Jobs `005`, `006`, and `008` are valid method observations even
-though all received reward 0.0. No identity is overwritten or reclassified as a pass.
+though all received reward 0.0; job `009` is a valid method pass. No identity is
+overwritten or reclassified.
 
 ## What changed in the reusable method and SDK
 
@@ -75,17 +79,31 @@ execution support:
   requirements against the same frozen work rows and capabilities rather than acting
   as an external judge that cannot inspect the Corridor.
 
+Method v8 also makes the replay semantics explicit: Position is an evidence-bound
+checkpoint, and Direction is the projection of the applicable Rule closure at that
+Position. Each compiled acceptance item must carry all six required obligation
+partitions before the task is declared ready. These are task-neutral constraints on
+the Builder's representation, not a stored repair for this benchmark.
+
 These changes are generic scaffolding. Role labels are cooperative provenance, not an
 operating-system permission boundary, and reminders are advisory rather than new
 business-blocking Gates.
 
 ## Timing and construction diagnosis
 
-Job `008` completed in 4,684.975 seconds wall time; agent phases consumed 4,605.638
-seconds. Builder used 1,495.443 seconds, Worker 1,945.286 seconds, and QA 1,154.560
-seconds. Builder did not consume the whole run. Its observed command round trips took
-18.35 seconds; most Builder time was model work over a large acceptance ledger, work
-backlog, task adapter, SDK inspection, binary inspection, and iterative hardening.
+Job `009` completed in 5,194 seconds wall time; agent phases consumed 5,107.230
+seconds. Builder used about 1,350.758 seconds, Worker 2,912.605 seconds, and QA plus
+runner finalization 843.867 seconds. The frozen Corridor contained 11 files and
+119,516 bytes; its acceptance ledger and task adapter accounted for roughly 78% of
+that representation.
+
+Observed tool wall time was small compared with model time: 8.683 seconds for 42
+Builder calls, 94.391 seconds for 218 Worker calls, and 29.101 seconds for 51 QA calls.
+The long run was therefore not primarily command latency. Construction still spent
+about 22 minutes and 31 seconds compiling requirements, but Worker reasoning and
+execution was the largest phase at about 48 minutes and 33 seconds. Job `008` had
+already shown a similar construction-volume problem: it completed in 4,684.975
+seconds wall time, with Builder using 1,495.443 seconds.
 
 That diagnosis supports a general optimization target: preserve exact acceptance
 coverage while making the construction representation smaller and more selective. It
@@ -95,18 +113,22 @@ does not justify copying this task's hidden failing boundary into the generic me
 
 - Dataset content hash:
   `sha256:a32a61879ea94eb9dc16fa1fbeb398759f0c07ca633d9d1f6aec760207036da3`.
-- Method identity: `charting-loop-method-v7`, source commit
-  `c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d`.
+- Method identity: `charting-loop-method-v8`, source commit
+  `3c3813444a7d43d0a56837e9cb960be86ce26d06`. The execution code condition was HEAD
+  `9e4aa1acda90ebbd366c3039166ac3c9c79596b3`, with SDK v0.4.0 and Agent v0.9.0.
 - Frozen Corridor digest:
-  `sha256:1ce413d06b67d1f1b878c4159d5f4787acae03ae427d1626a2dfeb5f8f9a0695`.
-- Uploaded SDK manifest digest:
-  `sha256:d5da5c8b8b12ed3259000a73c2bcb9e624175ccfb17e891d4fc5de4858badbef`.
-- Frozen Corridor file hashes matched the Builder manifest; structural validation and
-  source mapping passed. Definition closure remained incomplete, construction
-  readiness remained unresolved, and `task_ready` was false.
-- QA's effective outcome was `not_assessed` because its emitted closure state was
-  internally contradictory. Grading still ran against the frozen Worker submission,
-  as required by the no-QA-gate policy.
+  `sha256:b8b8f2853ffc9cb30372af08dcd6ef1a652235243d822b9998f9bff2aa08ce7d`.
+- Worker froze six complete snapshots. Snapshot 6,
+  `worker-000006-458931fa489a7207`, was restored for grading with tree digest
+  `sha256:458931fa489a7207663b311fdaf44a6a9ecc628b58b9ad798c6055bd3c6c4e7a`.
+- Worker and QA both queried the same frozen Corridor runtime Guide. QA found no
+  concrete defect, but its envelope combined incomplete definition closure with
+  complete assessment closure. QA's effective outcome was `not_assessed`; no repair
+  ran, and the sixth Worker snapshot was graded.
+- The original Modal container had already been destroyed when custody was collected.
+  The Corridor was reconstructed from archived Builder write events, and the recovered
+  bytes reproduced the frozen digest exactly. This is recovered byte-identical
+  custody, not a direct container download.
 
 Raw custody remains sealed because it contains a live benchmark problem, a
 solution-bearing binary patch, detailed failure witnesses, role transcripts, and
@@ -119,11 +141,12 @@ redacting subscription and profile tokens alone would not make solution bytes sa
 
 `production-planning` supplies three counted matched pairs on one task. Four Treatment
 executions were observed at 20/20, but one belonged to an infrastructure-invalid pair
-and remains noncounting. This page adds a second task and shows that the dynamic
-Builder/Worker/QA pipeline can construct and consume a Corridor under a different task
-shape, but the scored run still failed and has no matched no-Corridor arm. The combined
-public record therefore supports two-task engineering coverage, not multi-task
-efficacy or a general causal claim.
+and remains noncounting. This page adds a second task and a passing same-task recovery,
+showing that the dynamic Builder/Worker/QA pipeline can construct and consume a
+Corridor under a different task shape. It still has no matched no-Corridor arm, and
+job `009` changed multiple implementation and sampling variables relative to job
+`008`. The combined public record therefore supports two-task engineering coverage,
+not multi-task efficacy or a general causal claim.
 
 For the matched evidence, read the
 [`production-planning` task result](PRODUCTION-PLANNING-RESULT.md). For navigation,
