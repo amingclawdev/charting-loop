@@ -10,6 +10,9 @@ demos/service-plan-corridor-e2e/**/auth.json
 demos/service-plan-corridor-e2e/**/.codex/
 demos/service-plan-corridor-e2e/**/*.jsonl
 
+# Local communication drafts and generated social assets.
+docs/dev/
+
 # Public-release restricted and generated material. Ignore rules are convenience only;
 # tools/public_release.py scans the exact staged tree and reachable Git objects.
 *.bundle

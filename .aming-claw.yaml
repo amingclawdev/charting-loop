@@ -1,0 +1,46 @@
+version: 1
+project_id: charting-loop
+language: python
+
+testing:
+  unit_command: ""
+  e2e_command: ""
+  allowed_commands: []
+  e2e:
+    auto_run: false
+    default_timeout_sec: 900
+    max_parallel: 1
+    require_clean_worktree: true
+    evidence_retention_days: 14
+    suites: {}
+
+build:
+  command: ""
+  release_checks: []
+
+deploy:
+  strategy: none
+  service_rules: []
+  commands: {}
+  smoke_checks: []
+
+governance:
+  enabled: true
+  test_tool_label: unknown
+  exclude_roots: []
+  policy_profile: third-party-public
+
+graph:
+  exclude_paths:
+    - .git
+    - __pycache__
+    - docs/dev
+  ignore_globs:
+    - "**/*.pyc"
+    - "**/.DS_Store"
+  nested_projects:
+    mode: exclude
+    roots: []
+
+ai:
+  routing: {}
