@@ -332,8 +332,36 @@ class PublicReleaseTests(unittest.TestCase):
         )
         self.assertLess(
             invitation.index("## Two evidence dimensions worth testing"),
-            invitation.index("## Why this experiment exists"),
+            invitation.index("## The Method, in brief"),
         )
+        invitation_sections = (
+            "## Two evidence dimensions worth testing",
+            "## The Method, in brief",
+            "## The Theory, in brief",
+            "## Hypothesis",
+            "## The simple matched design",
+            "## What an independent report should answer",
+            "## Running or publishing a study",
+            "## Why this experiment exists",
+        )
+        section_positions = [invitation.index(section) for section in invitation_sections]
+        self.assertEqual(section_positions, sorted(section_positions))
+
+        invitation_words = " ".join(invitation.split())
+        for marker in (
+            "normative Method v8 source",
+            "../method-paper/METHOD.md",
+            "The Method separates normative Rules, admitted Facts, and a deterministic Guide",
+            "Position is checkpointed",
+            "Direction is projected",
+            "Entrance or typed refusal",
+            "published Theory v1 original",
+            "https://doi.org/10.5281/zenodo.21844624",
+            "../theory/README.md",
+            "Position becomes an immutable checkpoint",
+            "does not silently revise the published theory",
+        ):
+            self.assertIn(marker, invitation_words)
 
         for page in (readme, invitation):
             words = " ".join(page.split())
@@ -366,7 +394,6 @@ class PublicReleaseTests(unittest.TestCase):
                 self.assertNotIn(prohibited_claim, page)
 
         readme_words = " ".join(readme.split())
-        invitation_words = " ".join(invitation.split())
         self.assertIn("Two evidence dimensions", readme_words)
         self.assertIn("Matched evidence", readme_words)
         self.assertIn("Transfer-motivating engineering evidence", readme_words)

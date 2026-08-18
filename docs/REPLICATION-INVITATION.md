@@ -36,46 +36,44 @@ transfer testing; it is not a second independent efficacy replication. Read its
 
 Together, the observations pose the question for an independent study: can a fresh
 builder use the frozen method to construct a useful Corridor for a fresh, distinct,
-unseen multi-step task, without solution-bearing context? Follow the
-[replication quickstart](REPLICATION-QUICKSTART.md) and submit every positive, null,
-negative, blocked, timeout, invalid, or unscored outcome through the public-safe
-[Corridor replication report](https://github.com/amingclawdev/charting-loop/issues/new?template=replication-report.md).
+unseen multi-step task, without solution-bearing context?
 
-## Why this experiment exists
+## The Method, in brief
 
-The idea began in Aming Claw, while applying the paper's theory to real agent workflows.
-In that practice, we found that an agent could use the theory as a diagnostic method:
-compare the actual work state, the governing objective and rules, and the legal next
-action, then identify when those elements had drifted apart. This showed a practical use
-for the theory and generated the Corridor hypothesis; it did not establish that Corridor
-works.
+A Corridor is a task-specific navigation aid built before the task arms run. It helps a
+later agent join three things: where the work actually is, what frozen objective and
+rules apply, and which bounded next move is available. It can refuse when those pieces
+do not line up. It is not a stored answer, hidden evaluator, authority grant, or
+guarantee of correctness.
 
-The next step was to combine the theory with lessons from Aming Claw into a reusable
-methodology. Under this methodology, a fresh builder agent receives the frozen
-methodology and the task requirements, then constructs a task-conditioned Corridor for
-that task. After the Corridor is frozen, matched task arms execute the same task under
-the same model, runtime, budgets, QA policy, and evaluator: one arm works with Corridor
-access and the other works without Corridor access. The comparison tests whether
-converting the diagnostic theory into task-specific executable guidance changes
-observable task performance or recovery.
+The Method separates normative Rules, admitted Facts, and a deterministic Guide. A
+fresh Builder maps the complete public task into an acceptance ledger, bounded work
+rows, and any reusable capability modules, then freezes their identities before the
+task arms begin. Position is checkpointed, Direction is projected from the frozen
+objective and applicable Rules at that Position, and Guide derives an Entrance or typed
+refusal. These are semantic obligations rather than a required software architecture: a
+conforming Corridor may be a prompt, checklist, validator, command-line tool, service,
+workflow, or a declared composition.
 
-The first authorized public release is now live. It publishes six current sanitized
-matched-arm summaries—Treatment and Control for each of CL-030, CL-031, and CL-032—
-plus a separate `ico-path-patch` job-009 engineering summary. The machine registry
-contains thirteen append-only rows: six historical arm records, six superseding
-matched-arm records, and the separate engineering record. The public index therefore
-covers two distinct tasks, but only `production-planning` has a matched comparison.
-In short, the current matched package has six sanitized arm summaries; the job-009
-engineering record is separate rather than a seventh causal-evidence arm.
-The underlying databases, SQL, detailed logs, raw sessions, trajectories,
-solution-bearing services, credentials, and internal Git history remain sealed. These
-are descriptive research records, not accepted benchmark submissions or leaderboard
-results.
+Read the [normative Method v8 source](../method-paper/METHOD.md). A reportable study must
+pin its exact catalog identity and digest; linking the readable source alone is not a
+frozen experimental input.
 
-We invite independent teams to test the idea on a fresh multi-step task. The useful
-question is not whether a team can reproduce one of this repository's solutions. It is
-whether a frozen method can help a fresh builder create a task-specific aid that later
-agents can use, under a matched comparison, without receiving solution-bearing context.
+## The Theory, in brief
+
+The published theory describes agent navigation through **Position**, **Direction**,
+and **Entrance**: where work is, where it should move under the governing objective,
+and how a transition becomes available. Drift becomes diagnosable when the observed
+state, governing direction, and purported next action no longer form a coherent chain.
+
+Method v8 operationalizes that vocabulary for construction and replay: Position becomes
+an immutable checkpoint, Direction becomes a Rule-grounded projection at that exact
+Position, and Entrance becomes the Guide's derived result rather than a third stored
+authority plane. That operational mapping is a Method decision; it does not silently
+revise the published theory.
+
+Read the [published Theory v1 original](https://doi.org/10.5281/zenodo.21844624) and
+inspect the repository's [version and byte-identity catalog](../theory/README.md).
 
 ## Hypothesis
 
@@ -88,18 +86,6 @@ The hypothesis concerns the complete method-instantiated process, not any one sc
 prompt, service, or component. A single pair is descriptive evidence. A causal method
 claim needs a prospectively frozen design that also addresses construction effects,
 such as a matched placebo-builder arm or method ablation.
-
-## Corridor, in plain language
-
-A Corridor is a task-specific navigation aid built before the task arms run. It helps a
-later agent join three things: where the work actually is, what frozen objective and
-rules apply, and which bounded next move is available. It can refuse when those pieces
-do not line up.
-
-A Corridor is not a stored answer, hidden evaluator, authority grant, or guarantee of
-correctness. The fresh builder chooses its implementation freely from the public task
-and frozen method package; the experiment then freezes those bytes before either task
-arm begins.
 
 ## The simple matched design
 
@@ -154,3 +140,39 @@ reasoning out of every public ref.
 
 Replication is welcome whether the result agrees with the current hypothesis or not.
 The contribution is an exact, inspectable comparison—not a preferred outcome.
+
+## Why this experiment exists
+
+The idea began in Aming Claw, while applying the paper's theory to real agent workflows.
+In that practice, we found that an agent could use the theory as a diagnostic method:
+compare the actual work state, the governing objective and rules, and the legal next
+action, then identify when those elements had drifted apart. This showed a practical use
+for the theory and generated the Corridor hypothesis; it did not establish that Corridor
+works.
+
+The next step was to combine the theory with lessons from Aming Claw into a reusable
+methodology. Under this methodology, a fresh builder agent receives the frozen
+methodology and the task requirements, then constructs a task-conditioned Corridor for
+that task. After the Corridor is frozen, matched task arms execute the same task under
+the same model, runtime, budgets, QA policy, and evaluator: one arm works with Corridor
+access and the other works without Corridor access. The comparison tests whether
+converting the diagnostic theory into task-specific executable guidance changes
+observable task performance or recovery.
+
+The first authorized public release is now live. It publishes six current sanitized
+matched-arm summaries—Treatment and Control for each of CL-030, CL-031, and CL-032—
+plus a separate `ico-path-patch` job-009 engineering summary. The machine registry
+contains thirteen append-only rows: six historical arm records, six superseding
+matched-arm records, and the separate engineering record. The public index therefore
+covers two distinct tasks, but only `production-planning` has a matched comparison.
+In short, the current matched package has six sanitized arm summaries; the job-009
+engineering record is separate rather than a seventh causal-evidence arm.
+The underlying databases, SQL, detailed logs, raw sessions, trajectories,
+solution-bearing services, credentials, and internal Git history remain sealed. These
+are descriptive research records, not accepted benchmark submissions or leaderboard
+results.
+
+We invite independent teams to test the idea on a fresh multi-step task. The useful
+question is not whether a team can reproduce one of this repository's solutions. It is
+whether a frozen method can help a fresh builder create a task-specific aid that later
+agents can use, under a matched comparison, without receiving solution-bearing context.

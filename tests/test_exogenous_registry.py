@@ -365,14 +365,24 @@ class ExogenousRegistryTests(unittest.TestCase):
         )
 
         invitation_sections = [
-            "## Why this experiment exists",
+            "## Two evidence dimensions worth testing",
+            "## The Method, in brief",
+            "## The Theory, in brief",
             "## Hypothesis",
-            "## Corridor, in plain language",
             "## The simple matched design",
+            "## What an independent report should answer",
+            "## Running or publishing a study",
+            "## Why this experiment exists",
         ]
         positions = [invitation.index(section) for section in invitation_sections]
         self.assertEqual(positions, sorted(positions))
         invitation_words = " ".join(invitation.split())
+        for source_marker in (
+            "[normative Method v8 source](../method-paper/METHOD.md)",
+            "[published Theory v1 original](https://doi.org/10.5281/zenodo.21844624)",
+            "[version and byte-identity catalog](../theory/README.md)",
+        ):
+            self.assertIn(source_marker, invitation)
         for origin_marker in (
             "The idea began in Aming Claw",
             "an agent could use the theory as a diagnostic method",
