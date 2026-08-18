@@ -277,9 +277,29 @@ class FullMethodContractTests(unittest.TestCase):
             ("path", "content_sha256"),
             ("scope_datum_path", "scope_datum_sha256"),
         ):
-            path = REPOSITORY_ROOT / version[path_key]
-            actual = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+            shown = subprocess.run(
+                [
+                    "git",
+                    "show",
+                    f"{version['source_commit']}:{version[path_key]}",
+                ],
+                cwd=REPOSITORY_ROOT,
+                check=True,
+                capture_output=True,
+            )
+            actual = "sha256:" + hashlib.sha256(shown.stdout).hexdigest()
             self.assertEqual(version[digest_key], actual)
+
+        v8 = next(
+            item
+            for item in index["versions"]
+            if item["version_id"] == "charting-loop-method-v8"
+        )
+        self.assertEqual(
+            "d63cd34c2f1b039ebf3d346d4da6fa6ec35126b7",
+            v8["source_commit"],
+        )
+        self.assertNotEqual(version["content_sha256"], v8["content_sha256"])
 
         source = (REPOSITORY_ROOT / "benchmark_agents" / "harbor_agent.py").read_text(
             encoding="utf-8"

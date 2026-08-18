@@ -1286,7 +1286,7 @@ class PublicReleaseTests(unittest.TestCase):
         self.assertTrue(any("training_ingestion must remain not-inferred" in error for error in report.errors))
         self.assertTrue(any("public upstream oracle requires publication time" in error for error in report.errors))
 
-    def test_v7_submission_custody_is_frozen_but_task_neutral(self) -> None:
+    def test_v7_custody_and_v8_navigation_method_are_frozen_and_task_neutral(self) -> None:
         versions = json.loads(
             (REPOSITORY_ROOT / "method-paper" / "VERSIONS.json").read_text(
                 encoding="utf-8"
@@ -1298,8 +1298,12 @@ class PublicReleaseTests(unittest.TestCase):
         v7 = [
             item for item in versions if item["version_id"] == "charting-loop-method-v7"
         ]
+        v8 = [
+            item for item in versions if item["version_id"] == "charting-loop-method-v8"
+        ]
         self.assertEqual(1, len(v6))
         self.assertEqual(1, len(v7))
+        self.assertEqual(1, len(v8))
         self.assertEqual("catalog/v6/CLAIMS.json", v6[0]["claim_catalog"])
         self.assertEqual("catalog/v6/SOURCES.json", v6[0]["source_catalog"])
         self.assertEqual("catalog/v6/EVIDENCE-INDEX.json", v6[0]["evidence_index"])
@@ -1321,10 +1325,48 @@ class PublicReleaseTests(unittest.TestCase):
             ("path", "content_sha256"),
             ("scope_datum_path", "scope_datum_sha256"),
         ):
-            data = (REPOSITORY_ROOT / v7[0][path_key]).read_bytes()
+            shown = git(
+                REPOSITORY_ROOT,
+                "show",
+                f"{v7[0]['source_commit']}:{v7[0][path_key]}",
+            )
+            self.assertEqual(0, shown.returncode, shown.stderr)
+            data = shown.stdout.encode("utf-8")
             self.assertEqual(
                 v7[0][digest_key], "sha256:" + hashlib.sha256(data).hexdigest()
             )
+        self.assertEqual("frozen", v8[0]["status"])
+        self.assertTrue(v8[0]["study_eligible"])
+        self.assertFalse(v8[0]["adoption_eligible"])
+        self.assertEqual(
+            "d63cd34c2f1b039ebf3d346d4da6fa6ec35126b7",
+            v8[0]["source_commit"],
+        )
+        self.assertEqual("catalog/v8/CLAIMS.json", v8[0]["claim_catalog"])
+        self.assertEqual("catalog/v8/SOURCES.json", v8[0]["source_catalog"])
+        self.assertEqual("catalog/v8/EVIDENCE-INDEX.json", v8[0]["evidence_index"])
+        for path_key, digest_key in (
+            ("path", "content_sha256"),
+            ("scope_datum_path", "scope_datum_sha256"),
+        ):
+            data = (REPOSITORY_ROOT / v8[0][path_key]).read_bytes()
+            self.assertEqual(
+                v8[0][digest_key], "sha256:" + hashlib.sha256(data).hexdigest()
+            )
+
+        method_text = (
+            REPOSITORY_ROOT / "method-paper" / "METHOD.md"
+        ).read_text(encoding="utf-8")
+        for marker in (
+            "# Charting Loop corridor method — v8",
+            "two navigation variables",
+            "PositionRef",
+            "DirectionDigest",
+            "Behavioral acceptance closure",
+            "not a third navigation variable",
+            "does not silently revise the published theory",
+        ):
+            self.assertIn(marker, method_text)
 
         public_surface = "\n".join(
             path.read_text(encoding="utf-8")

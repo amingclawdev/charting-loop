@@ -43,6 +43,14 @@ The v7 cooperative-role and exact-restore package is
 `sha256:35590e6a3adddcfc5e210a52045c473d286fdbf256db8c47f951a754d7477fb6`
 and SCOPE-DATUM digest
 `sha256:8e5daca8d7e880521b37fdf1ac63b0e7a919d4bab2446d4aca7e135689f11c35`.
+The v8 Position-checkpoint, effective-Direction, and derived-Entrance package is
+`charting-loop-method-v8`, frozen at
+`d63cd34c2f1b039ebf3d346d4da6fa6ec35126b7`, with METHOD digest
+`sha256:118116d237f12b5d67db2cb553557714367b73369f9646783a56dee2629c4085`
+and SCOPE-DATUM digest
+`sha256:18c10ec806754940da03b958bcef19a218d48fadc5f412364d7e8cfd43725d25`.
+This is a method revision only: published Theory v1 and all earlier frozen method
+identities remain unchanged.
 All frozen study packages are `study_eligible=true`, `adoption_eligible=false`, and
 `builder_eligible=false`; a study must name one exact version and may not request
 “current” or “latest.” The prior `draft-v2` package remains non-study-eligible audit

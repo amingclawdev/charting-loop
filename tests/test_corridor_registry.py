@@ -1082,6 +1082,7 @@ class MethodIndexValidationTests(unittest.TestCase):
                 "charting-loop-method-v5",
                 "charting-loop-method-v6",
                 "charting-loop-method-v7",
+                "charting-loop-method-v8",
             ],
         )
         self.assertEqual(
@@ -1101,6 +1102,9 @@ class MethodIndexValidationTests(unittest.TestCase):
         )
         v7 = next(
             version for version in versions if version["version_id"] == "charting-loop-method-v7"
+        )
+        v8 = next(
+            version for version in versions if version["version_id"] == "charting-loop-method-v8"
         )
         historical = next(
             version for version in versions if version["version_id"] == "draft-v2"
@@ -1175,7 +1179,23 @@ class MethodIndexValidationTests(unittest.TestCase):
             v7["source_commit"],
             "c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d",
         )
-        self.assertEqual(report.facts["study_eligible_version_count"], 5)
+        self.assertEqual(v8["status"], "frozen")
+        self.assertTrue(v8["study_eligible"])
+        self.assertFalse(v8["adoption_eligible"])
+        self.assertFalse(v8["builder_eligible"])
+        self.assertEqual(
+            v8["source_commit"],
+            "d63cd34c2f1b039ebf3d346d4da6fa6ec35126b7",
+        )
+        self.assertEqual(
+            v8["content_sha256"],
+            "sha256:118116d237f12b5d67db2cb553557714367b73369f9646783a56dee2629c4085",
+        )
+        self.assertEqual(
+            v8["scope_datum_sha256"],
+            "sha256:18c10ec806754940da03b958bcef19a218d48fadc5f412364d7e8cfd43725d25",
+        )
+        self.assertEqual(report.facts["study_eligible_version_count"], 6)
         self.assertEqual(report.facts["adoption_eligible_version_count"], 0)
         self.assertEqual(report.facts["builder_eligible_version_count"], 0)
         self.assertEqual(
@@ -1194,8 +1214,8 @@ class MethodIndexValidationTests(unittest.TestCase):
         )
         self.assertEqual(report.facts["method_primary_theory_version_id"], "zenodo-v1")
         self.assertEqual(report.facts["method_drafting_provenance_count"], 1)
-        self.assertEqual(report.facts["method_claim_count"], 16)
-        self.assertEqual(report.facts["method_binding_count"], 16)
+        self.assertEqual(report.facts["method_claim_count"], 20)
+        self.assertEqual(report.facts["method_binding_count"], 20)
         self.assertEqual(report.facts["method_source_count"], 4)
         self.assertEqual(
             report.facts["method_source_bytes_resolution_status"], "not-resolved"
@@ -1377,6 +1397,7 @@ class MethodIndexValidationTests(unittest.TestCase):
                 "charting-loop-method-v5",
                 "charting-loop-method-v6",
                 "charting-loop-method-v7",
+                "charting-loop-method-v8",
             ],
         )
 

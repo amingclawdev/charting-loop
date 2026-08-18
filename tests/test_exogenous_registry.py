@@ -937,6 +937,7 @@ class ExogenousRegistryTests(unittest.TestCase):
                 "charting-loop-method-v5",
                 "charting-loop-method-v6",
                 "charting-loop-method-v7",
+                "charting-loop-method-v8",
             ],
         )
         current = next(
@@ -953,6 +954,9 @@ class ExogenousRegistryTests(unittest.TestCase):
         )
         v7 = next(
             version for version in versions if version["version_id"] == "charting-loop-method-v7"
+        )
+        v8 = next(
+            version for version in versions if version["version_id"] == "charting-loop-method-v8"
         )
         historical = next(
             version for version in versions if version["version_id"] == "draft-v2"
@@ -1009,7 +1013,13 @@ class ExogenousRegistryTests(unittest.TestCase):
             v7["source_commit"],
             "c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d",
         )
-        self.assertEqual(method_report.facts["study_eligible_method_version_count"], 5)
+        self.assertTrue(v8["study_eligible"])
+        self.assertFalse(v8["adoption_eligible"])
+        self.assertEqual(
+            v8["source_commit"],
+            "d63cd34c2f1b039ebf3d346d4da6fa6ec35126b7",
+        )
+        self.assertEqual(method_report.facts["study_eligible_method_version_count"], 6)
         self.assertEqual(method_report.facts["adoption_eligible_method_version_count"], 0)
         self.assertEqual(method_report.facts["eligible_method_version_count"], 0)
 
@@ -1099,6 +1109,7 @@ class ExogenousRegistryTests(unittest.TestCase):
                 "charting-loop-method-v5",
                 "charting-loop-method-v6",
                 "charting-loop-method-v7",
+                "charting-loop-method-v8",
             ],
         )
 
@@ -2226,7 +2237,7 @@ class ExogenousRegistryTests(unittest.TestCase):
             self.assertFalse(report.ok)
             self.assertTrue(any("PATH_SYMLINK" in error for error in report.errors))
 
-    def test_prospective_v7_runtime_projection_does_not_rewrite_frozen_v2(self) -> None:
+    def test_prospective_v8_method_does_not_rewrite_frozen_v2(self) -> None:
         paths = [
             REPOSITORY_ROOT / "method-paper" / "METHOD.md",
             REPOSITORY_ROOT / "method-paper" / "SCOPE-DATUM.md",
@@ -2243,7 +2254,7 @@ class ExogenousRegistryTests(unittest.TestCase):
         protocol_v2 = documents["TASK-CONDITIONED-CORRIDOR-EXPERIMENT-V2.md"]
         running = documents["RUNNING-AN-EXPERIMENT.md"]
 
-        self.assertIn("Charting Loop corridor method — v7", method)
+        self.assertIn("Charting Loop corridor method — v8", method)
         self.assertIn("Status: **normative source**", method)
         self.assertIn("Architecture and projection boundary", method)
         self.assertIn("none is a reference\narchitecture", method)
@@ -2267,6 +2278,11 @@ class ExogenousRegistryTests(unittest.TestCase):
         self.assertIn("not a credential, account", method)
         self.assertIn("per-file atomic", method)
         self.assertIn("timeline presence alone never admits a Fact", method)
+        self.assertIn("two navigation variables", method)
+        self.assertIn("PositionRef", method)
+        self.assertIn("DirectionDigest", method)
+        self.assertIn("Behavioral acceptance closure", method)
+        self.assertIn("does not silently revise the published theory", method)
         self.assertIn("fresh Worker and a separate fresh Independent", protocol_v2)
         self.assertIn("exactly one bounded Worker repair opportunity", protocol_v2)
         self.assertIn("Agent-visible QA is a matched common intervention", protocol_v2)

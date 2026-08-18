@@ -127,6 +127,27 @@
       "claim_catalog": "catalog/v7/CLAIMS.json",
       "source_catalog": "catalog/v7/SOURCES.json",
       "evidence_index": "catalog/v7/EVIDENCE-INDEX.json"
+    },
+    {
+      "version_id": "charting-loop-method-v8",
+      "status": "frozen",
+      "study_eligible": true,
+      "adoption_eligible": false,
+      "builder_eligible": false,
+      "source_commit": "d63cd34c2f1b039ebf3d346d4da6fa6ec35126b7",
+      "path": "method-paper/METHOD.md",
+      "content_sha256": "sha256:118116d237f12b5d67db2cb553557714367b73369f9646783a56dee2629c4085",
+      "scope_datum_path": "method-paper/SCOPE-DATUM.md",
+      "scope_datum_sha256": "sha256:18c10ec806754940da03b958bcef19a218d48fadc5f412364d7e8cfd43725d25",
+      "derived_from": {
+        "theory_version_id": "zenodo-v1",
+        "source_commit": "cf5ac479e208a2401b9358527d58df48e22c0670",
+        "representation": "pdf",
+        "content_sha256": "sha256:f557af476441e814e4d86041969c18fde2299a6a47d28658bdeb8cec2d7296c1"
+      },
+      "claim_catalog": "catalog/v8/CLAIMS.json",
+      "source_catalog": "catalog/v8/SOURCES.json",
+      "evidence_index": "catalog/v8/EVIDENCE-INDEX.json"
     }
   ]
 }
