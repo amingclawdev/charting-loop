@@ -15,7 +15,7 @@
     {
       "claim_id": "claim-effective-direction-projection",
       "source_ids": ["charting-loop-theory-zenodo-v1", "charting-loop-repository-v4-practice"],
-      "relationship": "method-level separation of frozen objective from Rule applicability at one checkpoint"
+      "relationship": "method-level separation of frozen objective from Rule applicability at one checkpoint, including a read-only counterfactual replay boundary"
     },
     {
       "claim_id": "claim-derived-entrance-result",

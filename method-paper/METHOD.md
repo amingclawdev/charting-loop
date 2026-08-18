@@ -127,6 +127,19 @@ projection without changing the frozen objective. Effective Direction must resol
 declared Rule authority; placing objective text beside a Guide result cannot bypass the
 Rule input plane.
 
+A **counterfactual transition** is a read-only evaluation over explicitly substituted
+inputs, not a state transition. `CounterfactualTransition` binds the base
+`PositionRef`, base `DirectionDigest`, exact substituted Position and/or Rule-closure
+identity, the unchanged remaining inputs, and the resulting projected Direction plus
+hypothetical Guide result. The record is marked `hypothetical=true`; identical base,
+substitution, scope, and warranty inputs produce the same result. It may explain how a
+different admitted state or Rule revision would alter an obligation or proposed
+Entrance, but it cannot admit a Fact, advance or replace Position, mutate the frozen
+acceptance ledger, append a real transition to the Position timeline, or establish a
+certificate, Warranty, authority, PASS, or C. Only separately observed evidence
+admitted under the applicable Rule can create a new real Position from which Guide is
+run again.
+
 #### Task acceptance ledger
 
 For a task-conditioned Candidate, Direction includes an immutable **task acceptance

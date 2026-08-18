@@ -18,10 +18,10 @@
     },
     {
       "claim_id": "claim-effective-direction-projection",
-      "statement": "Direction separates a frozen objective and Rule datum from a deterministic effective projection at one Position checkpoint; the projection records applicability, obligations, conflicts, warranties, and digest but does not choose an operation.",
+      "statement": "Direction separates a frozen objective and Rule datum from a deterministic effective projection at one Position checkpoint; a counterfactual transition binds its real base and explicit substituted Position or Rule identity as a read-only hypothetical result that cannot write admitted state, while neither projection chooses an operation.",
       "origin": "method-decision",
       "scope": "Direction construction and replay",
-      "falsified_by": "a conforming projection changes for identical inputs, hides Rule applicability or conflict, rewrites the frozen objective, or embeds the later operation choice"
+      "falsified_by": "a conforming projection changes for identical inputs, hides Rule applicability or conflict, rewrites the frozen objective, embeds the later operation choice, or permits a hypothetical counterfactual result to mutate Facts, Position, acceptance, timeline, authority, or closure"
     },
     {
       "claim_id": "claim-derived-entrance-result",

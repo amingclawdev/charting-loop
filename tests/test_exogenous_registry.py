@@ -2281,6 +2281,8 @@ class ExogenousRegistryTests(unittest.TestCase):
         self.assertIn("two navigation variables", method)
         self.assertIn("PositionRef", method)
         self.assertIn("DirectionDigest", method)
+        self.assertIn("CounterfactualTransition", method)
+        self.assertIn("hypothetical=true", method)
         self.assertIn("Behavioral acceptance closure", method)
         self.assertIn("does not silently revise the published theory", method)
         self.assertIn("fresh Worker and a separate fresh Independent", protocol_v2)

@@ -147,6 +147,13 @@ examples can preserve a wrong Direction projection when negative or interacting 
 were never represented. No task identifier, task bytes, solution, verifier material,
 score, transcript, or repair content is imported into v8.
 
+Version v8 further makes counterfactual replay explicit: substituting a Position or
+Rule closure produces a deterministic, read-only hypothetical projection bound to its
+real base and substituted identities. It cannot write admitted Facts, Position,
+acceptance, timeline, authority, or closure state. This is a method-level replay
+boundary, not a claim that the published theory already defines a counterfactual
+estimator or causal effect.
+
 This amendment was prompted by a post-hoc review of one excluded benchmark smoke run
 in which a genuine QA witness was repaired but a different public acceptance
 dimension remained omitted. Only that abstract failure shape informed the method.

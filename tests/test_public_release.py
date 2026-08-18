@@ -1362,11 +1362,27 @@ class PublicReleaseTests(unittest.TestCase):
             "two navigation variables",
             "PositionRef",
             "DirectionDigest",
+            "CounterfactualTransition",
+            "hypothetical=true",
             "Behavioral acceptance closure",
             "not a third navigation variable",
             "does not silently revise the published theory",
         ):
             self.assertIn(marker, method_text)
+
+        claims = json.loads(
+            (REPOSITORY_ROOT / "catalog" / "v8" / "CLAIMS.json").read_text(
+                encoding="utf-8"
+            )
+        )["claims"]
+        direction_claim = next(
+            claim
+            for claim in claims
+            if claim["claim_id"] == "claim-effective-direction-projection"
+        )
+        self.assertIn("counterfactual transition", direction_claim["statement"])
+        self.assertIn("hypothetical", direction_claim["statement"])
+        self.assertIn("mutate Facts", direction_claim["falsified_by"])
 
         public_surface = "\n".join(
             path.read_text(encoding="utf-8")
