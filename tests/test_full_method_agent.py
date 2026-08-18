@@ -704,6 +704,37 @@ class FullMethodContractTests(unittest.TestCase):
                 preserved_manifest,
                 (custody / "custody-manifest.json").read_bytes(),
             )
+            injected = custody / "roles" / "builder" / "custody-manifest.json"
+            injected.write_text("unbound nested bytes\n", encoding="utf-8")
+            nested_injection_retry = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    contract.private_custody_program(
+                        agent_dir=str(agent_dir),
+                        expected_corridor_digest=digest,
+                        runtime_root=str(runtime_root),
+                        position_path=str(position),
+                        submission_root=str(submissions),
+                    ),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(
+                0, nested_injection_retry.returncode, nested_injection_retry.stderr
+            )
+            nested_injection_report = json.loads(nested_injection_retry.stdout)
+            self.assertFalse(nested_injection_report["ok"])
+            self.assertFalse(
+                nested_injection_report["existing_bytes_revalidated"]
+            )
+            self.assertEqual(
+                preserved_manifest,
+                (custody / "custody-manifest.json").read_bytes(),
+            )
+            injected.unlink()
             (custody / "frozen-corridor" / "tool.py").write_text(
                 "tampered\n", encoding="utf-8"
             )

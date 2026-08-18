@@ -163,7 +163,7 @@ def private_custody_program(
             for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
                 if path.is_symlink():
                     raise ValueError(f"custody symlink is forbidden: {{path}}")
-                if path.is_dir() or path.name == "custody-manifest.json":
+                if path.is_dir() or path == root / "custody-manifest.json":
                     continue
                 if not path.is_file():
                     raise ValueError(f"custody special file is forbidden: {{path}}")
