@@ -17,7 +17,7 @@
     "launch_id": "job-009-launch",
     "method_version_id": "charting-loop-method-v8",
     "protocol_id": "tb3-full-method-smoke",
-    "result_release": "public-v1",
+    "result_release": "public-v2",
     "run_id": "job-009",
     "study_id": "cl074-tb3-ico-path-patch-replay",
     "task_id": "ico-path-patch",
@@ -48,10 +48,10 @@
   },
   "public_summary": {
     "path": "public/results/ico-path-patch/job-009/SUMMARY.md",
-    "sha256": "sha256:4f11c1020e42dd265744eda9c4fc3aa760fbbd9cb755652faaca00ef4c1113e6",
-    "size_bytes": 3088
+    "sha256": "sha256:13ab4404f070dcc36afbe8053e09e4cd6589ace964b4e70ccae3315ed9a488fc",
+    "size_bytes": 4798
   },
-  "release_id": "ico-path-patch-job-009-public-v1",
+  "release_id": "ico-path-patch-job-009-public-v2",
   "schema_version": "charting-loop/public-result-summary/v1",
   "sealed_artifacts": [
     {

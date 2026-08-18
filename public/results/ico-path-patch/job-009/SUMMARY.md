@@ -16,6 +16,34 @@ construction readiness. QA consumed the same frozen Corridor and its runtime
 Guide, but its internally contradictory assessment normalized to
 `not_assessed`; it found no concrete defect and caused no repair.
 
+## Public Harbor comparison snapshot
+
+Harbor's publicly readable trial table now exposes this job alongside the other
+public trials for the exact shipped task content digest. The frozen
+[`PUBLIC-TRIALS.json`](PUBLIC-TRIALS.json) snapshot records what that table returned
+at `2026-08-18T18:36:05Z`:
+
+- before subject job `2e54f22b-69c3-4eef-b77c-02b28f183266`, there were **59
+  completed public trials across 11 exact agent/model/reasoning configurations, with
+  0 reward-1 passes**;
+- including the subject job, the table contained **60 completed public trials across
+  12 exact configurations, with 59 reward-0 rows and 1 reward-1 row**; and
+- the reward-1 row is the [public Harbor job](https://hub.harborframework.com/jobs/2e54f22b-69c3-4eef-b77c-02b28f183266)
+  summarized here: `openai/gpt-5.6-sol`, maximum reasoning effort, official 19/19,
+  reward `1.0`.
+
+The canonical snapshot is 26,753 bytes with digest
+`sha256:a360805445a70c298f430c16b845f826efcc59e516cc1ebd279fc88ee6230dc6`.
+It retains only public trial/job ids, the three configuration-key fields, reward,
+status, and timestamps. It does not retain the public client key, full configuration
+or environment payloads, creator/claimer identities, paths, trajectories, or
+solution-bearing bytes.
+
+This comparison is a frozen observation of Harbor's public table, not an exhaustive
+claim about private runs, every possible model, a leaderboard maximum, or an
+independent matched Control. The subject run followed same-task adaptation described
+below, so the 59-to-1 public-table contrast does not establish Method causality.
+
 ## Observable execution facts
 
 The frozen Corridor contained 11 files and 119,516 bytes and had digest
@@ -56,4 +84,6 @@ result, recovered Corridor manifest, role transcripts, evaluator receipt, final
 Worker snapshot, original binary, patch generator, and patched binary. Those raw
 bytes remain sealed because they contain an active benchmark task, solution
 material, hidden-verifier detail, private paths, or authentication-bearing logs.
-The public branch contains only this summary and digest commitments.
+The public branch contains this summary, the minimized public-table snapshot, and
+digest commitments; it still contains no task solution, hidden verifier, credential,
+or raw role transcript.
