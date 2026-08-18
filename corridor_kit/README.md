@@ -47,7 +47,7 @@ requirements can be replayed together. A clause may therefore be mapped while it
 meaning remains explicitly ambiguous; that is complete source mapping but incomplete
 definition closure, and it cannot produce task readiness.
 
-Each required acceptance item also carries six explicit behavioral verification
+Each compiled acceptance item also carries six explicit behavioral verification
 partitions: positive behavior, prohibited or negative behavior, boundary cases,
 state transitions, temporal behavior, and coupled interactions. A partition that is
 truly inapplicable still contains an explicit reason; an omitted or empty partition

@@ -324,11 +324,11 @@ def validate_acceptance_ledger(
                 report=report,
                 location=f"{location}.verification_obligations.{kind}",
             )
-            if item.get("required") is True and not entries:
+            if not entries:
                 report.error(
-                    "REQUIRED_VERIFICATION_OBLIGATION",
+                    "VERIFICATION_OBLIGATION_REQUIRED",
                     f"{location}.verification_obligations.{kind}",
-                    "required acceptance must explicitly declare at least one obligation; use an explicit not-applicable reason when the partition does not apply",
+                    "every acceptance item must explicitly declare at least one obligation; use an explicit not-applicable reason when the partition does not apply",
                 )
 
     if len(item_ids) != len(set(item_ids)):

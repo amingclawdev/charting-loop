@@ -790,7 +790,7 @@ clause in the public task instruction and public task specification into an atom
 item with a stable `acceptance_id`, exact `source_ref`, normalized `statement`,
 `required` boolean, `definition_state` (`defined|ambiguous`), non-empty task
 `scope`, non-empty decision `rule`, and typed `relations` (`requires`,
-`subsumes`, `overlaps`, `conflicts`, or `derived_from`). Every required item must
+`subsumes`, `overlaps`, `conflicts`, or `derived_from`). Every item must
 also declare non-empty `verification_obligations` for `positive`, `negative`,
 `boundary`, `state`, `temporal`, and `coupled`. If a partition truly does not apply,
 write an explicit reason; never omit it or leave it empty. The top-level

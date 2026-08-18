@@ -146,12 +146,21 @@ class AcceptanceLedgerTests(unittest.TestCase):
         self.assertTrue(report.facts["task_ready"])
         self.assertEqual(report.facts["required_acceptance_ids"], ["AC-1", "AC-2"])
 
-    def test_required_items_need_all_behavioral_verification_partitions(self) -> None:
+    def test_all_items_need_all_behavioral_verification_partitions(self) -> None:
         ledger = valid_ledger()
         ledger["items"][0]["verification_obligations"]["negative"] = []
         report = validate_acceptance_ledger(ledger)
         self.assertIn(
-            "REQUIRED_VERIFICATION_OBLIGATION",
+            "VERIFICATION_OBLIGATION_REQUIRED",
+            {item["code"] for item in report.errors},
+        )
+
+        ledger = valid_ledger()
+        ledger["items"][0]["required"] = False
+        ledger["items"][0]["verification_obligations"]["negative"] = []
+        report = validate_acceptance_ledger(ledger)
+        self.assertIn(
+            "VERIFICATION_OBLIGATION_REQUIRED",
             {item["code"] for item in report.errors},
         )
 
