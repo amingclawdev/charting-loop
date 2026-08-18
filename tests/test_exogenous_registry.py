@@ -1017,7 +1017,7 @@ class ExogenousRegistryTests(unittest.TestCase):
         self.assertFalse(v8["adoption_eligible"])
         self.assertEqual(
             v8["source_commit"],
-            "d63cd34c2f1b039ebf3d346d4da6fa6ec35126b7",
+            "3c3813444a7d43d0a56837e9cb960be86ce26d06",
         )
         self.assertEqual(method_report.facts["study_eligible_method_version_count"], 6)
         self.assertEqual(method_report.facts["adoption_eligible_method_version_count"], 0)

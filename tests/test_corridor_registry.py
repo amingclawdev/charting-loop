@@ -1185,15 +1185,15 @@ class MethodIndexValidationTests(unittest.TestCase):
         self.assertFalse(v8["builder_eligible"])
         self.assertEqual(
             v8["source_commit"],
-            "d63cd34c2f1b039ebf3d346d4da6fa6ec35126b7",
+            "3c3813444a7d43d0a56837e9cb960be86ce26d06",
         )
         self.assertEqual(
             v8["content_sha256"],
-            "sha256:118116d237f12b5d67db2cb553557714367b73369f9646783a56dee2629c4085",
+            "sha256:85b5a7a8700312ec1e35b80df6e224221d44a48904247a8d6d32cfe940459446",
         )
         self.assertEqual(
             v8["scope_datum_sha256"],
-            "sha256:18c10ec806754940da03b958bcef19a218d48fadc5f412364d7e8cfd43725d25",
+            "sha256:bd70498b2f75e039d88c80ae0c5b0a11fba15d12517820c27e8bccb28da987af",
         )
         self.assertEqual(report.facts["study_eligible_version_count"], 6)
         self.assertEqual(report.facts["adoption_eligible_version_count"], 0)

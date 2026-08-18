@@ -45,10 +45,10 @@ and SCOPE-DATUM digest
 `sha256:8e5daca8d7e880521b37fdf1ac63b0e7a919d4bab2446d4aca7e135689f11c35`.
 The v8 Position-checkpoint, effective-Direction, and derived-Entrance package is
 `charting-loop-method-v8`, frozen at
-`d63cd34c2f1b039ebf3d346d4da6fa6ec35126b7`, with METHOD digest
-`sha256:118116d237f12b5d67db2cb553557714367b73369f9646783a56dee2629c4085`
+`3c3813444a7d43d0a56837e9cb960be86ce26d06`, with METHOD digest
+`sha256:85b5a7a8700312ec1e35b80df6e224221d44a48904247a8d6d32cfe940459446`
 and SCOPE-DATUM digest
-`sha256:18c10ec806754940da03b958bcef19a218d48fadc5f412364d7e8cfd43725d25`.
+`sha256:bd70498b2f75e039d88c80ae0c5b0a11fba15d12517820c27e8bccb28da987af`.
 This is a method revision only: published Theory v1 and all earlier frozen method
 identities remain unchanged.
 All frozen study packages are `study_eligible=true`, `adoption_eligible=false`, and

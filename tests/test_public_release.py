@@ -1339,7 +1339,7 @@ class PublicReleaseTests(unittest.TestCase):
         self.assertTrue(v8[0]["study_eligible"])
         self.assertFalse(v8[0]["adoption_eligible"])
         self.assertEqual(
-            "d63cd34c2f1b039ebf3d346d4da6fa6ec35126b7",
+            "3c3813444a7d43d0a56837e9cb960be86ce26d06",
             v8[0]["source_commit"],
         )
         self.assertEqual("catalog/v8/CLAIMS.json", v8[0]["claim_catalog"])

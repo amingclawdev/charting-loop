@@ -296,7 +296,7 @@ class FullMethodContractTests(unittest.TestCase):
             if item["version_id"] == "charting-loop-method-v8"
         )
         self.assertEqual(
-            "d63cd34c2f1b039ebf3d346d4da6fa6ec35126b7",
+            "3c3813444a7d43d0a56837e9cb960be86ce26d06",
             v8["source_commit"],
         )
         self.assertNotEqual(version["content_sha256"], v8["content_sha256"])
