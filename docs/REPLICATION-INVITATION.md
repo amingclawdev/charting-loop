@@ -1,5 +1,46 @@
 # Invitation to replicate the Corridor method
 
+## Two evidence dimensions worth testing
+
+### 1. Matched evidence: 20/20 versus 15–16/20
+
+Within each `production-planning` pair, the benchmark task, model, runtime, limits,
+QA policy, and evaluator were held fixed. The frozen-Corridor Treatment passed
+**20/20 in all three matched pairs**. Task-only Control passed **16/20, 16/20, and
+15/20**.
+
+The mechanism hypothesis is not that Corridor makes the model smarter. It is that a
+task-conditioned, executable, replayable Corridor lets the same model act against
+joined global constraints instead of relying on local context alone. The
+[case detail](PRODUCTION-PLANNING-RESULT.md) describes the observed mechanism and also
+discloses an evaluator semantics discrepancy.
+
+This is a repeated descriptive single-task matched pilot. It is not benchmark-wide or
+multi-task causal evidence, and it does not establish that the mechanism generalizes.
+
+### 2. Transfer-motivating engineering evidence: 10/19 to 19/19
+
+For the different `ico-path-patch` task, an
+[official maintainer issue](https://github.com/harbor-framework/terminal-bench/issues/1453)
+reported **“Best grader result: 10/19”** and said no recorded agent attempt had combined
+all required repairs within the original 5,400-second limit. After same-task adaptive
+development of a Corridor-supported workflow, our job 009 passed **19/19 official
+verifier checks**, received **reward 1.0**, and completed within that same
+**5,400-second limit**.
+
+This second observation is an engineering result with incomplete Method conformance
+and no matched Control. It is not an accepted leaderboard submission, does not
+establish a world-first result, and does not show that every model failed. It motivates
+transfer testing; it is not a second independent efficacy replication. Read its
+[attempt chronology and limits](ICO-PATH-PATCH-RESULT.md).
+
+Together, the observations pose the question for an independent study: can a fresh
+builder use the frozen method to construct a useful Corridor for a fresh, distinct,
+unseen multi-step task, without solution-bearing context? Follow the
+[replication quickstart](REPLICATION-QUICKSTART.md) and submit every positive, null,
+negative, blocked, timeout, invalid, or unscored outcome through the public-safe
+[Corridor replication report](https://github.com/amingclawdev/charting-loop/issues/new?template=replication-report.md).
+
 ## Why this experiment exists
 
 The idea began in Aming Claw, while applying the paper's theory to real agent workflows.

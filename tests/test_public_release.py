@@ -320,6 +320,65 @@ class PublicReleaseTests(unittest.TestCase):
             results,
         )
 
+    def test_public_result_hooks_are_prominent_and_claim_bounded(self) -> None:
+        readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+        invitation = (
+            REPOSITORY_ROOT / "docs" / "REPLICATION-INVITATION.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertLess(
+            readme.index("## Two evidence dimensions worth testing"),
+            readme.index("## Read the theory"),
+        )
+        self.assertLess(
+            invitation.index("## Two evidence dimensions worth testing"),
+            invitation.index("## Why this experiment exists"),
+        )
+
+        for page in (readme, invitation):
+            words = " ".join(page.split())
+            for marker in (
+                "20/20 in all three matched pairs",
+                "16/20, 16/20, and 15/20",
+                "repeated descriptive single-task matched pilot",
+                "evaluator semantics discrepancy",
+                "https://github.com/harbor-framework/terminal-bench/issues/1453",
+                "Best grader result: 10/19",
+                "19/19 official verifier checks",
+                "reward 1.0",
+                "5,400-second limit",
+                "same-task adaptive",
+                "incomplete Method conformance",
+                "no matched Control",
+                "not an accepted leaderboard submission",
+                "does not establish a world-first result",
+                "does not show that every model failed",
+                "fresh, distinct, unseen",
+            ):
+                self.assertIn(marker, words)
+
+            for prohibited_claim in (
+                "No model on the leaderboard passed",
+                "Every model failed this task",
+                "The method is proven",
+                "proves benchmark-wide efficacy",
+            ):
+                self.assertNotIn(prohibited_claim, page)
+
+        readme_words = " ".join(readme.split())
+        invitation_words = " ".join(invitation.split())
+        self.assertIn("Two evidence dimensions", readme_words)
+        self.assertIn("Matched evidence", readme_words)
+        self.assertIn("Transfer-motivating engineering evidence", readme_words)
+        self.assertIn("within-task arm difference", readme_words)
+        self.assertIn("Neither establishes general method efficacy", readme_words)
+        self.assertIn(
+            "not benchmark-wide or multi-task causal evidence", invitation_words
+        )
+        self.assertIn(
+            "not a second independent efficacy replication", invitation_words
+        )
+
     def test_result_index_human_detail_and_ai_analysis_are_separate(self) -> None:
         readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
         invitation = (

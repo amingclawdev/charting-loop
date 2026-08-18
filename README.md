@@ -1,5 +1,31 @@
 # Charting Loop corridor method and experiment substrate
 
+## Two evidence dimensions worth testing
+
+**Matched evidence — same model and runtime within each pair, same task.** On
+`production-planning`, the frozen-Corridor Treatment passed **20/20 in all three
+matched pairs**; task-only Control passed **16/20, 16/20, and 15/20**. This is a
+repeated descriptive single-task matched pilot, not benchmark-wide or multi-task
+causal evidence. The [detailed result](docs/PRODUCTION-PLANNING-RESULT.md) also records
+an evaluator semantics discrepancy rather than hiding it.
+
+**Transfer-motivating engineering evidence — a different task.** For
+`ico-path-patch`, the [official maintainer issue](https://github.com/harbor-framework/terminal-bench/issues/1453)
+reported **“Best grader result: 10/19.”** Our job 009 later passed **19/19 official
+verifier checks**, received **reward 1.0**, and completed within the original
+**5,400-second limit**. This was a same-task adaptive engineering result with
+incomplete Method conformance and no matched Control. It is not an accepted
+leaderboard submission, does not establish a world-first result, and does not show
+that every model failed. See the [full engineering result](docs/ICO-PATH-PATCH-RESULT.md).
+
+These are deliberately different kinds of evidence: the first isolates a within-task
+arm difference; the second asks whether a Corridor-supported workflow can help on a
+different kind of task. Neither establishes general method efficacy. The next useful
+test is a fresh, distinct, unseen task: read the
+[replication invitation](docs/REPLICATION-INVITATION.md), follow the
+[quickstart](docs/REPLICATION-QUICKSTART.md), and submit every outcome through the
+[public replication report](https://github.com/amingclawdev/charting-loop/issues/new?template=replication-report.md).
+
 This repository separates a draft corridor method from the empirical data used to test
 it. Current status: **public release live and replication-invitation ready**. Six
 sanitized arm summaries from three matched attempts on `production-planning` are
