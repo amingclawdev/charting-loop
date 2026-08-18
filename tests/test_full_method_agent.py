@@ -301,6 +301,18 @@ class FullMethodContractTests(unittest.TestCase):
         )
         self.assertNotEqual(version["content_sha256"], v8["content_sha256"])
 
+        module = load_harbor_agent_with_stubs()
+        resolved = module._resolve_frozen_method(REPOSITORY_ROOT)
+        self.assertIsInstance(resolved, bytes)
+        self.assertEqual(
+            version["content_sha256"],
+            "sha256:" + hashlib.sha256(resolved).hexdigest(),
+        )
+        self.assertNotEqual(
+            resolved,
+            (REPOSITORY_ROOT / version["path"]).read_bytes(),
+        )
+
         source = (REPOSITORY_ROOT / "benchmark_agents" / "harbor_agent.py").read_text(
             encoding="utf-8"
         )

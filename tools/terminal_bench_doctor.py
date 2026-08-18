@@ -46,6 +46,8 @@ MODEL = "openai/gpt-5.6-sol"
 REASONING_EFFORT = "max"
 METHOD_VERSION_ID = "charting-loop-method-v7"
 METHOD_SOURCE_COMMIT = "c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d"
+METHOD_SOURCE_PATH = "method-paper/METHOD.md"
+METHOD_SCOPE_PATH = "method-paper/SCOPE-DATUM.md"
 METHOD_CONTENT_SHA256 = (
     "sha256:35590e6a3adddcfc5e210a52045c473d286fdbf256db8c47f951a754d7477fb6"
 )
@@ -185,6 +187,20 @@ def _sha256(path: Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _git_blob_sha256(
+    runner: Runner, git: str, repository_root: Path, commit: str, path: str
+) -> str:
+    """Hash the exact committed text blob instead of the mutable worktree path."""
+
+    commit_check = runner.run(
+        [git, "cat-file", "-e", f"{commit}^{{commit}}"], cwd=repository_root
+    )
+    shown = runner.run([git, "show", f"{commit}:{path}"], cwd=repository_root)
+    if commit_check.returncode or shown.returncode:
+        raise RuntimeError(f"frozen Git blob unavailable: {commit}:{path}")
+    return "sha256:" + hashlib.sha256(shown.stdout.encode("utf-8")).hexdigest()
+
+
 def _tool(explicit: str | None, name: str) -> str | None:
     if explicit:
         return explicit
@@ -304,10 +320,14 @@ def _check_git_and_method(
         record = next(
             item for item in index["versions"] if item["version_id"] == METHOD_VERSION_ID
         )
-        method_digest = _sha256(config.repo_root / record["path"])
-        scope_digest = _sha256(config.repo_root / record["scope_datum_path"])
+        method_digest = _git_blob_sha256(
+            runner, git, config.repo_root, METHOD_SOURCE_COMMIT, METHOD_SOURCE_PATH
+        )
+        scope_digest = _git_blob_sha256(
+            runner, git, config.repo_root, METHOD_SOURCE_COMMIT, METHOD_SCOPE_PATH
+        )
         agent_source = (config.repo_root / "benchmark_agents/harbor_agent.py").read_text()
-    except (OSError, ValueError, KeyError, StopIteration, TypeError):
+    except (OSError, RuntimeError, ValueError, KeyError, StopIteration, TypeError):
         return _failed(
             "immutable_inputs",
             "Frozen method or agent identity could not be read.",
@@ -319,7 +339,9 @@ def _check_git_and_method(
         and record.get("adoption_eligible") is False
         and record.get("builder_eligible") is False
         and record.get("source_commit") == METHOD_SOURCE_COMMIT
+        and record.get("path") == METHOD_SOURCE_PATH
         and record.get("content_sha256") == METHOD_CONTENT_SHA256
+        and record.get("scope_datum_path") == METHOD_SCOPE_PATH
         and record.get("scope_datum_sha256") == METHOD_SCOPE_SHA256
     )
     agent_match = re.search(r'^AGENT_VERSION\s*=\s*"([^"]+)"', agent_source, re.MULTILINE)

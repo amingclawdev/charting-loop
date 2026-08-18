@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import subprocess
 import tempfile
 import unittest
 from decimal import Decimal
@@ -57,6 +58,17 @@ class FakeRunner:
             if command[1:3] == ["merge-base", "--is-ancestor"]:
                 self.assert_isolation_commit(command)
                 return CommandResult(0, "")
+            if command[1:3] == ["cat-file", "-e"]:
+                return CommandResult(0, "")
+            if command[1] == "show":
+                shown = subprocess.run(
+                    ["git", "show", command[2]],
+                    cwd=REPO_ROOT,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                return CommandResult(shown.returncode, shown.stdout, shown.stderr)
         if executable == "fake-harbor":
             if command[1:] == ["--version"]:
                 return CommandResult(0, "0.21.0\n")
@@ -313,6 +325,18 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         self.assertIn("--private", command)
         self.assertIn("-i", command)
         self.assertEqual(command[command.index("-i") + 1], TASK_FILTER)
+        git_show_calls = [
+            call for call in runner.calls if call[:2] == ["fake-git", "show"]
+        ]
+        self.assertEqual(2, len(git_show_calls))
+        self.assertTrue(
+            all(
+                call[2].startswith(
+                    "c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d:method-paper/"
+                )
+                for call in git_show_calls
+            )
+        )
 
     def test_session_window_task_binds_exact_canonical_identity(self) -> None:
         config = self.config(

@@ -16,6 +16,8 @@ import hashlib
 import json
 import re
 import shlex
+import subprocess
+import tempfile
 import uuid
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -59,6 +61,8 @@ from benchmark_agents.contract import (
 AGENT_VERSION = "0.8.1"
 METHOD_VERSION_ID = "charting-loop-method-v7"
 METHOD_SOURCE_COMMIT = "c68813cea1aa1d1eeaafde69a3f35f71ffab6d0d"
+METHOD_SOURCE_PATH = "method-paper/METHOD.md"
+METHOD_SCOPE_PATH = "method-paper/SCOPE-DATUM.md"
 METHOD_CONTENT_SHA256 = (
     "sha256:35590e6a3adddcfc5e210a52045c473d286fdbf256db8c47f951a754d7477fb6"
 )
@@ -319,11 +323,35 @@ class _PhaseCodex(Codex):
             raise
 
 
-def _sha256(path: Path) -> str:
-    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+def _sha256_bytes(content: bytes) -> str:
+    return "sha256:" + hashlib.sha256(content).hexdigest()
 
 
-def _resolve_frozen_method(repository_root: Path) -> Path:
+def _git_blob(repository_root: Path, commit: str, path: str) -> bytes:
+    """Read one blob from an exact commit without consulting mutable worktree bytes."""
+
+    commit_check = subprocess.run(
+        ["git", "-C", str(repository_root), "cat-file", "-e", f"{commit}^{{commit}}"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        check=False,
+    )
+    if commit_check.returncode != 0:
+        raise RuntimeError("Frozen method source_commit is not an available commit")
+    shown = subprocess.run(
+        ["git", "-C", str(repository_root), "show", f"{commit}:{path}"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        check=False,
+    )
+    if shown.returncode != 0:
+        raise RuntimeError(f"Frozen method blob is unavailable: {path}")
+    return shown.stdout
+
+
+def _resolve_frozen_method(repository_root: Path) -> bytes:
     """Resolve the exact v7 bytes or fail before a paid model call."""
 
     index_path = repository_root / "method-paper" / "VERSIONS.json"
@@ -344,9 +372,9 @@ def _resolve_frozen_method(repository_root: Path) -> Path:
         "adoption_eligible": False,
         "builder_eligible": False,
         "source_commit": METHOD_SOURCE_COMMIT,
-        "path": "method-paper/METHOD.md",
+        "path": METHOD_SOURCE_PATH,
         "content_sha256": METHOD_CONTENT_SHA256,
-        "scope_datum_path": "method-paper/SCOPE-DATUM.md",
+        "scope_datum_path": METHOD_SCOPE_PATH,
         "scope_datum_sha256": METHOD_SCOPE_SHA256,
     }
     mismatches = [key for key, value in expected.items() if version.get(key) != value]
@@ -354,15 +382,13 @@ def _resolve_frozen_method(repository_root: Path) -> Path:
         raise RuntimeError(
             "Frozen method catalog binding changed: " + ", ".join(mismatches)
         )
-    method_path = repository_root / expected["path"]
-    scope_path = repository_root / expected["scope_datum_path"]
-    if not method_path.is_file() or not scope_path.is_file():
-        raise FileNotFoundError("Frozen method or scope datum is missing")
-    if _sha256(method_path) != METHOD_CONTENT_SHA256:
-        raise RuntimeError("Mutable METHOD.md bytes do not match the frozen v7 digest")
-    if _sha256(scope_path) != METHOD_SCOPE_SHA256:
-        raise RuntimeError("Mutable SCOPE-DATUM.md bytes do not match the frozen v7 digest")
-    return method_path
+    method_bytes = _git_blob(repository_root, METHOD_SOURCE_COMMIT, METHOD_SOURCE_PATH)
+    scope_bytes = _git_blob(repository_root, METHOD_SOURCE_COMMIT, METHOD_SCOPE_PATH)
+    if _sha256_bytes(method_bytes) != METHOD_CONTENT_SHA256:
+        raise RuntimeError("Frozen METHOD.md Git blob does not match the v7 digest")
+    if _sha256_bytes(scope_bytes) != METHOD_SCOPE_SHA256:
+        raise RuntimeError("Frozen SCOPE-DATUM.md Git blob does not match the v7 digest")
+    return method_bytes
 
 
 class ChartingLoopFullMethodAgent(Codex):
@@ -378,7 +404,7 @@ class ChartingLoopFullMethodAgent(Codex):
         return AGENT_VERSION
 
     @property
-    def _method_source(self) -> Path:
+    def _method_source(self) -> bytes:
         return _resolve_frozen_method(Path(__file__).resolve().parents[1])
 
     @property
@@ -555,8 +581,7 @@ class ChartingLoopFullMethodAgent(Codex):
                 codex_bin=codex_bin,
             ),
         )
-        if not self._method_source.is_file():
-            raise FileNotFoundError(f"Frozen method source missing: {self._method_source}")
+        method_source = self._method_source
 
         sdk_manifest = self._sdk_manifest()
         self._sdk_identity = {
@@ -577,11 +602,14 @@ class ChartingLoopFullMethodAgent(Codex):
                 f"{shlex.quote(POSITION_ROOT)} {shlex.quote(SUBMISSION_ROOT)}"
             ),
         )
-        await self._upload_agent_owned_file(
-            environment,
-            self._method_source,
-            METHOD_PATH,
-        )
+        with tempfile.NamedTemporaryFile(prefix="charting-loop-method-", suffix=".md") as method_file:
+            method_file.write(method_source)
+            method_file.flush()
+            await self._upload_agent_owned_file(
+                environment,
+                Path(method_file.name),
+                METHOD_PATH,
+            )
         sdk_parents = sorted(
             {
                 PurePosixPath(SDK_PACKAGE_PATH, item["path"]).parent.as_posix()
