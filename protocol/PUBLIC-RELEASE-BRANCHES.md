@@ -99,10 +99,12 @@ frozen design and evidence beyond a release checklist.
 6. Append one immutable row to `exogenous/registry/PUBLIC-RELEASES.json`; never update an
    old row in place.
 
-The current registry contains thirteen public-summary rows. Twelve are the immutable
+The current registry contains fourteen public-summary rows. Twelve are the immutable
 v1/v2 Treatment and Control releases for CL-030, CL-031, and CL-032: six current arm
 releases from three repetitions of one benchmark task, not six distinct-task results.
-The thirteenth is a separate Corridor-assisted engineering release for
-`ico-path-patch` job 009; it has no matched Control and is not a causal-evidence arm.
+The remaining two are append-only versions of the separate Corridor-assisted
+engineering release for `ico-path-patch` job 009. Its `public-v2` supersedes but does
+not mutate `public-v1`, adding a minimized frozen snapshot of Harbor's public trial
+table. The run has no matched Control and is not a causal-evidence arm.
 Every row points to a sanitized result branch; controlled source bytes remain sealed
 behind recorded digests.

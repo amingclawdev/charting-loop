@@ -29,6 +29,33 @@ reusable SDK, but the sequence was informed by same-task verifier feedback. Job 
 therefore does not retroactively turn the earlier outcome into a pass, make the
 sequence an independent reproduction, or make it a controlled comparison.
 
+## Public task difficulty snapshot
+
+The strongest public comparison now comes from Harbor's own publicly readable trial
+table for the exact shipped task content digest. At `2026-08-18T18:36:05Z`, before
+job `009`, that table contained **59 completed trials across 11 exact
+agent/model/reasoning configurations and 0 reward-1 passes**. With job `009` included,
+it contained 60 completed rows: 59 at reward `0.0` and this one at reward `1.0`.
+
+- [Frozen minimized dataset: all 60 public rows](../public/results/ico-path-patch/job-009/PUBLIC-TRIALS.json)
+- [Public Harbor job: 19/19, reward 1.0](https://hub.harborframework.com/jobs/2e54f22b-69c3-4eef-b77c-02b28f183266)
+- [Harbor's public-client source](https://github.com/harbor-framework/harbor/blob/main/src/harbor/auth/constants.py#L304-L312)
+
+The snapshot is pinned to task digest
+`sha256:0115a4136189b48da79070f9b3004dc4e0dfc1a60725c5acebdd7f380d037d14`
+and has digest
+`sha256:a360805445a70c298f430c16b845f826efcc59e516cc1ebd279fc88ee6230dc6`.
+It retains only public trial/job ids, the three fields forming the exact
+configuration key, reward, status, and timestamps. The public client key itself,
+full configuration/environment payloads, creator or claimer identities, paths,
+trajectories, and solution-bearing bytes are excluded.
+
+This establishes the difficulty of the task in the observed public table and the
+identity of our public pass. It does not establish that every model or private run
+failed, that this was a world-first, that it is a leaderboard maximum, or that the
+Method caused the result. This was the fourth scored same-task attempt in our adaptive
+sequence and had no matched Control.
+
 ## External comparison, with its boundary
 
 On 2026-07-31, the official benchmark maintainers reported **“Best grader result:
@@ -152,11 +179,14 @@ exact task/method identities, digests, timings, disposition history, and the off
 score. Publication of the raw bytes would change the benchmark and leakage boundary;
 redacting subscription and profile tokens alone would not make solution bytes safe.
 
-The immutable public-summary package is
+The current immutable `public-v2` public-summary package is
 [`public/results/ico-path-patch/job-009`](../public/results/ico-path-patch/job-009/).
 Its manifest binds the private audit, runner result, Corridor custody manifest, role
 transcripts, official reward receipt, final Worker snapshot, original binary, patch
-generator, and patched binary by digest and size without publishing those bytes.
+generator, and patched binary by digest and size without publishing those bytes. It
+also binds the minimized public-trial snapshot through the summary digest and exact
+release commit/tree. The earlier `public-v1` package remains immutable and is
+superseded, not rewritten.
 
 ## How to interpret this task beside `production-planning`
 

@@ -908,7 +908,7 @@ class ExogenousRegistryTests(unittest.TestCase):
             history_base_ref="0029d1f2412ee41c040b9a2364c2e78e69c0e81d",
         )
         self.assertTrue(release_report.ok, release_report.errors)
-        self.assertEqual(release_report.facts["release_count"], 13)
+        self.assertEqual(release_report.facts["release_count"], 14)
         for marker in (
             "## Public executed-topology amendments",
             "they do not rewrite the frozen STUDY or RUN registry",
@@ -932,7 +932,7 @@ class ExogenousRegistryTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("Method-transfer replication", release_protocol)
         invitation_words = " ".join(invitation.split())
-        self.assertIn("first authorized public release is now live", invitation_words)
+        self.assertIn("authorized public release is live", invitation_words)
         self.assertIn("six sanitized arm summaries", invitation_words)
         method_report, versions = registry.load_method_catalog(
             REPOSITORY_ROOT / "method-paper" / "VERSIONS.json"

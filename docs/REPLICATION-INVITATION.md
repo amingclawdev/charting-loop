@@ -159,11 +159,12 @@ access and the other works without Corridor access. The comparison tests whether
 converting the diagnostic theory into task-specific executable guidance changes
 observable task performance or recovery.
 
-The first authorized public release is now live. It publishes six current sanitized
-matched-arm summaries—Treatment and Control for each of CL-030, CL-031, and CL-032—
-plus a separate `ico-path-patch` job-009 engineering summary. The machine registry
-contains thirteen append-only rows: six historical arm records, six superseding
-matched-arm records, and the separate engineering record. The public index therefore
+The authorized public release is live. It publishes six current sanitized matched-arm
+summaries—Treatment and Control for each of CL-030, CL-031, and CL-032—plus a current
+`ico-path-patch` job-009 engineering summary with a frozen public-trial snapshot. The
+machine registry contains fourteen append-only rows: six historical arm records, six
+superseding matched-arm records, the original engineering record, and its superseding
+public-table-evidence release. The public index therefore
 covers two distinct tasks, but only `production-planning` has a matched comparison.
 In short, the current matched package has six sanitized arm summaries; the job-009
 engineering record is separate rather than a seventh causal-evidence arm.

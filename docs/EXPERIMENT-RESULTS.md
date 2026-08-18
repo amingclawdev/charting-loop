@@ -21,6 +21,12 @@ attempts on one task as new tasks.
   unresolved, and QA `not_assessed`, so this is not classified as a complete
   Method-conformance pass. It was not an independent reproduction, matched experiment,
   or accepted leaderboard submission.
+- Harbor's frozen public table for the exact task digest shows **59 completed trials
+  across 11 exact agent/model/reasoning configurations and 0 reward-1 passes before
+  job 009**. Including the [public 19/19 job](https://hub.harborframework.com/jobs/2e54f22b-69c3-4eef-b77c-02b28f183266),
+  the [minimized 60-row snapshot](../public/results/ico-path-patch/job-009/PUBLIC-TRIALS.json)
+  has 59 reward-0 rows and 1 reward-1 row. This is a bounded public-table observation,
+  not a claim about private runs, every model, rank, world-first status, or causality.
 
 The matched pattern remains a repeated descriptive result on one task. Adding a
 passing same-task recovery observation on a second task gives two-task engineering
@@ -30,7 +36,7 @@ benchmark-wide efficacy evidence, or a production-readiness claim.
 ## Publication and participation status
 
 **Current status: the public result and causal-evidence release is live.** A reader can
-inspect six current causal-evidence arm packages and one engineering-result package,
+inspect six current causal-evidence arm packages and one current engineering-result package,
 validate their exact Git and digest identities,
 follow the observable event chain, use the bounded AI review prompts, and follow the
 prospective replication protocol. A public project-level replication-report intake is
@@ -42,8 +48,8 @@ leaderboard acceptance.
 | Human explanation and result navigation | Ready | This index and the two task pages explain the design, attempts, scores, mechanism evidence, adjustments, and limitations. |
 | Post-hoc AI review | Ready | Complete evidence-bound prompts are available for the whole task and CL-030/031/032. They are not experiment input. |
 | Prospective replication instructions | Ready for a frozen pilot | The human invitation, operator runbook, and authoritative protocol define how to add distinct tasks without treating repetitions as new tasks. |
-| Current result artifacts | Six causal-evidence arm releases plus one engineering-result release | Treatment and Control for CL-030/031/032 each have an immutable `public-v2` branch. The separate `ico-path-patch` job-009 `public-v1` branch records an official pass with incomplete Method conformance and same-task adaptive provenance; it is not a causal-evidence arm release. |
-| Public release registry | Thirteen validated append-only rows | Six historical `public-v1` arm rows and six superseding `public-v2` arm rows remain immutable. The thirteenth row binds the job-009 engineering summary. Every row binds its branch to a commit, tree, manifest digest, typed identity, outcome, and sealed-source digests. |
+| Current result artifacts | Six causal-evidence arm releases plus one engineering-result release | Treatment and Control for CL-030/031/032 each have an immutable `public-v2` branch. The separate `ico-path-patch` job-009 `public-v2` branch records the official pass, incomplete Method conformance, same-task adaptive provenance, and frozen public-trial snapshot; it is not a causal-evidence arm release. |
+| Public release registry | Fourteen validated append-only rows | Six historical `public-v1` arm rows and six superseding `public-v2` arm rows remain immutable. The job-009 engineering `public-v1` row is preserved and its `public-v2` row adds the frozen public-table evidence. Every row binds its branch to a commit, tree, manifest digest, typed identity, outcome, and sealed-source digests. |
 | Public remote and project report intake | Open | The repository is public at [`amingclawdev/charting-loop`](https://github.com/amingclawdev/charting-loop). Participants can follow the [`replication quickstart`](REPLICATION-QUICKSTART.md) and file a public-safe [Corridor replication report](https://github.com/amingclawdev/charting-loop/issues/new?template=replication-report.md). This is not an official benchmark upload. |
 | Official benchmark leaderboard | No accepted project entry | The matched pairs are not a complete eligible run. The passing `ico-path-patch` job has not been accepted as a Harbor submission, so no rank or accepted submission is claimed. |
 
