@@ -90,7 +90,10 @@ def _remaining_seconds(deadline: float) -> int:
 
 
 def _builder_freeze_metrics(
-    freeze: dict[str, Any], *, elapsed_seconds: float
+    freeze: dict[str, Any],
+    *,
+    elapsed_seconds: float,
+    runtime_guide: dict[str, Any],
 ) -> dict[str, Any]:
     """Name a first-valid freeze only when all frozen readiness facts support it."""
 
@@ -109,6 +112,17 @@ def _builder_freeze_metrics(
         and freeze.get("definition_closure_status") == "complete"
         and freeze.get("construction_readiness_status") == "ready"
         and freeze.get("acceptance_ledger_errors") == []
+        and runtime_guide.get("available") is True
+        and runtime_guide.get("status") == "compiled"
+        and runtime_guide.get("work_validation_ok") is True
+        and runtime_guide.get("work_state") == "compiled"
+        and runtime_guide.get("capability_state") == "compiled"
+        and isinstance(runtime_guide.get("current_row_id"), str)
+        and bool(runtime_guide.get("current_row_id"))
+        and isinstance(runtime_guide.get("direction_digest"), str)
+        and bool(runtime_guide.get("direction_digest"))
+        and runtime_guide.get("advisory_only") is True
+        and runtime_guide.get("authorizes_mutation") is False
     )
     elapsed = round(elapsed_seconds, 3)
     return {
@@ -127,6 +141,13 @@ def _builder_freeze_metrics(
         "method_capsule_digest_matches_stored": bool(
             freeze.get("method_capsule_digest_matches_stored")
         ),
+        "work_backlog_status": runtime_guide.get("status", "invalid_or_missing"),
+        "work_validation_ok": runtime_guide.get("work_validation_ok") is True,
+        "capability_registry_status": runtime_guide.get(
+            "capability_state", "missing"
+        ),
+        "runtime_guide_available": runtime_guide.get("available") is True,
+        "runtime_guide_direction_digest": runtime_guide.get("direction_digest"),
     }
 
 
@@ -1365,6 +1386,7 @@ class ChartingLoopFullMethodAgent(Codex):
                 "error_type",
                 "already_captured",
                 "preserved_existing",
+                "existing_bytes_revalidated",
                 "builder_recovery_evidence",
             )
             if key in report
@@ -1513,13 +1535,8 @@ class ChartingLoopFullMethodAgent(Codex):
         digest = str(freeze["corridor_digest"])
         metadata["corridor_digest"] = digest
         builder_metrics = dict(builder_run.get("role_metrics", {}))
-        builder_metrics.update(
-            _builder_freeze_metrics(
-                freeze, elapsed_seconds=loop.time() - started_at
-            )
-        )
+        freeze_elapsed_seconds = loop.time() - started_at
         builder_metrics["frozen_corridor_digest"] = digest
-        metadata["builder_construction_metrics"] = builder_metrics
         metadata["builder_corridor_status"] = freeze.get("builder_corridor_status")
         metadata["method_capsule_status"] = freeze.get("method_capsule_status")
         metadata["method_capsule_errors"] = freeze.get(
@@ -1579,6 +1596,14 @@ class ChartingLoopFullMethodAgent(Codex):
         metadata["runtime_guide_projections"].append(
             {"phase": "worker", **worker_guide}
         )
+        builder_metrics.update(
+            _builder_freeze_metrics(
+                freeze,
+                elapsed_seconds=freeze_elapsed_seconds,
+                runtime_guide=worker_guide,
+            )
+        )
+        metadata["builder_construction_metrics"] = builder_metrics
 
         await self._verify_freeze(environment, expected_digest=digest)
         if _remaining_seconds(execution_deadline) > 0:

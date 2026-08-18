@@ -125,6 +125,56 @@ def private_custody_program(
         expected_digest = {expected_corridor_digest!r}
         target = agent_dir / "corridor-custody"
 
+        def digest(data):
+            return "sha256:" + hashlib.sha256(data).hexdigest()
+
+        def canonical(value):
+            return json.dumps(
+                value, sort_keys=True, separators=(",", ":"),
+                ensure_ascii=False, allow_nan=False,
+            ).encode("utf-8")
+
+        def corridor_identity(root):
+            if root.is_symlink() or not root.is_dir():
+                raise ValueError("archived Corridor must be a real directory")
+            records = []
+            for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
+                if path.is_symlink():
+                    raise ValueError(f"custody symlink is forbidden: {{path}}")
+                if path.is_dir():
+                    continue
+                if not path.is_file():
+                    raise ValueError(f"custody special file is forbidden: {{path}}")
+                data = path.read_bytes()
+                records.append({{
+                    "path": path.relative_to(root).as_posix(),
+                    "bytes": len(data),
+                    "sha256": digest(data),
+                    "executable": bool(stat.S_IMODE(path.stat().st_mode) & 0o111),
+                }})
+            if not records:
+                raise ValueError("archived Corridor is empty")
+            return records, digest(canonical(records))
+
+        def file_manifest(root):
+            if root.is_symlink() or not root.is_dir():
+                raise ValueError("custody target must be a real directory")
+            records = []
+            for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
+                if path.is_symlink():
+                    raise ValueError(f"custody symlink is forbidden: {{path}}")
+                if path.is_dir() or path.name == "custody-manifest.json":
+                    continue
+                if not path.is_file():
+                    raise ValueError(f"custody special file is forbidden: {{path}}")
+                data = path.read_bytes()
+                records.append({{
+                    "path": path.relative_to(root).as_posix(),
+                    "bytes": len(data),
+                    "sha256": digest(data),
+                }})
+            return records
+
         if target.exists() or target.is_symlink():
             try:
                 if target.is_symlink() or not target.is_dir():
@@ -134,14 +184,47 @@ def private_custody_program(
                 )
                 if not isinstance(existing, dict):
                     raise ValueError("existing private custody manifest is invalid")
-                existing["already_captured"] = True
-                existing["preserved_existing"] = True
+                corridor_files, copied_digest = corridor_identity(
+                    target / "frozen-corridor"
+                )
+                records = file_manifest(target)
+                expected_fields = {{
+                    "schema_version": "charting-loop/benchmark-private-custody/v1",
+                    "private": True,
+                    "public_release_allowed": False,
+                    "source_kind": "direct_runtime_capture",
+                    "custody_status": "direct",
+                    "direct_byte_match": True,
+                    "direct_download": True,
+                    "recovered": False,
+                    "expected_corridor_digest": expected_digest,
+                    "copied_corridor_digest": copied_digest,
+                    "corridor_files": corridor_files,
+                    "files": records,
+                    "tree_digest": digest(canonical(records)),
+                    "builder_recovery_evidence": "roles/builder",
+                }}
+                for key, value in expected_fields.items():
+                    if existing.get(key) != value:
+                        raise ValueError(f"existing custody mismatch: {{key}}")
+                if copied_digest != expected_digest:
+                    raise ValueError("existing custody Corridor digest mismatch")
+                for required_path in (
+                    target / "FREEZE.json",
+                    target / "POSITION.jsonl",
+                    target / "roles" / "builder",
+                    target / "submission-manifests",
+                ):
+                    if required_path.is_symlink() or not required_path.exists():
+                        raise ValueError(
+                            f"existing custody surface missing: {{required_path.name}}"
+                        )
                 print(json.dumps({{
-                    "ok": bool(
-                        existing.get("custody_status") == "direct"
-                        and existing.get("direct_byte_match") is True
-                    ),
+                    "ok": True,
                     **existing,
+                    "already_captured": True,
+                    "preserved_existing": True,
+                    "existing_bytes_revalidated": True,
                 }}, sort_keys=True))
             except Exception as exc:
                 print(json.dumps({{
@@ -156,21 +239,13 @@ def private_custody_program(
                     "recovered": False,
                     "expected_corridor_digest": expected_digest,
                     "error_type": type(exc).__name__,
+                    "existing_bytes_revalidated": False,
                     "preserved_existing": True,
                     "builder_recovery_evidence": "../phases/builder",
                 }}, sort_keys=True))
             raise SystemExit(0)
 
         staging = Path(tempfile.mkdtemp(prefix=".corridor-custody-", dir=agent_dir))
-
-        def digest(data):
-            return "sha256:" + hashlib.sha256(data).hexdigest()
-
-        def canonical(value):
-            return json.dumps(
-                value, sort_keys=True, separators=(",", ":"),
-                ensure_ascii=False, allow_nan=False,
-            ).encode("utf-8")
 
         def copy_regular_tree(source, destination, predicate=lambda path: True):
             if source.is_symlink() or not source.is_dir():
@@ -190,33 +265,6 @@ def private_custody_program(
                 output.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(path, output)
                 os.chmod(output, stat.S_IMODE(path.stat().st_mode) & 0o777)
-
-        def corridor_identity(root):
-            records = []
-            for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
-                if path.is_dir():
-                    continue
-                data = path.read_bytes()
-                records.append({{
-                    "path": path.relative_to(root).as_posix(),
-                    "bytes": len(data),
-                    "sha256": digest(data),
-                    "executable": bool(stat.S_IMODE(path.stat().st_mode) & 0o111),
-                }})
-            return records, digest(canonical(records))
-
-        def file_manifest(root):
-            records = []
-            for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
-                if path.is_dir() or path.name == "custody-manifest.json":
-                    continue
-                data = path.read_bytes()
-                records.append({{
-                    "path": path.relative_to(root).as_posix(),
-                    "bytes": len(data),
-                    "sha256": digest(data),
-                }})
-            return records
 
         try:
             copy_regular_tree(runtime_root / "corridor", staging / "frozen-corridor")

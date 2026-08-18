@@ -699,6 +699,35 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertTrue(repeated_report["ok"])
             self.assertTrue(repeated_report["already_captured"])
             self.assertTrue(repeated_report["preserved_existing"])
+            self.assertTrue(repeated_report["existing_bytes_revalidated"])
+            self.assertEqual(
+                preserved_manifest,
+                (custody / "custody-manifest.json").read_bytes(),
+            )
+            (custody / "frozen-corridor" / "tool.py").write_text(
+                "tampered\n", encoding="utf-8"
+            )
+            tampered_retry = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    contract.private_custody_program(
+                        agent_dir=str(agent_dir),
+                        expected_corridor_digest=digest,
+                        runtime_root=str(runtime_root),
+                        position_path=str(position),
+                        submission_root=str(submissions),
+                    ),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, tampered_retry.returncode, tampered_retry.stderr)
+            tampered_report = json.loads(tampered_retry.stdout)
+            self.assertFalse(tampered_report["ok"])
+            self.assertFalse(tampered_report["existing_bytes_revalidated"])
+            self.assertTrue(tampered_report["preserved_existing"])
             self.assertEqual(
                 preserved_manifest,
                 (custody / "custody-manifest.json").read_bytes(),
@@ -771,6 +800,43 @@ class FullMethodContractTests(unittest.TestCase):
                     .read_text(encoding="utf-8")
                 )
                 self.assertEqual(report["custody_status"], manifest["custody_status"])
+
+    def test_private_custody_rejects_forged_preexisting_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            agent_dir = root / "agent"
+            target = agent_dir / "corridor-custody"
+            target.mkdir(parents=True)
+            (target / "custody-manifest.json").write_text(
+                json.dumps({
+                    "custody_status": "direct",
+                    "direct_byte_match": True,
+                    "direct_download": True,
+                }),
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    contract.private_custody_program(
+                        agent_dir=str(agent_dir),
+                        expected_corridor_digest="sha256:" + "f" * 64,
+                        runtime_root=str(root / "runtime"),
+                        position_path=str(root / "POSITION.jsonl"),
+                        submission_root=str(root / "submissions"),
+                    ),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            report = json.loads(completed.stdout)
+            self.assertFalse(report["ok"])
+            self.assertEqual("capture_failed", report["custody_status"])
+            self.assertFalse(report["existing_bytes_revalidated"])
+            self.assertTrue(report["preserved_existing"])
 
     def test_role_metrics_separate_tool_and_inference_wall_time(self) -> None:
         adapter = load_harbor_agent_with_stubs()
@@ -887,8 +953,21 @@ class FullMethodContractTests(unittest.TestCase):
             "construction_readiness_status": "ready",
             "acceptance_ledger_errors": [],
         }
+        valid_runtime_guide = {
+            "available": True,
+            "status": "compiled",
+            "work_validation_ok": True,
+            "work_state": "compiled",
+            "capability_state": "compiled",
+            "current_row_id": "ROW-1",
+            "direction_digest": "sha256:" + "d" * 64,
+            "advisory_only": True,
+            "authorizes_mutation": False,
+        }
         valid_metrics = adapter._builder_freeze_metrics(
-            valid_freeze, elapsed_seconds=12.3456
+            valid_freeze,
+            elapsed_seconds=12.3456,
+            runtime_guide=valid_runtime_guide,
         )
         self.assertTrue(valid_metrics["first_valid_freeze_recorded"])
         self.assertEqual(12.346, valid_metrics["first_valid_freeze_elapsed_seconds"])
@@ -899,11 +978,35 @@ class FullMethodContractTests(unittest.TestCase):
         invalid_freeze = dict(valid_freeze)
         invalid_freeze["acceptance_ledger_status"] = "invalid"
         invalid_metrics = adapter._builder_freeze_metrics(
-            invalid_freeze, elapsed_seconds=9.0
+            invalid_freeze,
+            elapsed_seconds=9.0,
+            runtime_guide=valid_runtime_guide,
         )
         self.assertFalse(invalid_metrics["first_valid_freeze_recorded"])
         self.assertIsNone(invalid_metrics["first_valid_freeze_elapsed_seconds"])
         self.assertEqual(9.0, invalid_metrics["freeze_elapsed_seconds"])
+
+        invalid_runtime_guide = dict(valid_runtime_guide)
+        invalid_runtime_guide["status"] = "invalid_or_uncompiled"
+        invalid_runtime_guide["work_validation_ok"] = False
+        invalid_runtime_guide["capability_state"] = "missing"
+        runtime_invalid_metrics = adapter._builder_freeze_metrics(
+            valid_freeze,
+            elapsed_seconds=7.0,
+            runtime_guide=invalid_runtime_guide,
+        )
+        self.assertFalse(runtime_invalid_metrics["first_valid_freeze_recorded"])
+        self.assertIsNone(
+            runtime_invalid_metrics["first_valid_freeze_elapsed_seconds"]
+        )
+        self.assertEqual(
+            "invalid_or_uncompiled",
+            runtime_invalid_metrics["work_backlog_status"],
+        )
+        self.assertEqual(
+            "missing",
+            runtime_invalid_metrics["capability_registry_status"],
+        )
 
     def test_freezer_marks_a_tampered_method_capsule_invalid(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
