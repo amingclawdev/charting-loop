@@ -990,6 +990,111 @@ class PublicReleaseTests(unittest.TestCase):
         )
         self.assertEqual(unsafe_paths, [])
 
+    def test_builder_generalization_audit_is_bounded_and_content_addressed(self) -> None:
+        root = (
+            REPOSITORY_ROOT
+            / "exogenous"
+            / "results"
+            / "tb3-v8-builder-generalization-audit"
+        )
+        manifest = json.loads((root / "MANIFEST.json").read_text(encoding="utf-8"))
+        audit = json.loads((root / "AUDIT.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            manifest["schema_version"],
+            "charting-loop/builder-generalization-audit-manifest/v1",
+        )
+        self.assertEqual(
+            {item["path"] for item in manifest["files"]},
+            {"AUDIT.md", "AUDIT.json"},
+        )
+        for item in manifest["files"]:
+            data = (root / item["path"]).read_bytes()
+            self.assertEqual(item["bytes"], len(data))
+            self.assertEqual(
+                item["sha256"],
+                "sha256:" + hashlib.sha256(data).hexdigest(),
+            )
+
+        self.assertEqual(
+            audit["method_condition"]["disposition"],
+            "NO_METHOD_CHANGE_FROM_CURRENT_EVIDENCE",
+        )
+        self.assertEqual(
+            audit["custody"]["status"],
+            "local_git_immutable_but_not_off_host",
+        )
+        self.assertIsNone(audit["custody"]["off_host_replica"])
+        self.assertEqual(
+            {item["run_id"] for item in audit["source_observations"]},
+            {"heat-pump-warranty", "music-harmony", "bun-sourcemap-leak"},
+        )
+        self.assertEqual(
+            [item["candidate_id"] for item in audit["candidates"]],
+            [
+                "M-01",
+                "S-01",
+                "S-02",
+                "S-03",
+                "S-04",
+                "S-05",
+                "H-01",
+                "H-02",
+                "D-01",
+                "D-02",
+                "D-03",
+                "T-01",
+            ],
+        )
+        candidate_fields = {
+            "candidate_id",
+            "name",
+            "owner",
+            "source_runs",
+            "inputs",
+            "outputs",
+            "deterministic_replay",
+            "side_effects",
+            "failure_semantics",
+            "saving_estimate",
+            "counterevidence",
+            "falsifier",
+            "disposition",
+        }
+        for candidate in audit["candidates"]:
+            self.assertEqual(set(candidate), candidate_fields)
+            self.assertIsInstance(candidate["owner"], str)
+            self.assertTrue(candidate["owner"])
+            self.assertTrue(candidate["source_runs"])
+
+        nested = next(
+            item
+            for item in audit["diagnostics"]
+            if item["diagnostic_id"] == "DGN-NESTED-FREEZE-01"
+        )
+        self.assertEqual(nested["cli_result"], {"valid": False, "outcome": "not_assessed"})
+        self.assertEqual(
+            nested["direct_nested_identity_result"],
+            {"valid": True, "outcome": "pass", "errors": []},
+        )
+        self.assertFalse(nested["method_delta"])
+        self.assertFalse(nested["repair_included"])
+
+        public_bytes = "\n".join(
+            (root / name).read_text(encoding="utf-8")
+            for name in ("MANIFEST.json", "AUDIT.md", "AUDIT.json")
+        )
+        self.assertNotRegex(public_bytes, r"/(?:Users|home)/[^/\s]+/")
+        for forbidden in (
+            "/private/tmp",
+            "rtok-",
+            "subscription_token",
+            "session_token",
+            "Bearer ",
+            "__PP",
+        ):
+            self.assertNotIn(forbidden, public_bytes)
+
     def test_checked_in_registry_and_public_v2_evidence_packages_are_bound(self) -> None:
         path = REPOSITORY_ROOT / "exogenous" / "registry" / "PUBLIC-RELEASES.json"
         report = public_release.validate_registry(

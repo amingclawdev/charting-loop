@@ -1,0 +1,60 @@
+{
+  "schema_version": "charting-loop/builder-generalization-audit-manifest/v1",
+  "package_id": "tb3-v8-builder-generalization-audit",
+  "backlog_id": "CL-092-BUILDER-CORRIDOR-GENERALIZATION-AUDIT",
+  "created_date": "2026-08-20",
+  "analysis_base_commit": "b4a0f3bf0aed6ba87fc9b85c3df61d17b59470bb",
+  "method_identity": {
+    "version_id": "charting-loop-method-v8",
+    "source_commit": "3c3813444a7d43d0a56837e9cb960be86ce26d06",
+    "method_sha256": "sha256:85b5a7a8700312ec1e35b80df6e224221d44a48904247a8d6d32cfe940459446"
+  },
+  "files": [
+    {
+      "path": "AUDIT.md",
+      "bytes": 11187,
+      "sha256": "sha256:4cdabc25759a91fd46fc5ac22c13b0b2346d3031779b00960681833801384be5",
+      "purpose": "human-readable bounded audit"
+    },
+    {
+      "path": "AUDIT.json",
+      "bytes": 23005,
+      "sha256": "sha256:4135e26051bd9d25b39179387f91f975a792a9a5980cb9e2bb409dba8d5580fa",
+      "purpose": "machine-readable observations, classifications, ownership, and falsifiers"
+    }
+  ],
+  "custody": {
+    "status": "local_git_immutable_but_not_off_host",
+    "custody_commit": "ffc08ea3e4903512fc3a95f5d6b4f1941940def1",
+    "custody_tree": "94cd73d80c1987d092e9bb2875dd8727297875a6",
+    "custody_path_count": 246,
+    "audit_draft_commit": "21ba85874b14fa817ebec66c0b62e4a1e9eee6e6",
+    "audit_draft_tree": "b9087c0a209d35cc00a8983cc55c923572e63d68",
+    "audit_draft_path_count": 247,
+    "off_host_replica": null
+  },
+  "public_boundary": {
+    "contains_raw_role_transcripts": false,
+    "contains_task_solution_bytes": false,
+    "contains_hidden_evaluator_feedback": false,
+    "contains_generated_submission_bytes": false,
+    "contains_credentials_or_subscription_material": false,
+    "contains_private_host_paths": false,
+    "contains_aggregate_timing_and_token_telemetry": true,
+    "contains_public_task_labels": true
+  },
+  "governance_provenance": {
+    "route_schema": "onboard_contract.operator_supervised_direct_main.full_round_route_issue.v1",
+    "graph_trace_id": "gqt-20260820-6950a17f9b",
+    "pre_mutation_exception_event_id": 762,
+    "source_audit_digest": "sha256:26abc28b046e0dd4c66f5186b8af5f0cb89f7320a05ea9b546fb410216dd4576"
+  },
+  "closure": {
+    "analysis_complete": true,
+    "method_change_authorized": false,
+    "implementation_included": false,
+    "benchmark_run_included": false,
+    "off_host_custody_complete": false,
+    "independent_qa_complete": false
+  }
+}

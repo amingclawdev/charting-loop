@@ -1,0 +1,478 @@
+{
+  "schema_version": "charting-loop/builder-generalization-audit/v1",
+  "audit_id": "tb3-v8-builder-generalization-audit",
+  "backlog_id": "CL-092-BUILDER-CORRIDOR-GENERALIZATION-AUDIT",
+  "date": "2026-08-20",
+  "status": "analysis_complete_custody_off_host_pending",
+  "method_condition": {
+    "version_id": "charting-loop-method-v8",
+    "source_commit": "3c3813444a7d43d0a56837e9cb960be86ce26d06",
+    "method_sha256": "sha256:85b5a7a8700312ec1e35b80df6e224221d44a48904247a8d6d32cfe940459446",
+    "disposition": "NO_METHOD_CHANGE_FROM_CURRENT_EVIDENCE"
+  },
+  "scope": {
+    "audit_only": true,
+    "benchmark_run_performed": false,
+    "method_mutated": false,
+    "sdk_mutated": false,
+    "agent_or_harness_mutated": false,
+    "task_solution_bytes_published": false,
+    "raw_transcripts_published": false,
+    "causal_claim": false,
+    "prospective_validation": false
+  },
+  "custody": {
+    "status": "local_git_immutable_but_not_off_host",
+    "custody_commit": "ffc08ea3e4903512fc3a95f5d6b4f1941940def1",
+    "custody_tree": "94cd73d80c1987d092e9bb2875dd8727297875a6",
+    "custody_path_count": 246,
+    "audit_draft_commit": "21ba85874b14fa817ebec66c0b62e4a1e9eee6e6",
+    "audit_draft_tree": "b9087c0a209d35cc00a8983cc55c923572e63d68",
+    "audit_draft_path_count": 247,
+    "off_host_replica": null,
+    "closure_blocker": "No access-controlled remote or durable off-host object identity is recorded.",
+    "retained_categories": [
+      "preregistration_and_deviations",
+      "cohort_summaries",
+      "builder_worker_qa_artifacts",
+      "frozen_corridors",
+      "position_freeze_and_submission_records",
+      "timing_and_results",
+      "verifier_results"
+    ],
+    "recorded_exclusions": [
+      "interpreter_caches",
+      "compiled_bytecode",
+      "task_workspace_and_output_bytes",
+      "redundant_job_level_wrappers"
+    ]
+  },
+  "source_observations": [
+    {
+      "run_id": "heat-pump-warranty",
+      "task_clock_seconds": 7200,
+      "builder_phase_seconds": 2093.872,
+      "first_source_edit_seconds_approx": 663,
+      "first_acceptance_validation_seconds_approx": 668,
+      "first_operational_adapter_replay_seconds_approx": 1853,
+      "first_task_ready_freeze_seconds": 2107.517,
+      "freeze_disposition": "task_ready",
+      "command_groups": 64,
+      "sdk_source_inspection_command_groups": 11,
+      "validator_command_groups": 9,
+      "frozen_file_count": 13,
+      "frozen_bytes": 658931,
+      "adapter_bytes": 79104,
+      "acceptance_item_count": 239,
+      "acceptance_bytes": 393285,
+      "builder_tokens": {
+        "input": 7172242,
+        "cached_input": 6913280,
+        "output": 99627
+      },
+      "cost": null
+    },
+    {
+      "run_id": "music-harmony",
+      "task_clock_seconds": 7200,
+      "builder_phase_seconds": 1463.095,
+      "first_source_edit_seconds_approx": 494,
+      "first_acceptance_validation_seconds_approx": 631,
+      "first_operational_adapter_replay_seconds_approx": 1008,
+      "first_task_ready_freeze_seconds": null,
+      "freeze_recorded_seconds": 1463.558,
+      "freeze_disposition": "unresolved",
+      "command_groups": 32,
+      "sdk_source_inspection_command_groups": 5,
+      "validator_command_groups": 5,
+      "frozen_file_count": 12,
+      "frozen_bytes": 100456,
+      "adapter_bytes": 58282,
+      "acceptance_item_count": null,
+      "acceptance_bytes": null,
+      "builder_tokens": {
+        "input": 3771321,
+        "cached_input": 3619584,
+        "output": 67243
+      },
+      "cost": null
+    },
+    {
+      "run_id": "bun-sourcemap-leak",
+      "task_clock_seconds": 1800,
+      "builder_phase_seconds": 1772.116,
+      "builder_termination": "task_deadline_reached",
+      "first_source_edit_seconds_approx": 514,
+      "first_acceptance_validation_seconds_approx": 763,
+      "first_operational_adapter_replay_seconds_approx": 1304,
+      "first_task_ready_freeze_seconds": 1773.85,
+      "freeze_disposition": "task_ready",
+      "command_groups": 19,
+      "sdk_source_inspection_command_groups": 2,
+      "validator_command_groups": 3,
+      "frozen_file_count": 12,
+      "frozen_bytes": 119511,
+      "adapter_bytes": 43447,
+      "acceptance_item_count": null,
+      "acceptance_bytes": null,
+      "builder_tokens": {
+        "input": 2701030,
+        "cached_input": 2555392,
+        "output": 80062
+      },
+      "cost": null
+    }
+  ],
+  "cross_domain_structure": {
+    "byte_identical_files_across_all_corridors": [
+      "METHOD-CAPSULE.json"
+    ],
+    "common_adapter_functions": [
+      "main"
+    ],
+    "pairwise_function_name_jaccard_range": {
+      "minimum": 0.013,
+      "maximum": 0.076
+    },
+    "whole_adapter_promotion_supported": false
+  },
+  "diagnostics": [
+    {
+      "diagnostic_id": "DGN-EXACT-REUSE-01",
+      "kind": "same_task_exact_corridor_reuse",
+      "source_run": "bun-sourcemap-leak",
+      "original_first_task_ready_freeze_seconds": 1773.85,
+      "reuse_first_task_ready_freeze_seconds": 0.594,
+      "observed_verifier_checks": "33/36",
+      "classification": "contaminated_path_and_timing_diagnostic_only",
+      "limitations": [
+        "same_task_artifact",
+        "prior_verifier_feedback_existed",
+        "private_runner",
+        "no_fresh_control",
+        "task_not_passed"
+      ],
+      "may_support": [
+        "execution_path_diagnosis",
+        "upper_bound_timing_hypothesis",
+        "future_falsifier_design"
+      ],
+      "may_not_support": [
+        "task_pass",
+        "causal_effect",
+        "efficacy_estimate",
+        "prospective_validation"
+      ]
+    },
+    {
+      "diagnostic_id": "DGN-NESTED-FREEZE-01",
+      "kind": "qa_freeze_identity_conformance",
+      "source_run": "bun-sourcemap-leak-reuse",
+      "same_assessment_bytes": true,
+      "same_freeze_bytes": true,
+      "freeze_has_nested_acceptance_ledger": true,
+      "freeze_has_required_flat_acceptance_fields": false,
+      "cli_result": {
+        "valid": false,
+        "outcome": "not_assessed"
+      },
+      "direct_nested_identity_result": {
+        "valid": true,
+        "outcome": "pass",
+        "errors": []
+      },
+      "root_cause": "The SDK runtime QA CLI resolves frozen acceptance identity from absent top-level fields instead of the nested acceptance_ledger object.",
+      "owner": "SDK Core",
+      "component": "SDK runtime CLI field resolver",
+      "normative_parser_owner": "corridor_kit.acceptance::load_qa_json_text",
+      "method_delta": false,
+      "repair_included": false
+    }
+  ],
+  "candidates": [
+    {
+      "candidate_id": "M-01",
+      "name": "construction-profile liveness boundary",
+      "owner": "Method invariant",
+      "source_runs": ["heat-pump-warranty", "music-harmony", "bun-sourcemap-leak"],
+      "inputs": ["total task deadline", "frozen identities", "latest artifact state", "readiness state"],
+      "outputs": ["typed liveness classification", "preserved official-deliverable path"],
+      "deterministic_replay": "The same deadline, artifact, and readiness history yields the same liveness classification.",
+      "side_effects": "none",
+      "failure_semantics": "Keep unresolved or invalid construction visible without suppressing the best legal deliverable or official scoring.",
+      "saving_estimate": null,
+      "counterevidence": "Method v8 already substantially states this non-gating boundary.",
+      "falsifier": "No distinct normative or observable delta can be stated relative to v8.",
+      "disposition": "already_present_no_version_bump"
+    },
+    {
+      "candidate_id": "S-01",
+      "name": "machine-readable Corridor authoring contract",
+      "owner": "SDK Core",
+      "source_runs": ["heat-pump-warranty", "music-harmony", "bun-sourcemap-leak"],
+      "inputs": ["frozen Method capsule", "public task-source inventory"],
+      "outputs": ["versioned schemas", "declarative examples", "field contracts", "single scaffold entrypoint"],
+      "deterministic_replay": "The same SDK version and capsule produce byte-identical starter bytes and schema description.",
+      "side_effects": "Writes only the requested new authoring directory.",
+      "failure_semantics": "Return uncompiled or a typed schema error; never imply task readiness.",
+      "saving_estimate": "Observed 494-663 second pre-edit interval is an upper bound only because task reading is included.",
+      "counterevidence": "A starter and CLI help already exist; discovery or prompting may be the actual gap.",
+      "falsifier": "Fresh tasks show no reduction in SDK-source reads or time to first meaningful edit under a frozen comparison.",
+      "disposition": "retain_for_prospective_measurement"
+    },
+    {
+      "candidate_id": "S-02",
+      "name": "validate-all and identity-join report",
+      "owner": "SDK Core",
+      "source_runs": ["heat-pump-warranty", "music-harmony", "bun-sourcemap-leak"],
+      "inputs": ["Corridor directory", "pinned Method and capsule identities"],
+      "outputs": ["canonical validation report", "typed unresolved remainder", "identity joins"],
+      "deterministic_replay": "Identical bytes and expected identities produce identical canonical JSON.",
+      "side_effects": "none",
+      "failure_semantics": "Typed errors remain non-gating for external task execution and scoring.",
+      "saving_estimate": "May replace 3-9 validator command groups; no wall-time estimate is supported.",
+      "counterevidence": "Separate validators may be intentional and more actionable.",
+      "falsifier": "The aggregate report hides errors, diverges from component semantics, or does not reduce commands and rework.",
+      "disposition": "retain_for_prospective_measurement"
+    },
+    {
+      "candidate_id": "S-03",
+      "name": "bounded coupled-witness envelope",
+      "owner": "SDK Core",
+      "source_runs": ["heat-pump-warranty", "music-harmony", "bun-sourcemap-leak"],
+      "inputs": ["Rule refs", "base Position and Direction identities", "explicit substitutions", "domain observations"],
+      "outputs": ["hypothetical joint-witness envelope", "candidate outcome", "unresolved remainder"],
+      "deterministic_replay": "The same canonical inputs and domain observations produce the same envelope; the SDK does not invent domain truth.",
+      "side_effects": "none",
+      "failure_semantics": "Unknown or unresolved with witness; never authority, PASS, or task mutation.",
+      "saving_estimate": "Not estimable; only schema and join reuse is hypothesized.",
+      "counterevidence": "Witness-generation algorithms showed negligible cross-domain code overlap.",
+      "falsifier": "The envelope requires task-specific semantics or falsely treats finite witnesses as universal proof.",
+      "disposition": "retain_with_negative_outcome_support"
+    },
+    {
+      "candidate_id": "S-04",
+      "name": "single QA semantic owner",
+      "owner": "SDK Core",
+      "source_runs": ["heat-pump-warranty", "music-harmony"],
+      "inputs": ["exact QA bytes", "frozen Rule, Acceptance, and freeze identities"],
+      "outputs": ["canonical parse", "identity join", "decision normalization"],
+      "deterministic_replay": "Identical bytes and identities have identical meaning at producer, CLI, and harness intake.",
+      "side_effects": "none",
+      "failure_semantics": "not_assessed with typed witness; external scoring continues.",
+      "saving_estimate": "No Builder-time claim; avoids divergent repair and diagnosis.",
+      "counterevidence": "The normative parser is already single-owned by corridor_kit.acceptance::load_qa_json_text.",
+      "falsifier": "An intake surface independently parses normative QA bytes or assigns different meaning to identical joined inputs.",
+      "disposition": "already_implemented_regression_only"
+    },
+    {
+      "candidate_id": "S-05",
+      "name": "nested freeze identity resolver",
+      "owner": "SDK Core",
+      "source_runs": ["bun-sourcemap-leak-reuse"],
+      "inputs": ["exact QA bytes", "frozen FREEZE bytes"],
+      "outputs": ["one canonical acceptance identity view for CLI and harness"],
+      "deterministic_replay": "Identical assessment and freeze bytes produce identical validation decisions across intake surfaces.",
+      "side_effects": "none",
+      "failure_semantics": "Malformed or missing identity returns not_assessed with typed errors and never blocks official scoring.",
+      "saving_estimate": "No time saving claimed; this is semantic conformance.",
+      "counterevidence": "Only one retained occurrence has been replayed.",
+      "falsifier": "After repair, a nested, flat, malformed, or legacy freeze is interpreted differently by CLI and harness under the declared compatibility contract.",
+      "disposition": "reproduced_narrow_repair_candidate"
+    },
+    {
+      "candidate_id": "H-01",
+      "name": "latest structurally-valid Builder handoff",
+      "owner": "Agent/Harness",
+      "source_runs": ["heat-pump-warranty", "music-harmony", "bun-sourcemap-leak"],
+      "inputs": ["total deadline", "append-only Builder snapshots", "schema validity", "task readiness", "official deliverability"],
+      "outputs": ["latest snapshot identity", "structurally_valid", "task_ready", "officially_deliverable", "termination reason"],
+      "deterministic_replay": "The same event history selects the same latest structurally-valid artifact while preserving separate readiness and deliverability states.",
+      "side_effects": "Append-only snapshots and telemetry plus runner-owned restore.",
+      "failure_semantics": "Report absence of a structurally-valid snapshot and continue with the best legal official deliverable; never manufacture PASS.",
+      "saving_estimate": "The 0.594 versus 1773.850 second same-artifact replay is a contaminated upper-bound diagnostic only.",
+      "counterevidence": "An unresolved artifact may be structurally valid, so one latest-valid bit is ambiguous.",
+      "falsifier": "Fresh tasks still lose Worker time or early handoffs increase invalidity without improving the declared mechanism.",
+      "disposition": "retain_for_prospective_measurement"
+    },
+    {
+      "candidate_id": "H-02",
+      "name": "automatic construction telemetry",
+      "owner": "Agent/Harness",
+      "source_runs": ["heat-pump-warranty", "music-harmony", "bun-sourcemap-leak"],
+      "inputs": ["role events", "commands", "file tree", "snapshots", "freeze events", "deadline"],
+      "outputs": ["stage times", "command counts", "bytes and files", "token counts or missing markers", "revisions", "remaining time"],
+      "deterministic_replay": "The same event stream produces the same canonical report.",
+      "side_effects": "Append-only provenance-bound audit evidence.",
+      "failure_semantics": "Missing telemetry stays explicit and is never replaced with an invented zero.",
+      "saving_estimate": "Audit reconstruction time only; no task-efficacy claim.",
+      "counterevidence": "Most raw data already exists, so this may be only a reporting adapter.",
+      "falsifier": "The summary cannot be joined to source event IDs and digests.",
+      "disposition": "retain_for_prospective_measurement"
+    },
+    {
+      "candidate_id": "D-01",
+      "name": "release, provenance, and source-map audit primitives",
+      "owner": "Domain capability",
+      "source_runs": ["bun-sourcemap-leak"],
+      "inputs": ["source tree", "release command", "visibility and provenance policy", "isolated scratch"],
+      "outputs": ["release inventory", "source-map facts", "manifest facts", "leak scan", "variant results"],
+      "deterministic_replay": "Pinned tree, toolchain, and policy yield a canonical report.",
+      "side_effects": "Scratch-only build and reports.",
+      "failure_semantics": "Typed finding or unresolved result; root input remains unchanged.",
+      "saving_estimate": "No cross-task estimate is justified from one observation.",
+      "counterevidence": "Only one task and domain; later verifier feedback existed.",
+      "falsifier": "A second unseen release task requires embedded task IDs, private indicators, expected failures, or fixtures.",
+      "disposition": "retain_single_domain_only"
+    },
+    {
+      "candidate_id": "D-02",
+      "name": "public record and document evidence survey",
+      "owner": "Domain capability",
+      "source_runs": ["heat-pump-warranty"],
+      "inputs": ["public endpoint catalog", "source-precedence rules", "document references"],
+      "outputs": ["read-only inventory", "source digests", "precedence and evidence graph"],
+      "deterministic_replay": "A pinned public world snapshot yields canonical facts.",
+      "side_effects": "Scratch and cache only; no portal mutation.",
+      "failure_semantics": "Unavailable or ambiguous source with provenance.",
+      "saving_estimate": "Not estimable from one domain observation.",
+      "counterevidence": "Most of the large adapter was task-specific.",
+      "falsifier": "A second record or document task requires warranty-specific policy or endpoint assumptions.",
+      "disposition": "retain_single_domain_only"
+    },
+    {
+      "candidate_id": "D-03",
+      "name": "MusicXML structural inspection",
+      "owner": "Domain capability",
+      "source_runs": ["music-harmony"],
+      "inputs": ["MusicXML or MXL bytes", "explicit musical Rule parameters"],
+      "outputs": ["canonical score inventory", "source-grounded observations"],
+      "deterministic_replay": "Pinned bytes and parser version yield a canonical report.",
+      "side_effects": "none or scratch-only fixtures",
+      "failure_semantics": "Unsupported or ambiguous musical semantics remain unresolved.",
+      "saving_estimate": "Not estimable from one domain observation.",
+      "counterevidence": "The observed adapter encoded task-specific harmonic judgments.",
+      "falsifier": "Parser and structural mechanics fail on a second unseen task without task-specific semantic additions.",
+      "disposition": "retain_single_domain_only"
+    },
+    {
+      "candidate_id": "T-01",
+      "name": "task Rule and Acceptance compilation plus operation algorithms",
+      "owner": "Task adapter",
+      "source_runs": ["heat-pump-warranty", "music-harmony", "bun-sourcemap-leak"],
+      "inputs": ["exact public task sources", "task-specific normative statements", "task world"],
+      "outputs": ["task Rule map", "Acceptance ledger", "task operation algorithms"],
+      "deterministic_replay": "Specified separately by each frozen task adapter.",
+      "side_effects": "Specified separately by each frozen task adapter.",
+      "failure_semantics": "Specified separately while preserving unresolved requirements.",
+      "saving_estimate": null,
+      "counterevidence": "Function overlap across adapters is negligible.",
+      "falsifier": "Any proposed promotion embeds task IDs, answers, fixed offsets, fixtures, or evaluator-specific expectations.",
+      "disposition": "keep_task_specific"
+    }
+  ],
+  "rejected": [
+    {
+      "candidate_id": "R-01",
+      "owner": "Rejected/contaminated",
+      "description": "Exact same-task Bun Corridor reuse and its 33/36 result.",
+      "allowed_use": ["custody", "path diagnosis", "timing diagnosis", "falsifier design"],
+      "prohibited_use": ["task pass", "causal effect", "efficacy estimate", "prospective validation"]
+    },
+    {
+      "candidate_id": "R-02",
+      "owner": "Rejected/contaminated",
+      "description": "Task answers, hidden-evaluator failure identities, fixed offsets, private indicators, generated submissions, and task fixtures.",
+      "allowed_use": ["sealed custody", "failure-boundary design"],
+      "prohibited_use": ["Method Core", "SDK Core", "public result bytes"]
+    }
+  ],
+  "v8_delta_audit": [
+    {
+      "claim": "Builder-compiled Rule closure derives authority only from pinned source refs, authorized precedence, stable identity, and preserved conflicts.",
+      "v8_status": "possible_clarification_not_established",
+      "owner": "Method disposition",
+      "next_step": "Evaluate prospectively in CL-093, first as conformance and validator semantics."
+    },
+    {
+      "claim": "Any canonical joined Position input change creates a new PositionRef.",
+      "v8_status": "already_present",
+      "owner": "Method invariant",
+      "next_step": "no_method_delta"
+    },
+    {
+      "claim": "Effective Direction is projected at the content-addressed Position.",
+      "v8_status": "already_present",
+      "owner": "Method invariant",
+      "next_step": "no_method_delta"
+    },
+    {
+      "claim": "Counterfactual transition is hypothetical and read-only.",
+      "v8_status": "already_present",
+      "owner": "Method invariant",
+      "next_step": "no_method_delta"
+    },
+    {
+      "claim": "Construction invalidity is visible but cannot gate external grading.",
+      "v8_status": "already_present",
+      "owner": "Agent/Harness",
+      "next_step": "conformance_only"
+    },
+    {
+      "claim": "Coupled witnesses support success, denial, hold, and refusal.",
+      "v8_status": "implementation_envelope",
+      "owner": "SDK Core",
+      "next_step": "prospective_falsification"
+    },
+    {
+      "claim": "Handoff distinguishes structurally_valid, task_ready, and officially_deliverable.",
+      "v8_status": "runtime_handoff_semantics",
+      "owner": "Agent/Harness",
+      "next_step": "prospective_falsification"
+    },
+    {
+      "claim": "QA parsing and decision semantics have one owner.",
+      "v8_status": "already_implemented",
+      "owner": "SDK Core",
+      "next_step": "regression_only"
+    },
+    {
+      "claim": "Frozen acceptance identity is resolved consistently from nested FREEZE bytes.",
+      "v8_status": "implementation_defect",
+      "owner": "SDK Core",
+      "next_step": "narrow_cli_conformance_repair"
+    }
+  ],
+  "successor_disposition": {
+    "superseded_row": "CL-091",
+    "clean_successor_row": "CL-093-RULE-POSITION-CONFORMANCE-AND-METHOD-V9-DISPOSITION",
+    "instruction": "Use this audit as evidence input. Do not use superseded CL-091 as implementation authority.",
+    "method_disposition_now": "NO_METHOD_CHANGE_FROM_CURRENT_EVIDENCE"
+  },
+  "positive_references_not_inference_sources": [
+    "production-planning",
+    "ico-path-patch"
+  ],
+  "claim_boundary": {
+    "supported": [
+      "substantial task-clock consumption during Corridor construction and validation in three observations",
+      "low whole-adapter structural overlap",
+      "plausible narrower authoring, validation, handoff, and telemetry targets",
+      "reproducible nested freeze identity conformance defect",
+      "no Method-v9 conclusion from current evidence"
+    ],
+    "not_supported": [
+      "benchmark improvement",
+      "multi-domain efficacy",
+      "generalization",
+      "leaderboard rank",
+      "causal effect",
+      "prospective validation"
+    ]
+  },
+  "governance_provenance": {
+    "pre_mutation_exception_event_id": 762,
+    "graph_trace_id": "gqt-20260820-6950a17f9b",
+    "source_audit_digest": "sha256:26abc28b046e0dd4c66f5186b8af5f0cb89f7320a05ea9b546fb410216dd4576"
+  }
+}
