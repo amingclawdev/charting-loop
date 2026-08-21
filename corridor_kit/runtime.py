@@ -814,6 +814,70 @@ def load_runtime_guide(
     )
 
 
+def _invalid_qa_path_report(raw: bytes, error: str) -> dict[str, Any]:
+    return {
+        "schema_version": "charting-loop/qa-assessment-decision/v1",
+        "valid": False,
+        "errors": [error],
+        "reported_outcome": None,
+        "outcome": "not_assessed",
+        "repair_required": False,
+        "raw_preserved": True,
+        "raw_sha256": sha256_bytes(raw),
+        "advisory_only": True,
+        "blocking_gate": False,
+        "authorizes_mutation": False,
+    }
+
+
+def _canonical_freeze_qa_identity(value: Any) -> dict[str, Any] | None:
+    """Read the seven QA identity inputs from the canonical frozen schema."""
+
+    if not isinstance(value, dict):
+        return None
+    if value.get("schema_version") != "charting-loop/frozen-task-corridor/v1":
+        return None
+    ledger = value.get("acceptance_ledger")
+    if not isinstance(ledger, dict):
+        return None
+
+    digest = value.get("corridor_tree_sha256")
+    status = ledger.get("status")
+    acceptance_ids = ledger.get("acceptance_ids")
+    required_ids = ledger.get("required_acceptance_ids")
+    source_mapping = ledger.get("source_mapping_status")
+    definition_closure = ledger.get("definition_closure_status")
+    construction_readiness = ledger.get("construction_readiness_status")
+    if not isinstance(digest, str) or not digest.strip():
+        return None
+    if not isinstance(status, str) or not status.strip():
+        return None
+    if not isinstance(acceptance_ids, list) or any(
+        not isinstance(item, str) or not item.strip() for item in acceptance_ids
+    ):
+        return None
+    if not isinstance(required_ids, list) or any(
+        not isinstance(item, str) or not item.strip() for item in required_ids
+    ):
+        return None
+    if not isinstance(source_mapping, str) or not source_mapping.strip():
+        return None
+    if not isinstance(definition_closure, str) or not definition_closure.strip():
+        return None
+    if not isinstance(construction_readiness, str) or not construction_readiness.strip():
+        return None
+
+    return {
+        "expected_corridor_digest": digest,
+        "acceptance_ledger_status": status,
+        "expected_acceptance_ids": acceptance_ids,
+        "required_acceptance_ids": required_ids,
+        "source_mapping_status": source_mapping,
+        "definition_closure_status": definition_closure,
+        "construction_readiness_status": construction_readiness,
+    }
+
+
 def validate_qa_assessment_path(
     assessment_path: Path, freeze_path: Path
 ) -> dict[str, Any]:
@@ -824,39 +888,14 @@ def validate_qa_assessment_path(
     try:
         value = load_qa_json_text(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
-        return {
-            "schema_version": "charting-loop/qa-assessment-decision/v1",
-            "valid": False,
-            "errors": ["ASSESSMENT_JSON"],
-            "reported_outcome": None,
-            "outcome": "not_assessed",
-            "repair_required": False,
-            "raw_preserved": True,
-            "raw_sha256": sha256_bytes(raw),
-            "advisory_only": True,
-            "blocking_gate": False,
-            "authorizes_mutation": False,
-        }
-    freeze = load_json(Path(freeze_path))
-    report = qa_assessment_decision(
-        value,
-        expected_corridor_digest=str(freeze.get("corridor_digest", "")),
-        acceptance_ledger_status=str(
-            freeze.get("acceptance_ledger_status", "missing")
-        ),
-        expected_acceptance_ids=[
-            str(item) for item in freeze.get("acceptance_ids", [])
-        ],
-        required_acceptance_ids=[
-            str(item) for item in freeze.get("required_acceptance_ids", [])
-        ],
-        source_mapping_status=str(freeze.get("source_mapping_status", "unknown")),
-        definition_closure_status=str(
-            freeze.get("definition_closure_status", "unknown")
-        ),
-        construction_readiness_status=str(
-            freeze.get("construction_readiness_status", "unknown")
-        ),
-    )
+        return _invalid_qa_path_report(raw, "ASSESSMENT_JSON")
+    try:
+        freeze = load_json(Path(freeze_path))
+    except CorridorKitError:
+        return _invalid_qa_path_report(raw, "FREEZE_IDENTITY")
+    identity = _canonical_freeze_qa_identity(freeze)
+    if identity is None:
+        return _invalid_qa_path_report(raw, "FREEZE_IDENTITY")
+    report = qa_assessment_decision(value, **identity)
     report["raw_sha256"] = sha256_bytes(raw)
     return report

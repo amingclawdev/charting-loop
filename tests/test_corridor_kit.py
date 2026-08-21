@@ -423,6 +423,21 @@ class QaAssessmentSemanticTests(unittest.TestCase):
             "construction_readiness_status": "ready",
         }
 
+    @staticmethod
+    def freeze(digest: str) -> dict[str, object]:
+        return {
+            "schema_version": "charting-loop/frozen-task-corridor/v1",
+            "corridor_tree_sha256": digest,
+            "acceptance_ledger": {
+                "status": "complete",
+                "acceptance_ids": ["ACCEPT-1"],
+                "required_acceptance_ids": ["ACCEPT-1"],
+                "source_mapping_status": "complete",
+                "definition_closure_status": "complete",
+                "construction_readiness_status": "ready",
+            },
+        }
+
     def test_contradiction_normalizes_to_not_assessed_and_partial_scope_is_explicit(self) -> None:
         digest = "sha256:" + "d" * 64
         contradictory = self.assessment(digest, outcome="not_assessed")
@@ -454,21 +469,65 @@ class QaAssessmentSemanticTests(unittest.TestCase):
                 json.dumps(self.assessment(digest)), encoding="utf-8"
             )
             before = assessment_path.read_bytes()
-            freeze_path.write_text(json.dumps({
-                "corridor_digest": digest,
-                "acceptance_ledger_status": "complete",
-                "acceptance_ids": ["ACCEPT-1"],
-                "required_acceptance_ids": ["ACCEPT-1"],
-                "source_mapping_status": "complete",
-                "definition_closure_status": "complete",
-                "construction_readiness_status": "ready",
-            }), encoding="utf-8")
+            freeze_path.write_text(
+                json.dumps(self.freeze(digest)), encoding="utf-8"
+            )
 
             report = validate_qa_assessment_path(assessment_path, freeze_path)
+            direct = qa_assessment_decision(
+                self.assessment(digest), **self.expected(digest)
+            )
             self.assertTrue(report["valid"], report["errors"])
+            self.assertEqual(direct["valid"], report["valid"])
+            self.assertEqual(direct["outcome"], report["outcome"])
+            self.assertEqual(direct["errors"], report["errors"])
             self.assertTrue(report["raw_preserved"])
             self.assertEqual(before, assessment_path.read_bytes())
             self.assertRegex(report["raw_sha256"], r"^sha256:[0-9a-f]{64}$")
+
+    def test_presubmit_rejects_noncanonical_freeze_identity(self) -> None:
+        digest = "sha256:" + "e" * 64
+        flat_only = {
+            "corridor_digest": digest,
+            "acceptance_ledger_status": "complete",
+            "acceptance_ids": ["ACCEPT-1"],
+            "required_acceptance_ids": ["ACCEPT-1"],
+            "source_mapping_status": "complete",
+            "definition_closure_status": "complete",
+            "construction_readiness_status": "ready",
+        }
+        malformed_shapes: list[object] = [
+            {},
+            {
+                "schema_version": "charting-loop/frozen-task-corridor/v1",
+                "corridor_tree_sha256": digest,
+                "acceptance_ledger": [],
+            },
+            flat_only,
+        ]
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            assessment_path = root / "assessment.json"
+            freeze_path = root / "FREEZE.json"
+            assessment_path.write_text(
+                json.dumps(self.assessment(digest)), encoding="utf-8"
+            )
+            before = assessment_path.read_bytes()
+            for freeze in malformed_shapes:
+                freeze_path.write_text(json.dumps(freeze), encoding="utf-8")
+                report = validate_qa_assessment_path(assessment_path, freeze_path)
+                self.assertFalse(report["valid"])
+                self.assertEqual(["FREEZE_IDENTITY"], report["errors"])
+                self.assertEqual("not_assessed", report["outcome"])
+                self.assertFalse(report["repair_required"])
+                self.assertEqual(before, assessment_path.read_bytes())
+
+            freeze_path.write_text("{", encoding="utf-8")
+            report = validate_qa_assessment_path(assessment_path, freeze_path)
+            self.assertFalse(report["valid"])
+            self.assertEqual(["FREEZE_IDENTITY"], report["errors"])
+            self.assertEqual("not_assessed", report["outcome"])
+            self.assertEqual(before, assessment_path.read_bytes())
 
     def test_presubmit_and_intake_share_strict_json_semantics(self) -> None:
         digest = "sha256:" + "f" * 64
@@ -479,15 +538,9 @@ class QaAssessmentSemanticTests(unittest.TestCase):
             valid = json.dumps(self.assessment(digest))
             duplicated = valid[:-1] + ',"summary":"duplicate"}'
             assessment_path.write_text(duplicated, encoding="utf-8")
-            freeze_path.write_text(json.dumps({
-                "corridor_digest": digest,
-                "acceptance_ledger_status": "complete",
-                "acceptance_ids": ["ACCEPT-1"],
-                "required_acceptance_ids": ["ACCEPT-1"],
-                "source_mapping_status": "complete",
-                "definition_closure_status": "complete",
-                "construction_readiness_status": "ready",
-            }), encoding="utf-8")
+            freeze_path.write_text(
+                json.dumps(self.freeze(digest)), encoding="utf-8"
+            )
 
             before = assessment_path.read_bytes()
             duplicate_report = validate_qa_assessment_path(
