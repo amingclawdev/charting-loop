@@ -128,17 +128,76 @@ TASK_SPECS = {
 }
 
 
+_DOCKER_HEREDOC_MARKER = re.compile(
+    r"<<(?P<strip_tabs>-?)(?:'(?P<single>[^']+)'|\"(?P<double>[^\"]+)\"|(?P<bare>[A-Za-z0-9_.-]+))"
+)
+
+
 def _active_dockerfile_from_instructions(docker_text: str) -> tuple[str, ...]:
-    """Return active, single-line Dockerfile FROM instructions."""
+    """Return active top-level FROM instructions from logical Dockerfile lines.
+
+    This intentionally is not a complete Dockerfile parser.  It recognizes the
+    boundaries that matter to the doctor: parser comments, escaped logical-line
+    continuations, and heredoc payloads.  FROM-like bytes inside those payloads
+    are data, not instructions, and therefore cannot satisfy the pinned image.
+    """
 
     instructions: list[str] = []
+    logical_parts: list[str] = []
+    heredoc_terminators: list[tuple[str, bool]] = []
+    escape = "\\"
+    saw_instruction = False
+
     for raw_line in docker_text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
+        if heredoc_terminators:
+            terminator, strip_tabs = heredoc_terminators[0]
+            candidate = raw_line.lstrip("\t") if strip_tabs else raw_line
+            if candidate == terminator:
+                heredoc_terminators.pop(0)
             continue
-        keyword, separator, _ = line.partition(" ")
+
+        stripped = raw_line.strip()
+        if not logical_parts and (not stripped or stripped.startswith("#")):
+            if not saw_instruction:
+                directive = re.fullmatch(
+                    r"#\s*escape\s*=\s*([\\`])", stripped, re.IGNORECASE
+                )
+                if directive:
+                    escape = directive.group(1)
+            continue
+
+        part = raw_line.strip()
+        trailing_escapes = len(part) - len(part.rstrip(escape))
+        continues = bool(part) and trailing_escapes % 2 == 1
+        if continues:
+            part = part[:-1].rstrip()
+        if part:
+            logical_parts.append(part)
+        if continues:
+            continue
+
+        logical_instruction = " ".join(logical_parts)
+        logical_parts.clear()
+        if not logical_instruction:
+            continue
+        saw_instruction = True
+
+        keyword, separator, _ = logical_instruction.partition(" ")
         if separator and keyword.casefold() == "from":
-            instructions.append(line)
+            instructions.append(logical_instruction)
+
+        for marker in _DOCKER_HEREDOC_MARKER.finditer(logical_instruction):
+            terminator = (
+                marker.group("single")
+                or marker.group("double")
+                or marker.group("bare")
+                or ""
+            )
+            if terminator:
+                heredoc_terminators.append(
+                    (terminator, marker.group("strip_tabs") == "-")
+                )
+
     return tuple(instructions)
 
 _SECRET_PATTERNS = (
