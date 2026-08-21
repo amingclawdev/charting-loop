@@ -431,7 +431,12 @@ class PublicReleaseTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
 
         for marker in (
-            "method-guided-graph-kernel-experiment-v1",
+            "method-guided-graph-kernel-experiment-v1.1",
+            "CL-107-GRAPH-KERNEL-PROTOCOL-CLEAN-SUCCESSOR",
+            "89ac2c853eec3d1dc6c25db5d1fc3d4088f4c70c",
+            "18a0cc1dc491040840adaf168dc2bab3cad8b45a",
+            "it is not a historical evidence backfill",
+            "does not revise Method v8, the Theory identity, the prospective Study estimand",
             "### Method profile",
             "### Protocol profile",
             "### Study profile",

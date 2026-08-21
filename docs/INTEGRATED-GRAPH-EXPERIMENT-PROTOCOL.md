@@ -1,6 +1,14 @@
 # Method-guided Position/Direction Graph Kernel experiment protocol
 
-Protocol ID: `method-guided-graph-kernel-experiment-v1`
+Protocol ID: `method-guided-graph-kernel-experiment-v1.1`
+
+Revision provenance: `CL-107-GRAPH-KERNEL-PROTOCOL-CLEAN-SUCCESSOR` is the
+fresh validation generation for the QA corrections first committed at
+`89ac2c853eec3d1dc6c25db5d1fc3d4088f4c70c`. It succeeds the immutable failed
+`CL-105` generation at `18a0cc1dc491040840adaf168dc2bab3cad8b45a`; it is not a
+historical evidence backfill. This revision closes protocol-specification gaps only.
+It does not revise Method v8, the Theory identity, the prospective Study estimand, or
+any earlier experimental result.
 
 Status: prospective protocol. It defines a study that has not yet been run. It does
 not amend the frozen Method, reclassify an earlier result, or claim that the design is
