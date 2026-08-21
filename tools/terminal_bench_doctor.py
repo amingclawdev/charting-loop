@@ -47,17 +47,9 @@ MUSIC_HARMONY_TASK_NAME = "music-harmony"
 MUSIC_HARMONY_TASK_CACHE_DIGEST = (
     "f5ba5ef9140c164e1c3654425caea7dc0f74423c9632f5e0c9a6dc9001d38f00"
 )
-DATA_ANONYMIZATION_TASK_NAME = "data-anonymization"
-DATA_ANONYMIZATION_TASK_CACHE_DIGEST = (
-    "2d463025deb8bcc4c860f8a8e90c799435306e566e6c36af4b0df6d18e10a290"
-)
-HEAT_PUMP_WARRANTY_TASK_NAME = "heat-pump-warranty"
-HEAT_PUMP_WARRANTY_TASK_CACHE_DIGEST = (
-    "195e39da0c97ea45552d216f04b204d438ec397e1003300be3edc064aa9859b6"
-)
 AGENT_IMPORT = "benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent"
 AGENT_VERSION = "0.9.0"
-CORRIDOR_SDK_VERSION = "0.6.0"
+CORRIDOR_SDK_VERSION = "0.5.0"
 MODEL = "openai/gpt-5.6-sol"
 REASONING_EFFORT = "max"
 METHOD_VERSION_ID = "charting-loop-method-v8"
@@ -112,18 +104,6 @@ TASK_SPECS = {
         cache_digest=MUSIC_HARMONY_TASK_CACHE_DIGEST,
         agent_timeout_sec=7200.0,
         dockerfile_from="FROM python:3.11-slim",
-    ),
-    DATA_ANONYMIZATION_TASK_NAME: TaskSpec(
-        name=DATA_ANONYMIZATION_TASK_NAME,
-        cache_digest=DATA_ANONYMIZATION_TASK_CACHE_DIGEST,
-        agent_timeout_sec=3600.0,
-        dockerfile_from="FROM ubuntu:24.04 AS input-builder",
-    ),
-    HEAT_PUMP_WARRANTY_TASK_NAME: TaskSpec(
-        name=HEAT_PUMP_WARRANTY_TASK_NAME,
-        cache_digest=HEAT_PUMP_WARRANTY_TASK_CACHE_DIGEST,
-        agent_timeout_sec=7200.0,
-        dockerfile_from="FROM python:3.13-slim",
     ),
 }
 

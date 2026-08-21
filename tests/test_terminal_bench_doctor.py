@@ -13,12 +13,8 @@ from tools.terminal_bench_doctor import (
     BUN_SOURCEMAP_TASK_NAME,
     CORRIDOR_SDK_VERSION,
     DATASET_CONTENT_SHA256,
-    DATA_ANONYMIZATION_TASK_CACHE_DIGEST,
-    DATA_ANONYMIZATION_TASK_NAME,
     DoctorConfig,
     CommandResult,
-    HEAT_PUMP_WARRANTY_TASK_CACHE_DIGEST,
-    HEAT_PUMP_WARRANTY_TASK_NAME,
     MUSIC_HARMONY_TASK_CACHE_DIGEST,
     MUSIC_HARMONY_TASK_NAME,
     PHASE_ISOLATION_COMMIT,
@@ -44,7 +40,6 @@ class FakeRunner:
         docker_quiescent: bool = True,
         codex_runtime_bound: bool = True,
         frozen_corridor_unchanged: bool = True,
-        task_digest_override: str | None = None,
     ) -> None:
         self.job_name = job_name
         self.jobs_dir = jobs_dir
@@ -53,7 +48,6 @@ class FakeRunner:
         self.docker_quiescent = docker_quiescent
         self.codex_runtime_bound = codex_runtime_bound
         self.frozen_corridor_unchanged = frozen_corridor_unchanged
-        self.task_digest_override = task_digest_override
         self.calls: list[list[str]] = []
 
     def run(self, args, *, cwd=None, env=None, timeout=60):
@@ -127,8 +121,7 @@ class FakeRunner:
         if executable == "fake-harbor-python":
             program = command[-1]
             if "Packager.compute_content_hash" in command[-2]:
-                digest = self.task_digest_override or Path(command[-1]).name
-                return CommandResult(0, digest + "\n")
+                return CommandResult(0, Path(command[-1]).name + "\n")
             if "github_username_claimed" in program:
                 return CommandResult(
                     0,
@@ -300,49 +293,11 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         (self.music_task_cache / "environment/Dockerfile").write_text(
             "FROM python:3.11-slim\n", encoding="utf-8"
         )
-        self.data_task_cache = self.root / DATA_ANONYMIZATION_TASK_CACHE_DIGEST
-        (self.data_task_cache / "environment").mkdir(parents=True)
-        (self.data_task_cache / "task.toml").write_text(
-            "\n".join(
-                [
-                    "[task]",
-                    'name = "terminal-bench/data-anonymization"',
-                    "[agent]",
-                    "timeout_sec = 3600.0",
-                    "[environment]",
-                    "gpus = 0",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        (self.data_task_cache / "environment/Dockerfile").write_text(
-            "FROM ubuntu:24.04 AS input-builder\n", encoding="utf-8"
-        )
-        self.heat_task_cache = self.root / HEAT_PUMP_WARRANTY_TASK_CACHE_DIGEST
-        (self.heat_task_cache / "environment").mkdir(parents=True)
-        (self.heat_task_cache / "task.toml").write_text(
-            "\n".join(
-                [
-                    "[task]",
-                    'name = "terminal-bench/heat-pump-warranty"',
-                    "[agent]",
-                    "timeout_sec = 7200.0",
-                    "[environment]",
-                    "gpus = 0",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        (self.heat_task_cache / "environment/Dockerfile").write_text(
-            "FROM python:3.13-slim\n", encoding="utf-8"
-        )
         self.task_caches = {
             "ico-path-patch": self.task_cache,
             SESSION_WINDOW_TASK_NAME: self.session_task_cache,
             BUN_SOURCEMAP_TASK_NAME: self.bun_task_cache,
             MUSIC_HARMONY_TASK_NAME: self.music_task_cache,
-            DATA_ANONYMIZATION_TASK_NAME: self.data_task_cache,
-            HEAT_PUMP_WARRANTY_TASK_NAME: self.heat_task_cache,
         }
         self.auth_path = self.root / "auth.json"
         self.auth_path.write_text("{}", encoding="utf-8")
@@ -491,16 +446,6 @@ class TerminalBenchDoctorTests(unittest.TestCase):
                 MUSIC_HARMONY_TASK_CACHE_DIGEST,
                 "FROM python:3.11-slim",
             ),
-            (
-                DATA_ANONYMIZATION_TASK_NAME,
-                DATA_ANONYMIZATION_TASK_CACHE_DIGEST,
-                "FROM ubuntu:24.04 AS input-builder",
-            ),
-            (
-                HEAT_PUMP_WARRANTY_TASK_NAME,
-                HEAT_PUMP_WARRANTY_TASK_CACHE_DIGEST,
-                "FROM python:3.13-slim",
-            ),
         )
         for task_name, cache_digest, base_image in cases:
             with self.subTest(task=task_name):
@@ -536,59 +481,6 @@ class TerminalBenchDoctorTests(unittest.TestCase):
                     print_call[print_call.index("-i") + 1],
                     f"terminal-bench/{task_name}",
                 )
-
-    def test_kit06_task_identity_drift_fails_closed(self) -> None:
-        task_toml = self.data_task_cache / "task.toml"
-        dockerfile = self.data_task_cache / "environment/Dockerfile"
-        canonical_task = task_toml.read_text(encoding="utf-8")
-        canonical_docker = dockerfile.read_text(encoding="utf-8")
-        cases = (
-            ("digest", canonical_task, canonical_docker, "0" * 64),
-            (
-                "task_name",
-                canonical_task.replace(
-                    "terminal-bench/data-anonymization",
-                    "terminal-bench/not-data-anonymization",
-                ),
-                canonical_docker,
-                None,
-            ),
-            (
-                "timeout",
-                canonical_task.replace("timeout_sec = 3600.0", "timeout_sec = 3599.0"),
-                canonical_docker,
-                None,
-            ),
-            (
-                "gpu",
-                canonical_task.replace("gpus = 0", "gpus = 1"),
-                canonical_docker,
-                None,
-            ),
-            (
-                "base_image",
-                canonical_task,
-                "FROM python:3.12-slim\n",
-                None,
-            ),
-        )
-        for name, task_text, docker_text, digest_override in cases:
-            with self.subTest(drift=name):
-                task_toml.write_text(task_text, encoding="utf-8")
-                dockerfile.write_text(docker_text, encoding="utf-8")
-                report, _ = self.run_fake(
-                    self.config(task_name=DATA_ANONYMIZATION_TASK_NAME),
-                    task_digest_override=digest_override,
-                )
-                architecture = next(
-                    check
-                    for check in report["checks"]
-                    if check["check_id"] == "task_architecture"
-                )
-                self.assertFalse(report["ready"])
-                self.assertFalse(architecture["passed"])
-                task_toml.write_text(canonical_task, encoding="utf-8")
-                dockerfile.write_text(canonical_docker, encoding="utf-8")
 
     def test_adaptive_regression_task_base_image_drift_fails_closed(self) -> None:
         (self.bun_task_cache / "environment/Dockerfile").write_text(
