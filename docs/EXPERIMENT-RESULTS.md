@@ -33,6 +33,42 @@ passing same-task recovery observation on a second task gives two-task engineeri
 coverage, but it is **not multi-task efficacy evidence**, a causal estimate,
 benchmark-wide efficacy evidence, or a production-readiness claim.
 
+## Unreleased Direct Main mechanism probes
+
+Two additional Terminal-Bench 3.0 runs were executed sequentially through the Direct
+Main lane with the frozen Method v8 and Corridor Kit 0.5.0. Both received reward 0.
+They remain private adaptive diagnostics: they have no sanitized result release, do
+not enter the result index or public release registry, and do not change the **2**
+public benchmark tasks counted above. Their purpose was to test two implementation
+mechanisms before changing the Method or SDK.
+
+- **Authoring probe — `bun-sourcemap-leak`.** The Builder compiled 42 acceptance
+  items and produced a self-tested task adapter, but reached the 1,800-second task
+  deadline before `WORK_ITEMS.json`, `CAPABILITIES.json`, and `WITNESSES.json` became
+  compiled. It honestly froze an unresolved partial Corridor. The runtime then
+  treated that not-task-ready state as a fatal validation exception, so Worker, QA,
+  and the official grader never started. This falsifies the intended graceful
+  handoff: an unresolved Corridor should project an advisory limitation and preserve
+  the remaining task path, not become a new Gate.
+- **Position-to-Direction probe — `music-harmony`.** The complete run reached the
+  official grader, which reported 27 violations and reward 0. Across Worker, QA,
+  repair, and closure, the frozen Rule-closure digest stayed identical while the
+  Position, Direction, and Entrance digests changed. The deterministic reprojection
+  path therefore executed. But every projection remained on
+  `W01.source-and-extent`, and the Position timeline contained phase events rather
+  than admitted domain facts, candidate identity, QA witness, verifier-like
+  observation, or row-completion evidence. The repair fixed one local witness and
+  introduced another, while the grader found 17 source-bass preservation failures.
+  The pre-registered mechanism criterion was therefore not met: digest churn alone
+  is not evidence that task facts changed the projected Direction.
+
+The bounded conclusion is implementation-level. Method v8 already freezes Rules and
+defines Direction as a projection from Position; these probes do not justify a Method
+revision. They identify two Corridor Kit/harness gaps to repair and retest: preserve
+execution after an honest partial freeze, and make typed admitted Facts plus replayable
+row/checkpoint progression part of Position. No post-result change or rerun is counted
+as evidence for either frozen probe.
+
 ## Publication and participation status
 
 **Current status: the public result and causal-evidence release is live.** A reader can
