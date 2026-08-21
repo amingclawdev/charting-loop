@@ -127,6 +127,20 @@ TASK_SPECS = {
     ),
 }
 
+
+def _active_dockerfile_from_instructions(docker_text: str) -> tuple[str, ...]:
+    """Return active, single-line Dockerfile FROM instructions."""
+
+    instructions: list[str] = []
+    for raw_line in docker_text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        keyword, separator, _ = line.partition(" ")
+        if separator and keyword.casefold() == "from":
+            instructions.append(line)
+    return tuple(instructions)
+
 _SECRET_PATTERNS = (
     re.compile(r"sk-harbor-[A-Za-z0-9_-]+", re.IGNORECASE),
     re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b"),
@@ -781,7 +795,9 @@ def _check_task_architecture(
         and agent_section.get("timeout_sec") == spec.agent_timeout_sec
         and environment_section.get("gpus", 0) == 0
     )
-    image_ok = spec.dockerfile_from in docker_text
+    image_ok = spec.dockerfile_from in _active_dockerfile_from_instructions(
+        docker_text
+    )
     amd64 = not spec.requires_x86_64_binary or (
         file_result is not None
         and file_result.returncode == 0

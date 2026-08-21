@@ -590,6 +590,38 @@ class TerminalBenchDoctorTests(unittest.TestCase):
                 task_toml.write_text(canonical_task, encoding="utf-8")
                 dockerfile.write_text(canonical_docker, encoding="utf-8")
 
+    def test_kit06_expected_base_image_in_comment_fails_closed(self) -> None:
+        cases = (
+            (
+                DATA_ANONYMIZATION_TASK_NAME,
+                self.data_task_cache,
+                "FROM ubuntu:24.04 AS input-builder",
+            ),
+            (
+                HEAT_PUMP_WARRANTY_TASK_NAME,
+                self.heat_task_cache,
+                "FROM python:3.13-slim",
+            ),
+        )
+        for task_name, task_cache, expected_from in cases:
+            with self.subTest(task=task_name):
+                dockerfile = task_cache / "environment/Dockerfile"
+                canonical_docker = dockerfile.read_text(encoding="utf-8")
+                dockerfile.write_text(
+                    f"FROM alpine:3.22\n# {expected_from}\n",
+                    encoding="utf-8",
+                )
+                report, _ = self.run_fake(self.config(task_name=task_name))
+                architecture = next(
+                    check
+                    for check in report["checks"]
+                    if check["check_id"] == "task_architecture"
+                )
+                self.assertFalse(report["ready"])
+                self.assertFalse(architecture["passed"])
+                self.assertFalse(architecture["details"]["base_image_exact"])
+                dockerfile.write_text(canonical_docker, encoding="utf-8")
+
     def test_adaptive_regression_task_base_image_drift_fails_closed(self) -> None:
         (self.bun_task_cache / "environment/Dockerfile").write_text(
             "FROM python:3.12-slim\n", encoding="utf-8"
