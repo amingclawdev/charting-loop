@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -128,9 +129,62 @@ TASK_SPECS = {
 }
 
 
-_DOCKER_HEREDOC_MARKER = re.compile(
-    r"<<(?P<strip_tabs>-?)(?:'(?P<single>[^']+)'|\"(?P<double>[^\"]+)\"|(?P<bare>[A-Za-z0-9_.-]+))"
+_DOCKER_HEREDOC_WORD = re.compile(
+    r"^\d*<<(?P<strip_tabs>-?)(?P<delimiter>[^<]+)$"
 )
+
+
+def _dockerfile_raw_words(instruction: str) -> tuple[str, ...]:
+    """Split one logical instruction while retaining shell quote bytes."""
+
+    words: list[str] = []
+    current: list[str] = []
+    quote = ""
+    escaped = False
+    for char in instruction:
+        if escaped:
+            current.append(char)
+            escaped = False
+            continue
+        if char == "\\" and quote != "'":
+            current.append(char)
+            escaped = True
+            continue
+        if char in {"'", '"'}:
+            current.append(char)
+            if not quote:
+                quote = char
+            elif quote == char:
+                quote = ""
+            continue
+        if char.isspace() and not quote:
+            if current:
+                words.append("".join(current))
+                current.clear()
+            continue
+        current.append(char)
+    if current:
+        words.append("".join(current))
+    return tuple(words)
+
+
+def _dockerfile_heredoc_markers(
+    instruction: str,
+) -> tuple[tuple[str, bool], ...]:
+    """Return BuildKit-shaped heredoc delimiter words from an instruction."""
+
+    markers: list[tuple[str, bool]] = []
+    for word in _dockerfile_raw_words(instruction):
+        match = _DOCKER_HEREDOC_WORD.fullmatch(word)
+        if not match:
+            continue
+        try:
+            parsed = shlex.split(match.group("delimiter"), posix=True)
+        except ValueError:
+            continue
+        if len(parsed) == 1 and parsed[0]:
+            markers.append((parsed[0], match.group("strip_tabs") == "-"))
+    return tuple(markers)
 
 
 def _active_dockerfile_from_instructions(docker_text: str) -> tuple[str, ...]:
@@ -186,17 +240,9 @@ def _active_dockerfile_from_instructions(docker_text: str) -> tuple[str, ...]:
         if separator and keyword.casefold() == "from":
             instructions.append(logical_instruction)
 
-        for marker in _DOCKER_HEREDOC_MARKER.finditer(logical_instruction):
-            terminator = (
-                marker.group("single")
-                or marker.group("double")
-                or marker.group("bare")
-                or ""
-            )
-            if terminator:
-                heredoc_terminators.append(
-                    (terminator, marker.group("strip_tabs") == "-")
-                )
+        heredoc_terminators.extend(
+            _dockerfile_heredoc_markers(logical_instruction)
+        )
 
     return tuple(instructions)
 
