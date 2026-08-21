@@ -12,26 +12,39 @@
   "files": [
     {
       "path": "AUDIT.md",
-      "bytes": 11187,
-      "sha256": "sha256:4cdabc25759a91fd46fc5ac22c13b0b2346d3031779b00960681833801384be5",
+      "bytes": 14647,
+      "sha256": "sha256:814e9291c484c1e11cba614eccfcf2badc23476a196796ae795c53b6b4328f56",
       "purpose": "human-readable bounded audit"
     },
     {
       "path": "AUDIT.json",
-      "bytes": 23005,
-      "sha256": "sha256:4135e26051bd9d25b39179387f91f975a792a9a5980cb9e2bb409dba8d5580fa",
+      "bytes": 28441,
+      "sha256": "sha256:6a1bf5a7cbbf9a8e599b86dc72193a98986618fb14bf49f8352765cbdd7dfda9",
       "purpose": "machine-readable observations, classifications, ownership, and falsifiers"
     }
   ],
   "custody": {
-    "status": "local_git_immutable_but_not_off_host",
+    "status": "local_git_immutable_operator_waived_off_host",
     "custody_commit": "ffc08ea3e4903512fc3a95f5d6b4f1941940def1",
     "custody_tree": "94cd73d80c1987d092e9bb2875dd8727297875a6",
     "custody_path_count": 246,
     "audit_draft_commit": "21ba85874b14fa817ebec66c0b62e4a1e9eee6e6",
     "audit_draft_tree": "b9087c0a209d35cc00a8983cc55c923572e63d68",
     "audit_draft_path_count": 247,
-    "off_host_replica": null
+    "off_host_replica": null,
+    "operator_waiver": {
+      "timeline_event_id": 766,
+      "decision": "off_host_custody_waived_local_git_retained",
+      "off_host_replication_required": false,
+      "local_git_custody_required": true
+    },
+    "residual_risk": "Loss or corruption of the single local host could destroy the private evidence.",
+    "forbidden_claims": [
+      "remote_custody",
+      "off_host_custody",
+      "disaster_resistant_custody",
+      "independently_recoverable_custody"
+    ]
   },
   "public_boundary": {
     "contains_raw_role_transcripts": false,
@@ -54,7 +67,9 @@
     "method_change_authorized": false,
     "implementation_included": false,
     "benchmark_run_included": false,
+    "local_custody_complete_under_waiver": true,
     "off_host_custody_complete": false,
+    "off_host_custody_required": false,
     "independent_qa_complete": false
   }
 }

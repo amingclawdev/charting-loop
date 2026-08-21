@@ -70,24 +70,82 @@ role artifacts, frozen Corridors, Position and freeze records, submission manife
 timing/results, and verifier results. Recorded exclusions are interpreter caches,
 compiled bytecode, task workspace/output bytes, and redundant job-level wrappers.
 
-The repository has no off-host remote. Its current custody status is therefore
-`local_git_immutable_but_not_off_host`: the commit and tree provide local byte identity,
-but not disaster-resistant replication. This is an explicit closure blocker for
-complete custody, not a reason to discard the audit.
+The repository has no off-host remote. The operator explicitly waived off-host
+replication in governance event `timeline:766` and chose to retain this evidence in
+the local immutable Git custody repository. Its custody status is therefore
+`local_git_immutable_operator_waived_off_host`: the commit and tree provide local byte
+identity, but not disaster-resistant replication. The accepted residual risk is that
+loss or corruption of this host could destroy the private evidence. This package does
+not claim remote, off-host, disaster-resistant, or independently recoverable custody.
 
 ## Reconstructed Builder timeline
 
-Times below come from the retained runner records and role event streams. “First edit”
-is measured from role-session start to the first patch operation, rounded to the
-nearest second. “Operational replay” is the first real adapter check or capture, not a
-text-only mention. Cost telemetry was unavailable. Harbor aggregate token fields were
-null, but Builder role streams retained token counts.
+Times below come from the retained runner records and role event streams. All detailed
+stage times are seconds from Builder-role start. Stages overlap: these are evidence
+milestones, not mutually exclusive phase allocations. “Operational replay” is the
+first real adapter check or capture, not a text-only mention. “Revision” means a
+patch-bearing command group, not a semantic version. No intermediate Builder freeze
+artifact was retained; only the runner-recorded final freeze is available. Cost
+telemetry was unavailable. Harbor aggregate token fields were null, but Builder role
+streams retained token counts.
 
 | Run | Total task clock | Builder phase | First source edit | First acceptance validation | First operational replay | First task-ready freeze | Command groups | Frozen files / bytes | Builder tokens |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | heat-pump-warranty | 7,200 s | 2,093.872 s | ~663 s | ~668 s | ~1,853 s | 2,107.517 s | 64 | 13 / 658,931 | 7,172,242 input; 6,913,280 cached; 99,627 output |
 | music-harmony | 7,200 s | 1,463.095 s | ~494 s | ~631 s | ~1,008 s | not recorded; unresolved freeze at 1,463.558 s | 32 | 12 / 100,456 | 3,771,321 input; 3,619,584 cached; 67,243 output |
 | bun-sourcemap-leak | 1,800 s | 1,772.116 s; task deadline reached | ~514 s | ~763 s | ~1,304 s | 1,773.850 s | 19 | 12 / 119,511 | 2,701,030 input; 2,555,392 cached; 80,062 output |
+
+### heat-pump-warranty
+
+- Task intake: Builder started with 7,170.000 seconds remaining; the first
+  source/Acceptance patch was at 662.990 seconds.
+- Rule/Acceptance compilation: first patch at 662.990 seconds; first validation at
+  approximately 668 seconds.
+- Work rows and capabilities: first work-item/capability patch at 688.621 seconds.
+- Fixtures and probes: first fixture patch at 1,666.827 seconds; first operational
+  replay at approximately 1,853 seconds.
+- Revisions and refreezes: 14 patch-bearing command groups, 13 after the first
+  Acceptance validation; no intermediate Builder freeze record was retained.
+- Freeze and handoff: runner recorded the first task-ready freeze at 2,107.517 seconds;
+  Worker then started with 5,047.830 seconds remaining.
+- Termination: Builder completed after 2,093.872 seconds; its last patch was at
+  1,898.465 seconds and last tool call at 2,048.232 seconds.
+
+### music-harmony
+
+- Task intake: Builder started with 7,170.000 seconds remaining; the first combined
+  source/Acceptance/work-item patch was at 493.557 seconds.
+- Rule/Acceptance compilation: first patch at 493.557 seconds; first validation at
+  approximately 631 seconds.
+- Work rows and capabilities: work items first appeared at 493.557 seconds and the
+  first capability patch at 1,056.966 seconds.
+- Fixtures and probes: first operational replay at approximately 1,008 seconds; first
+  fixture patch at 1,161.710 seconds.
+- Revisions and refreezes: 12 patch-bearing command groups, 9 after the first
+  Acceptance validation; no intermediate Builder freeze record was retained.
+- Freeze and handoff: no task-ready freeze was recorded; the runner recorded an
+  unresolved freeze at 1,463.558 seconds, then Worker started with 5,705.870 seconds
+  remaining.
+- Termination: Builder completed after 1,463.095 seconds; its last patch was at
+  1,399.479 seconds and last tool call at 1,447.662 seconds.
+
+### bun-sourcemap-leak
+
+- Task intake: Builder started with 1,770.000 seconds remaining; the first combined
+  source/Acceptance/adapter patch was at 513.978 seconds.
+- Rule/Acceptance compilation: first patch at 513.978 seconds; first validation at
+  approximately 763 seconds.
+- Work rows and capabilities: first work-item patch at 1,286.302 seconds and first
+  capability patch at 1,406.979 seconds.
+- Fixtures and probes: first operational replay at approximately 1,304 seconds; first
+  fixture patch at 1,535.603 seconds.
+- Revisions and refreezes: 13 patch-bearing command groups, 9 after the first
+  Acceptance validation; no intermediate Builder freeze record was retained.
+- Freeze and handoff: the runner recorded a task-ready freeze at 1,773.850 seconds,
+  after the available Builder-start budget had expired. No Worker or QA handoff
+  occurred; remaining task time was zero.
+- Termination: Builder reached the task deadline after 1,772.116 seconds; its last
+  patch was at 1,736.770 seconds and last tool call at 1,761.042 seconds.
 
 Further construction signals:
 

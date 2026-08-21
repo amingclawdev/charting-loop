@@ -1022,13 +1022,73 @@ class PublicReleaseTests(unittest.TestCase):
         )
         self.assertEqual(
             audit["custody"]["status"],
-            "local_git_immutable_but_not_off_host",
+            "local_git_immutable_operator_waived_off_host",
         )
         self.assertIsNone(audit["custody"]["off_host_replica"])
+        self.assertEqual(
+            audit["custody"]["operator_waiver"],
+            {
+                "timeline_event_id": 766,
+                "decision": "off_host_custody_waived_local_git_retained",
+                "off_host_replication_required": False,
+                "local_git_custody_required": True,
+            },
+        )
+        self.assertTrue(audit["custody"]["residual_risk"])
+        self.assertEqual(
+            manifest["custody"]["operator_waiver"],
+            audit["custody"]["operator_waiver"],
+        )
+        self.assertTrue(manifest["closure"]["local_custody_complete_under_waiver"])
+        self.assertFalse(manifest["closure"]["off_host_custody_required"])
         self.assertEqual(
             {item["run_id"] for item in audit["source_observations"]},
             {"heat-pump-warranty", "music-harmony", "bun-sourcemap-leak"},
         )
+        stage_keys = {
+            "time_basis",
+            "stages_overlap",
+            "remaining_task_seconds_at_builder_start",
+            "task_intake",
+            "rule_acceptance_compilation",
+            "work_rows_and_capabilities",
+            "fixtures_and_probes",
+            "revisions_and_refreezes",
+            "freeze",
+            "handoff",
+            "termination",
+            "missing_telemetry",
+        }
+        by_run = {item["run_id"]: item for item in audit["source_observations"]}
+        for observation in by_run.values():
+            timeline = observation["builder_stage_timeline"]
+            self.assertEqual(set(timeline), stage_keys)
+            self.assertEqual(timeline["time_basis"], "seconds_from_builder_role_start")
+            self.assertTrue(timeline["stages_overlap"])
+            self.assertEqual(
+                timeline["revisions_and_refreezes"]["intermediate_builder_freeze_records"],
+                0,
+            )
+            self.assertIn("cost", timeline["missing_telemetry"])
+
+        heat = by_run["heat-pump-warranty"]["builder_stage_timeline"]
+        self.assertEqual(heat["remaining_task_seconds_at_builder_start"], 7170.0)
+        self.assertEqual(heat["handoff"]["remaining_task_seconds"], 5047.83)
+        self.assertTrue(heat["handoff"]["worker_started"])
+        self.assertEqual(heat["termination"]["status"], "completed")
+
+        music = by_run["music-harmony"]["builder_stage_timeline"]
+        self.assertIsNone(music["freeze"]["first_task_ready_freeze_seconds"])
+        self.assertEqual(music["freeze"]["disposition"], "unresolved")
+        self.assertTrue(music["handoff"]["worker_started"])
+        self.assertEqual(music["handoff"]["remaining_task_seconds"], 5705.87)
+
+        bun = by_run["bun-sourcemap-leak"]["builder_stage_timeline"]
+        self.assertEqual(bun["remaining_task_seconds_at_builder_start"], 1770.0)
+        self.assertFalse(bun["handoff"]["worker_started"])
+        self.assertFalse(bun["handoff"]["qa_started"])
+        self.assertEqual(bun["handoff"]["remaining_task_seconds"], 0.0)
+        self.assertEqual(bun["termination"]["status"], "task_deadline_reached")
         self.assertEqual(
             [item["candidate_id"] for item in audit["candidates"]],
             [
@@ -1084,6 +1144,8 @@ class PublicReleaseTests(unittest.TestCase):
             (root / name).read_text(encoding="utf-8")
             for name in ("MANIFEST.json", "AUDIT.md", "AUDIT.json")
         )
+        self.assertIn("timeline:766", public_bytes)
+        self.assertIn("single local host", public_bytes)
         self.assertNotRegex(public_bytes, r"/(?:Users|home)/[^/\s]+/")
         for forbidden in (
             "/private/tmp",
