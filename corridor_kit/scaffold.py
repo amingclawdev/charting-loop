@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .acceptance import ACCEPTANCE_SCHEMA, validate_acceptance_ledger
+from .authoring import starter_authoring_contract, starter_witnesses
 from .capabilities import starter_capability_registry, validate_capability_registry
 from .core import KIT_VERSION, CorridorKitError, atomic_write_bytes, atomic_write_json, sha256_json
 from .runtime import starter_work_backlog, validate_work_backlog
@@ -57,6 +58,8 @@ def method_capsule(
             "ACCEPTANCE.json",
             "WORK_ITEMS.json",
             "CAPABILITIES.json",
+            "AUTHORING.json",
+            "WITNESSES.json",
             "SOURCE-MAP.json",
             "EVIDENCE.json",
             "REPLAY.json",
@@ -150,20 +153,27 @@ advisory aid, not an answer, an authority source, or a mandatory workflow gate.
 
 Before the Corridor is frozen, the Builder must:
 
-1. Re-read every public task source and replace the starter gap in `ACCEPTANCE.json`
+1. Treat `AUTHORING.json` as the fixed ownership and boundary contract. The Builder
+   authors task Corridor surfaces; the runner owns Position, freeze, and custody
+   surfaces; the external evaluator alone owns official deliverability.
+2. Re-read every public task source and replace the starter gap in `ACCEPTANCE.json`
    with atomic acceptance items using exact source references, scope, Rule, typed
    relations, and explicit positive, negative, boundary, state, temporal, and coupled
    verification obligations. When a partition does not apply, record that reason
    explicitly instead of leaving it absent.
-2. Record interacting hard requirements in `construction_readiness`, then implement
+3. Record interacting hard requirements in `construction_readiness`, then implement
    one replayable task adapter that evaluates those requirements together.
-3. Compile `WORK_ITEMS.json` into bounded rows that cover every acceptance ID. Give
+4. Compile `WORK_ITEMS.json` into bounded rows that cover every acceptance ID. Give
    each row dependencies, scope, done-when conditions, selected capability IDs, and
    advisory reminders. Compile `CAPABILITIES.json` with exact versions, digests,
    input/output contracts, applicability signals, and side-effect declarations.
-4. Keep task observations and command output under builder scratch during construction;
+5. Compile `WITNESSES.json` with bounded pass, deny, hold, or refusal observations.
+   Bind each observation to known acceptance IDs, direct argv, labeled input refs,
+   and one result ref. Witness disposition is evidence, never an inferred task PASS.
+6. Keep task observations and command output under builder scratch during construction;
    include only reusable task diagnostics, tests, and documentation in this directory.
-5. Run strict validation without draft mode. Incomplete or unresolved output is an
+7. Run `python3 -m corridor_kit authoring validate .` without draft mode. Incomplete
+   or unresolved output is an
    honest diagnostic, not permission to claim success.
 
 After runner-owned freezing, both Worker and QA receive these same bytes and the same
@@ -239,6 +249,8 @@ def _write_scaffold_tree(
     ledger = starter_acceptance_ledger()
     work = starter_work_backlog()
     capabilities = starter_capability_registry()
+    authoring = starter_authoring_contract()
+    witnesses = starter_witnesses()
     capsule = method_capsule(
         method_version=method_version,
         method_digest=method_digest,
@@ -287,6 +299,8 @@ def _write_scaffold_tree(
     atomic_write_json(root / "WORK_ITEMS.json", work)
     atomic_write_json(root / "CAPABILITIES.json", capabilities)
     atomic_write_json(root / "METHOD-CAPSULE.json", capsule)
+    atomic_write_json(root / "AUTHORING.json", authoring)
+    atomic_write_json(root / "WITNESSES.json", witnesses)
     atomic_write_json(root / "EVIDENCE.json", evidence)
     atomic_write_json(root / "SOURCE-MAP.json", source_map)
     atomic_write_json(root / "REPLAY.json", replay)
@@ -305,6 +319,8 @@ def _write_scaffold_tree(
         "work": work,
         "capabilities": capabilities,
         "method_capsule": capsule,
+        "authoring": authoring,
+        "witnesses": witnesses,
         "evidence": evidence,
         "source_map": source_map,
         "replay": replay,
@@ -330,6 +346,8 @@ def _write_scaffold_tree(
                 "WORK_ITEMS.json",
                 "CAPABILITIES.json",
                 "METHOD-CAPSULE.json",
+                "AUTHORING.json",
+                "WITNESSES.json",
                 "EVIDENCE.json",
                 "SOURCE-MAP.json",
                 "REPLAY.json",
