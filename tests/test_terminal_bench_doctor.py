@@ -9,10 +9,14 @@ from decimal import Decimal
 from pathlib import Path
 
 from tools.terminal_bench_doctor import (
+    BUN_SOURCEMAP_TASK_CACHE_DIGEST,
+    BUN_SOURCEMAP_TASK_NAME,
     CORRIDOR_SDK_VERSION,
     DATASET_CONTENT_SHA256,
     DoctorConfig,
     CommandResult,
+    MUSIC_HARMONY_TASK_CACHE_DIGEST,
+    MUSIC_HARMONY_TASK_NAME,
     PHASE_ISOLATION_COMMIT,
     SESSION_WINDOW_TASK_CACHE_DIGEST,
     SESSION_WINDOW_TASK_NAME,
@@ -139,6 +143,7 @@ class FakeRunner:
                             "paths": [
                                 "__main__.py",
                                 "acceptance.py",
+                                "authoring.py",
                                 "capabilities.py",
                                 "core.py",
                                 "domain/binary.py",
@@ -253,6 +258,47 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         (self.session_task_cache / "environment/Dockerfile").write_text(
             "FROM python:3.12-slim\n", encoding="utf-8"
         )
+        self.bun_task_cache = self.root / BUN_SOURCEMAP_TASK_CACHE_DIGEST
+        (self.bun_task_cache / "environment").mkdir(parents=True)
+        (self.bun_task_cache / "task.toml").write_text(
+            "\n".join(
+                [
+                    "[task]",
+                    'name = "terminal-bench/bun-sourcemap-leak"',
+                    "[agent]",
+                    "timeout_sec = 1800.0",
+                    "[environment]",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (self.bun_task_cache / "environment/Dockerfile").write_text(
+            "FROM oven/bun:1.2.15-debian\n", encoding="utf-8"
+        )
+        self.music_task_cache = self.root / MUSIC_HARMONY_TASK_CACHE_DIGEST
+        (self.music_task_cache / "environment").mkdir(parents=True)
+        (self.music_task_cache / "task.toml").write_text(
+            "\n".join(
+                [
+                    "[task]",
+                    'name = "terminal-bench/music-harmony"',
+                    "[agent]",
+                    "timeout_sec = 7200.0",
+                    "[environment]",
+                    "gpus = 0",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (self.music_task_cache / "environment/Dockerfile").write_text(
+            "FROM python:3.11-slim\n", encoding="utf-8"
+        )
+        self.task_caches = {
+            "ico-path-patch": self.task_cache,
+            SESSION_WINDOW_TASK_NAME: self.session_task_cache,
+            BUN_SOURCEMAP_TASK_NAME: self.bun_task_cache,
+            MUSIC_HARMONY_TASK_NAME: self.music_task_cache,
+        }
         self.auth_path = self.root / "auth.json"
         self.auth_path.write_text("{}", encoding="utf-8")
 
@@ -264,11 +310,7 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         trusted: bool = True,
         task_name: str = "ico-path-patch",
     ) -> DoctorConfig:
-        task_cache = (
-            self.session_task_cache
-            if task_name == SESSION_WINDOW_TASK_NAME
-            else self.task_cache
-        )
+        task_cache = self.task_caches[task_name]
         return DoctorConfig(
             repo_root=REPO_ROOT,
             job_name=job_name,
@@ -391,6 +433,72 @@ class TerminalBenchDoctorTests(unittest.TestCase):
             resolved["details"]["task_filter"],
             "terminal-bench/session-window-debug",
         )
+
+    def test_adaptive_regression_tasks_bind_exact_canonical_identities(self) -> None:
+        cases = (
+            (
+                BUN_SOURCEMAP_TASK_NAME,
+                BUN_SOURCEMAP_TASK_CACHE_DIGEST,
+                "FROM oven/bun:1.2.15-debian",
+            ),
+            (
+                MUSIC_HARMONY_TASK_NAME,
+                MUSIC_HARMONY_TASK_CACHE_DIGEST,
+                "FROM python:3.11-slim",
+            ),
+        )
+        for task_name, cache_digest, base_image in cases:
+            with self.subTest(task=task_name):
+                config = self.config(
+                    job_name=f"{task_name}-kit05-doctor-001",
+                    task_name=task_name,
+                )
+
+                report, runner = self.run_fake(config)
+
+                self.assertTrue(report["ready"])
+                self.assertEqual(report["condition"]["task"], task_name)
+                self.assertEqual(
+                    report["condition"]["task_filter"],
+                    f"terminal-bench/{task_name}",
+                )
+                self.assertEqual(
+                    report["condition"]["task_cache_digest"], cache_digest
+                )
+                architecture = next(
+                    check
+                    for check in report["checks"]
+                    if check["check_id"] == "task_architecture"
+                )
+                self.assertTrue(architecture["passed"])
+                self.assertEqual(architecture["details"]["base_image"], base_image)
+                print_call = next(
+                    call
+                    for call in runner.calls
+                    if call[:3] == ["fake-harbor", "run", "--print-config"]
+                )
+                self.assertEqual(
+                    print_call[print_call.index("-i") + 1],
+                    f"terminal-bench/{task_name}",
+                )
+
+    def test_adaptive_regression_task_base_image_drift_fails_closed(self) -> None:
+        (self.bun_task_cache / "environment/Dockerfile").write_text(
+            "FROM python:3.12-slim\n", encoding="utf-8"
+        )
+
+        report, _ = self.run_fake(
+            self.config(task_name=BUN_SOURCEMAP_TASK_NAME)
+        )
+
+        self.assertFalse(report["ready"])
+        architecture = next(
+            check
+            for check in report["checks"]
+            if check["check_id"] == "task_architecture"
+        )
+        self.assertFalse(architecture["passed"])
+        self.assertFalse(architecture["details"]["base_image_exact"])
 
     def test_unclaimed_harbor_username_fails_closed(self) -> None:
         report, _ = self.run_fake(self.config(), username_claimed=False)

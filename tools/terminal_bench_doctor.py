@@ -39,9 +39,17 @@ SESSION_WINDOW_TASK_NAME = "session-window-debug"
 SESSION_WINDOW_TASK_CACHE_DIGEST = (
     "638c00fd438a0289ba75f6bc536861831f4a8eab2b85064064038e1bcc91cfbb"
 )
+BUN_SOURCEMAP_TASK_NAME = "bun-sourcemap-leak"
+BUN_SOURCEMAP_TASK_CACHE_DIGEST = (
+    "ac0b0f77da4e8f6c3904133033ec6d8591eb0d3f18205ab28104ea3cf2a5a07f"
+)
+MUSIC_HARMONY_TASK_NAME = "music-harmony"
+MUSIC_HARMONY_TASK_CACHE_DIGEST = (
+    "f5ba5ef9140c164e1c3654425caea7dc0f74423c9632f5e0c9a6dc9001d38f00"
+)
 AGENT_IMPORT = "benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent"
 AGENT_VERSION = "0.9.0"
-CORRIDOR_SDK_VERSION = "0.4.0"
+CORRIDOR_SDK_VERSION = "0.5.0"
 MODEL = "openai/gpt-5.6-sol"
 REASONING_EFFORT = "max"
 METHOD_VERSION_ID = "charting-loop-method-v8"
@@ -63,6 +71,7 @@ class TaskSpec:
     name: str
     cache_digest: str
     agent_timeout_sec: float
+    dockerfile_from: str
     requires_x86_64_binary: bool = False
 
     @property
@@ -75,12 +84,26 @@ TASK_SPECS = {
         name=TASK_NAME,
         cache_digest=TASK_CACHE_DIGEST,
         agent_timeout_sec=5400.0,
+        dockerfile_from="FROM python:3.12-slim",
         requires_x86_64_binary=True,
     ),
     SESSION_WINDOW_TASK_NAME: TaskSpec(
         name=SESSION_WINDOW_TASK_NAME,
         cache_digest=SESSION_WINDOW_TASK_CACHE_DIGEST,
         agent_timeout_sec=7200.0,
+        dockerfile_from="FROM python:3.12-slim",
+    ),
+    BUN_SOURCEMAP_TASK_NAME: TaskSpec(
+        name=BUN_SOURCEMAP_TASK_NAME,
+        cache_digest=BUN_SOURCEMAP_TASK_CACHE_DIGEST,
+        agent_timeout_sec=1800.0,
+        dockerfile_from="FROM oven/bun:1.2.15-debian",
+    ),
+    MUSIC_HARMONY_TASK_NAME: TaskSpec(
+        name=MUSIC_HARMONY_TASK_NAME,
+        cache_digest=MUSIC_HARMONY_TASK_CACHE_DIGEST,
+        agent_timeout_sec=7200.0,
+        dockerfile_from="FROM python:3.11-slim",
     ),
 }
 
@@ -365,6 +388,7 @@ def _check_git_and_method(
     required_sdk_paths = {
         "__main__.py",
         "acceptance.py",
+        "authoring.py",
         "capabilities.py",
         "core.py",
         "domain/binary.py",
@@ -391,7 +415,7 @@ def _check_git_and_method(
         return _failed(
             "immutable_inputs",
             "Frozen method or agent bytes do not match the declared condition.",
-            "Restore the frozen v8 method, Agent v0.9.0, and Corridor SDK v0.4.0 before running.",
+            "Restore the frozen v8 method, Agent v0.9.0, and Corridor SDK v0.5.0 before running.",
             {
                 "head": actual_head,
                 "method_version_id": METHOD_VERSION_ID,
@@ -737,7 +761,7 @@ def _check_task_architecture(
         and agent_section.get("timeout_sec") == spec.agent_timeout_sec
         and environment_section.get("gpus", 0) == 0
     )
-    image_ok = "FROM python:3.12-slim" in docker_text
+    image_ok = spec.dockerfile_from in docker_text
     amd64 = not spec.requires_x86_64_binary or (
         file_result is not None
         and file_result.returncode == 0
@@ -756,6 +780,7 @@ def _check_task_architecture(
                 "task_tree_digest_exact": cache_exact,
                 "task_manifest_exact": task_ok,
                 "base_image_exact": image_ok,
+                "expected_base_image": spec.dockerfile_from,
                 "x86_64_binary_required": spec.requires_x86_64_binary,
                 "binary_is_x86_64": amd64 if spec.requires_x86_64_binary else None,
             },
@@ -768,6 +793,7 @@ def _check_task_architecture(
             "task_filter": spec.task_filter,
             "task_cache_digest": spec.cache_digest,
             "task_tree_digest_exact": True,
+            "base_image": spec.dockerfile_from,
             "binary_architecture": (
                 "x86-64" if spec.requires_x86_64_binary else "not_task_constrained"
             ),

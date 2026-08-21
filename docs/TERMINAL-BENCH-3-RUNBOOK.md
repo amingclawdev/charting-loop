@@ -18,12 +18,12 @@ This run is bound to `charting-loop-method-v8` at
 and SCOPE-DATUM digest
 `sha256:bd70498b2f75e039d88c80ae0c5b0a11fba15d12517820c27e8bccb28da987af`.
 Agent v0.9.0 resolves this identity and rejects changed catalog or method bytes before
-any paid model call. The frozen reusable SDK condition is `corridor_kit` v0.4.0 plus
+any paid model call. The frozen reusable SDK condition is `corridor_kit` v0.5.0 plus
 its per-run canonical source-tree digest.
 
 The agent computes the local `corridor_kit` source-tree digest, uploads that exact SDK
 read-only before Builder, verifies the remote digest, and records it in trial metadata.
-The SDK supplies task-neutral work rows, capability registry, Position timeline,
+The SDK supplies task-neutral authoring and witness records, work rows, capability registry, Position timeline,
 advisory reminders, immutable Worker/QA submission custody, and a generic read-only
 binary pack. It contains no task-specific patch, offset, verifier fact, or stored
 answer.
@@ -154,6 +154,80 @@ harbor run \
 Run this paid command only when the immediately preceding doctor report for the same
 job name **and task** says `ready: true`. The doctor does not authorize changing any
 flag between preflight and launch. If a condition changes, rerun the doctor.
+
+### Two sequential adaptive regressions for Kit 0.5
+
+These two runs are mechanism probes on previously failed tasks, not a matched
+experiment, transfer claim, or benchmark-wide result. Keep WIP at one and run them in
+this order. Each Builder starts from the public task and the same frozen Method v8 +
+Kit 0.5 condition; it may not reuse an earlier task Corridor. Worker and QA read the
+same frozen Corridor. Use one official task clock, zero retries, no per-role budget,
+and the latest valid Worker snapshot if the clock expires. Do not change Method,
+SDK, prompts, or harness between the doctor and either trial.
+
+First, `bun-sourcemap-leak` tests whether the task-neutral Authoring layer reduces
+time to the first valid, task-ready freeze enough to leave time for Worker and QA.
+Its official clock is 1,800 seconds.
+
+```bash
+python3 tools/terminal_bench_doctor.py \
+  --job-name charting-loop-tb3-bun-sourcemap-leak-kit05-001 \
+  --task bun-sourcemap-leak \
+  --jobs-dir jobs \
+  --modal-spend-limit-usd "$CHARTING_LOOP_MODAL_SPEND_LIMIT_USD" \
+  --min-modal-headroom-usd 1.00 \
+  --trusted-cyber-access-confirmed \
+  --json
+
+harbor run \
+  --job-name charting-loop-tb3-bun-sourcemap-leak-kit05-001 \
+  -o jobs \
+  -d terminal-bench/terminal-bench@3.0.0 \
+  -i terminal-bench/bun-sourcemap-leak \
+  --n-tasks 1 \
+  -e modal \
+  -a benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent \
+  -m openai/gpt-5.6-sol \
+  --ak reasoning_effort=max \
+  -n 1 \
+  --max-retries 0 \
+  --upload --private
+```
+
+Second, `music-harmony` tests a different mechanism: a known key-signature change
+must be admitted as a new Position checkpoint, after which the real Position-bound
+Direction and Entrance are reprojected. A changed generic digest is insufficient.
+The record must preserve the ordered Position reference, timeline head, Direction
+digest, current work row, and Rule-closure identity around that transition.
+
+```bash
+python3 tools/terminal_bench_doctor.py \
+  --job-name charting-loop-tb3-music-harmony-kit05-001 \
+  --task music-harmony \
+  --jobs-dir jobs \
+  --modal-spend-limit-usd "$CHARTING_LOOP_MODAL_SPEND_LIMIT_USD" \
+  --min-modal-headroom-usd 1.00 \
+  --trusted-cyber-access-confirmed \
+  --json
+
+harbor run \
+  --job-name charting-loop-tb3-music-harmony-kit05-001 \
+  -o jobs \
+  -d terminal-bench/terminal-bench@3.0.0 \
+  -i terminal-bench/music-harmony \
+  --n-tasks 1 \
+  -e modal \
+  -a benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent \
+  -m openai/gpt-5.6-sol \
+  --ak reasoning_effort=max \
+  -n 1 \
+  --max-retries 0 \
+  --upload --private
+```
+
+For both jobs, retain the Builder stage timeline, every freeze, Worker/QA role
+records, final verifier output, and remaining task time at each handoff. A score
+cannot substitute for the Authoring or Position/Direction mechanism evidence.
 
 ### Third distinct-task transfer probe: `session-window-debug`
 
