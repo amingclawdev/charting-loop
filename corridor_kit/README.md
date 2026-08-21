@@ -5,9 +5,10 @@ part of U → C. It lets a fresh Builder start from known-good evidence plumbing
 than rebuilding JSON parsing, hashing, manifests, scratch isolation, and command
 capture on every task.
 
-The kit has four deliberately separate execution surfaces: frozen task-specific
-`ACCEPTANCE.json`, frozen `WORK_ITEMS.json`, frozen selected `CAPABILITIES.json`, and
-a runner-owned hash-linked Position timeline outside the Corridor. Position,
+The kit keeps execution ownership explicit: the Builder authors task-specific
+`ACCEPTANCE.json`, `WORK_ITEMS.json`, selected `CAPABILITIES.json`, and bounded
+`WITNESSES.json`; the runner owns the hash-linked Position timeline, freezing, and
+custody outside the Corridor; the external evaluator owns official deliverability. Position,
 Direction, Entrance, Guide, and reminder views are deterministic projections over
 those surfaces; they do not create authority.
 
@@ -34,7 +35,11 @@ The frozen reusable layer is deliberately small:
 - isolated, shell-free argv execution with replayable stdout and stderr;
 - generic read-only ELF inventory, changed-range comparison, and replay binding; and
 - a digest-bound, solution-free Method capsule plus honest acceptance, evidence,
-  source-map, replay, work, and capability surfaces that begin uncompiled.
+  source-map, replay, work, capability, authoring-contract, and witness surfaces that
+  begin uncompiled where task content is required; and
+- one deterministic aggregate authoring report that reuses the acceptance, work,
+  capability, and Method-capsule validators, reports every JSON surface digest and
+  exact identity join, and separates structural validity from task readiness.
 
 Each Builder must still compile the current task's acceptance items, Rule/Fact map,
 coupled constraints, work rows, capability selections, domain checks, fixtures, and task adapter. Those bytes belong to
@@ -78,6 +83,11 @@ python3 -m corridor_kit validate-work \
   /tmp/charting-loop/corridor/WORK_ITEMS.json \
   --acceptance /tmp/charting-loop/corridor/ACCEPTANCE.json \
   --capabilities /tmp/charting-loop/corridor/CAPABILITIES.json --allow-draft
+python3 -m corridor_kit authoring validate \
+  /tmp/charting-loop/corridor --allow-draft \
+  --expected-method-version charting-loop-method-v8 \
+  --expected-method-digest sha256:METHOD_DIGEST \
+  --expected-method-scope-digest sha256:SCOPE_DIGEST
 python3 -m corridor_kit survey \
   --root specification=/app/public/SPEC.md \
   --root source=/app/public/src \
@@ -140,6 +150,32 @@ Draft validation exists only so the initial scaffold can state its incompletenes
 honestly. Before runner-owned freezing, run `validate` without `--allow-draft`; a final
 ledger needs at least one atomic acceptance item, complete source coverage, and a
 replayable entrypoint before it may report construction readiness `ready`.
+
+## Authoring contract and coupled witnesses
+
+`AUTHORING.json` is identical in every scaffold. Its exact surface descriptors name
+Builder-owned files separately from runner and external-evaluator surfaces. Its
+boundaries are fixed: advisory and read-only validation, no mutation authority, no
+blocking Gate, no task solution, no evaluator material, and no inferred task answer.
+It contains no task ID, Rule, domain algorithm, candidate, or outcome-derived repair.
+
+`WITNESSES.json` starts empty with `state=uncompiled` and a null acceptance digest.
+After the Builder compiles it, each witness has exactly a stable `witness_id`, one or
+more known `acceptance_ids`, a disposition from `pass`, `deny`, `hold`, or `refusal`,
+and a replay object. The replay object contains a non-empty direct `argv`, at least
+one labeled input ref and digest, one result ref and digest, and `shell=false`.
+The surface is bounded to finite witness, acceptance-ID, argv, input-ref, and string
+sizes. Its coverage projection only lists witnessed and unwitnessed acceptance IDs;
+even complete coverage with all `pass` dispositions cannot infer task PASS, an answer,
+authority, or official deliverability.
+
+`authoring validate` loads strict JSON without following symlinks and reuses the
+existing normative validators instead of reimplementing their schemas. It reports raw
+file and canonical-JSON SHA-256 identities per surface plus exact work→acceptance,
+witnesses→acceptance, and kit→Method-capsule joins. Missing, malformed, symlinked, or
+digest-mismatched surfaces fail closed. `structurally_valid` says only that these
+schemas and joins are sound; `task_ready` says the task surfaces are fully compiled.
+`officially_deliverable` always remains external and `not_assessed`.
 
 The runner, not the Builder, freezes the resulting task-specific Corridor. Worker and
 QA then receive the same frozen bytes and digest. Both independently re-read public
@@ -246,7 +282,8 @@ Claw and does not present that implementation as the method's required architect
 
 ## Freezing and integration
 
-`KIT_VERSION` identifies the API, while the exact Git commit plus
+The authoring-core release sets `KIT_VERSION` to `0.5.0`. `KIT_VERSION` identifies
+the API, while the exact Git commit plus
 `python3 -m corridor_kit manifest corridor_kit` tree digest identifies the bytes.
 A source-tree manifest excludes interpreter-created `__pycache__`, `.pyc`, and `.pyo`
 files under a declared, digest-bound policy; the runner's later task-Corridor freeze

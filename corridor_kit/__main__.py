@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .acceptance import validate_acceptance_file
+from .authoring import validate_authoring_directory
 from .capabilities import validate_capability_file
 from .core import (
     KIT_VERSION,
@@ -123,6 +124,22 @@ def _parser() -> argparse.ArgumentParser:
     validate_capabilities.add_argument("registry", type=Path)
     validate_capabilities.add_argument("--allow-draft", action="store_true")
     validate_capabilities.add_argument("--output", type=Path)
+
+    authoring = commands.add_parser(
+        "authoring", help="inspect task-neutral Builder authoring surfaces"
+    )
+    authoring_commands = authoring.add_subparsers(
+        dest="authoring_command", required=True
+    )
+    authoring_validate = authoring_commands.add_parser(
+        "validate", help="validate all authoring surfaces and identity joins"
+    )
+    authoring_validate.add_argument("root", type=Path)
+    authoring_validate.add_argument("--allow-draft", action="store_true")
+    authoring_validate.add_argument("--expected-method-version")
+    authoring_validate.add_argument("--expected-method-digest")
+    authoring_validate.add_argument("--expected-method-scope-digest")
+    authoring_validate.add_argument("--output", type=Path)
 
     capability = commands.add_parser("capabilities", help="inspect frozen capability packs")
     capability_commands = capability.add_subparsers(dest="capability_command", required=True)
@@ -258,6 +275,16 @@ def main(argv: list[str] | None = None) -> int:
             ).as_dict()
             _emit(report, args.output)
             return 0 if report["ok"] else 1
+        if args.command == "authoring" and args.authoring_command == "validate":
+            report = validate_authoring_directory(
+                args.root,
+                allow_draft=args.allow_draft,
+                expected_method_version=args.expected_method_version,
+                expected_method_digest=args.expected_method_digest,
+                expected_method_scope_digest=args.expected_method_scope_digest,
+            )
+            _emit(report, args.output)
+            return 0 if report["structurally_valid"] else 1
         if args.command == "capabilities" and args.capability_command == "builtins":
             _emit(builtin_binary_registry(), args.output)
             return 0

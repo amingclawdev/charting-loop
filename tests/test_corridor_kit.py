@@ -11,7 +11,10 @@ from pathlib import Path
 
 from corridor_kit import (
     ACCEPTANCE_SCHEMA,
+    AUTHORING_SCHEMA,
     CAPABILITY_SCHEMA,
+    KIT_VERSION,
+    WITNESSES_SCHEMA,
     WORK_BACKLOG_SCHEMA,
     CorridorKitError,
     append_position_event,
@@ -25,11 +28,14 @@ from corridor_kit import (
     restore_submission,
     runtime_guide,
     sha256_json,
+    starter_witnesses,
     validate_acceptance_file,
     validate_acceptance_ledger,
+    validate_authoring_directory,
     validate_capability_registry,
     validate_work_backlog,
     validate_work_files,
+    validate_witnesses,
     verify_submission,
 )
 from corridor_kit.domain.binary import (
@@ -275,6 +281,17 @@ class ScaffoldTests(unittest.TestCase):
             )
             self.assertTrue((first / "WORK_ITEMS.json").is_file())
             self.assertTrue((first / "CAPABILITIES.json").is_file())
+            self.assertEqual(
+                load_json(first / "AUTHORING.json")["schema_version"],
+                AUTHORING_SCHEMA,
+            )
+            self.assertEqual(
+                load_json(first / "WITNESSES.json"),
+                starter_witnesses(),
+            )
+            for name in ("AUTHORING.json", "WITNESSES.json"):
+                self.assertEqual((first / name).read_bytes(), (second / name).read_bytes())
+            self.assertEqual(load_json(first / "KIT.json")["kit_version"], KIT_VERSION)
             generated_text = "\n".join(
                 path.read_text(encoding="utf-8", errors="ignore")
                 for path in first.rglob("*")
@@ -379,6 +396,182 @@ class ScaffoldTests(unittest.TestCase):
             report = json.loads(run.stdout)
             self.assertEqual(report["status"], "unresolved")
             self.assertIs(report["authorizes_mutation"], False)
+
+
+class AuthoringCoreTests(unittest.TestCase):
+    @staticmethod
+    def witnesses(digest: str) -> dict[str, object]:
+        dispositions = ("pass", "deny", "hold", "refusal")
+        return {
+            "schema_version": WITNESSES_SCHEMA,
+            "state": "compiled",
+            "acceptance_ledger_digest": digest,
+            "witnesses": [
+                {
+                    "witness_id": f"WIT-{index + 1}",
+                    "acceptance_ids": ["AC-1" if index < 2 else "AC-2"],
+                    "disposition": disposition,
+                    "replay": {
+                        "argv": ["python3", "task_adapter.py", "check"],
+                        "input_refs": [{
+                            "label": "public-input",
+                            "ref": "public:input.json",
+                            "sha256": "sha256:" + "1" * 64,
+                        }],
+                        "result_ref": {
+                            "ref": f"evidence:witness-{index + 1}.json",
+                            "sha256": "sha256:" + str(index + 2) * 64,
+                        },
+                        "shell": False,
+                    },
+                }
+                for index, disposition in enumerate(dispositions)
+            ],
+            "boundaries": starter_witnesses()["boundaries"],
+        }
+
+    def test_bounded_witnesses_accept_all_dispositions_without_inferring_pass(self) -> None:
+        digest = "sha256:" + "a" * 64
+        witnesses = self.witnesses(digest)
+
+        report = validate_witnesses(
+            witnesses,
+            known_acceptance_ids={"AC-1", "AC-2"},
+            expected_acceptance_digest=digest,
+        )
+
+        self.assertTrue(report.ok, report.errors)
+        self.assertTrue(report.facts["coverage_complete"])
+        self.assertEqual(
+            set(report.facts["coverage_by_disposition"]),
+            {"pass", "deny", "hold", "refusal"},
+        )
+        self.assertIs(report.facts["pass_inferred"], False)
+        self.assertEqual(report.facts["task_answer"], "not_inferred")
+        self.assertEqual(
+            report.facts["officially_deliverable"],
+            {
+                "owner": "external_evaluator",
+                "authority": "external",
+                "status": "not_assessed",
+            },
+        )
+
+        unknown = self.witnesses(digest)
+        unknown["witnesses"][0]["acceptance_ids"] = ["AC-UNKNOWN"]
+        unknown["witnesses"][0]["disposition"] = "success"
+        unknown["witnesses"][0]["replay"]["shell"] = True
+        unknown["witnesses"][0]["replay"]["input_refs"] = []
+        unknown["task_answer"] = "PASS"
+        codes = {
+            error["code"]
+            for error in validate_witnesses(
+                unknown,
+                known_acceptance_ids={"AC-1", "AC-2"},
+                expected_acceptance_digest=digest,
+            ).errors
+        }
+        for code in (
+            "EXACT_FIELDS_REQUIRED",
+            "UNKNOWN_ACCEPTANCE_ID",
+            "WITNESS_DISPOSITION",
+            "REPLAY_SHELL_FORBIDDEN",
+            "INPUT_REFERENCE_REQUIRED",
+        ):
+            self.assertIn(code, codes)
+
+    def test_aggregate_authoring_validation_reuses_surfaces_and_exact_joins(self) -> None:
+        method_digest = "sha256:" + "a" * 64
+        scope_digest = "sha256:" + "b" * 64
+        with tempfile.TemporaryDirectory() as raw:
+            root = create_scaffold(
+                Path(raw) / "corridor",
+                method_version="method-v-test",
+                method_digest=method_digest,
+                method_scope_digest=scope_digest,
+            )
+            ledger = valid_ledger()
+            (root / "ACCEPTANCE.json").write_text(json.dumps(ledger))
+            (root / "WORK_ITEMS.json").write_text(json.dumps(valid_work_backlog()))
+            (root / "CAPABILITIES.json").write_text(json.dumps(valid_capabilities()))
+            (root / "WITNESSES.json").write_text(
+                json.dumps(self.witnesses(sha256_json(ledger)))
+            )
+
+            report = validate_authoring_directory(
+                root,
+                expected_method_version="method-v-test",
+                expected_method_digest=method_digest,
+                expected_method_scope_digest=scope_digest,
+            )
+
+            self.assertTrue(report["structurally_valid"], report)
+            self.assertTrue(report["task_ready"], report)
+            self.assertEqual(
+                {join["status"] for join in report["identity_joins"]},
+                {"matched"},
+            )
+            for surface in report["surfaces"].values():
+                self.assertRegex(surface["file_sha256"], r"\Asha256:[0-9a-f]{64}\Z")
+                self.assertRegex(
+                    surface["canonical_json_sha256"],
+                    r"\Asha256:[0-9a-f]{64}\Z",
+                )
+            self.assertEqual(report, validate_authoring_directory(
+                root,
+                expected_method_version="method-v-test",
+                expected_method_digest=method_digest,
+                expected_method_scope_digest=scope_digest,
+            ))
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "corridor_kit",
+                    "authoring",
+                    "validate",
+                    str(root),
+                    "--expected-method-version",
+                    "method-v-test",
+                    "--expected-method-digest",
+                    method_digest,
+                    "--expected-method-scope-digest",
+                    scope_digest,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertTrue(json.loads(completed.stdout)["task_ready"])
+
+    def test_aggregate_fails_closed_on_missing_malformed_symlink_and_digest_mismatch(self) -> None:
+        cases = ("missing", "malformed", "symlink", "digest")
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as raw:
+                root = create_scaffold(Path(raw) / "corridor")
+                if case == "missing":
+                    (root / "WITNESSES.json").unlink()
+                elif case == "malformed":
+                    (root / "CAPABILITIES.json").write_text('{"schema_version":')
+                elif case == "symlink":
+                    authoring = root / "AUTHORING.json"
+                    saved = root / "saved-authoring.json"
+                    authoring.replace(saved)
+                    authoring.symlink_to(saved)
+                else:
+                    kit = load_json(root / "KIT.json")
+                    kit["method_capsule_digest"] = "sha256:" + "0" * 64
+                    (root / "KIT.json").write_text(json.dumps(kit))
+
+                report = validate_authoring_directory(root, allow_draft=True)
+                self.assertFalse(report["structurally_valid"], report)
+                if case == "digest":
+                    self.assertIn(
+                        "mismatch",
+                        {join["status"] for join in report["identity_joins"]},
+                    )
 
 
 class QaAssessmentSemanticTests(unittest.TestCase):
