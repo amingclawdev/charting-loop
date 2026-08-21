@@ -18,7 +18,7 @@ This protocol therefore supplies both arms with the same frozen, task-neutral gr
 infrastructure. The task-time agent performs the semantic work itself. The experiment
 asks whether Method guidance changes that work when infrastructure is held fixed.
 
-## Three frozen profiles
+## Three frozen identity layers
 
 ### Method profile
 
@@ -49,6 +49,25 @@ A Study profile pins the prospective task set, task and evaluator digests, model
 runtime, reasoning effort, tools, network policy, total task clock, Kernel bytes,
 prompts, QA rubric, seeds when available, and all retry and invalid-run rules. It also
 declares the exact Treatment and Control context manifests before either arm starts.
+
+## Three work profiles
+
+The identity layers above must not be confused with three different ways of applying
+Charting Loop:
+
+- **Diagnostic application profile.** A task-time agent uses the Method to diagnose
+  drift between the current Position, governing Rules, projected Direction, and the
+  next attempted transition. This is the primary profile tested here.
+- **Long-horizon Corridor engineering profile.** An engineering process repeatedly
+  builds mechanisms, encounters blocks, repairs the system, and replays it until a
+  durable Corridor stabilizes. This process can take many iterations and is not
+  compressed into a benchmark Builder stage or counted as a task arm in this Study.
+- **Frozen Corridor traversal profile.** A later agent consumes a previously built and
+  frozen task-conditioned Corridor. Existing matched observations used this profile;
+  it remains valid, but it estimates a different intervention from the primary Study.
+
+A report names the profile it actually ran. Evidence from one profile is not silently
+reclassified as evidence for another.
 
 ## Estimand and matched arms
 
@@ -90,21 +109,30 @@ Worker behavior and therefore part of what is measured.
 
 ### Rule and Fact authority
 
-The Worker may append a proposed Rule node only with an exact source binding into the
-frozen public task or another Study-authorized Rule source. A dependency edge states
-that one Rule's applicability or satisfaction depends on another; it does not make
-either Rule true. K verifies the reference and bytes, not the interpretation.
+The Study freezes a `RuleAdmissionPolicy` and `FactAdmissionPolicy` before either arm
+starts. The Worker may append a proposed Rule node only with an exact source binding
+into the frozen public task or another Study-authorized Rule source. A proposal becomes
+an authorized `RuleRevision` only through the policy's source-authorized ratification
+transition, which emits a content-addressed `RuleRatificationReceipt`. K verifies the
+source and transition identity; neither the Worker, graph membership, nor K creates
+new normative authority. A dependency edge states that one Rule's applicability or
+satisfaction depends on another; it does not make either Rule true.
 
-A Fact node binds an observation to its evidence and the Position at which it was
-admitted. Fact admission does not authorize a Rule. Rule authorization does not admit
-a Fact. K must preserve that distinction and may not infer either authority from a
-well-formed record.
+A proposed Fact binds an observation to evidence and the Position at which it was
+observed. It enters the admitted-Fact root only through the frozen FactAdmissionPolicy,
+whose source selector and replay result are bound in a `FactAdmissionReceipt`. The
+receipt authorizes inclusion under that policy; it does not promote an observation
+beyond the cited evidence. Fact admission does not authorize a Rule. Rule authorization
+does not admit a Fact. K must preserve that distinction and may not infer either
+authority from a well-formed record or a QA opinion.
 
 ### Position and Direction
 
-`PositionCheckpoint` is a content-addressed whole-state checkpoint: current artifacts,
-admitted Facts, applicable Rule closure, unresolved conflicts, and the relevant task
-timeline. It is not merely a progress label.
+`PositionCheckpoint` is a content-addressed whole-state checkpoint. It binds the task
+and world identities; governed-object revision; role definitions, assignments, and
+scope; current artifact root; authorized RuleRevision and applicable Rule closure;
+admitted-Fact root and admission-receipt watermark; unresolved conflicts; and the
+relevant task-timeline root. It is not a per-Rule checkpoint or merely a progress label.
 
 At a Position, the Worker writes a semantic `DirectionProposal` grounded in the
 applicable Rules and cited timeline evidence. Direction is intentionally not fixed:
@@ -125,15 +153,20 @@ post-score. During task execution the Worker may create Rule and Fact nodes, che
 Position, propose and reproject Direction, and freeze complete artifact revisions.
 
 On every append K performs structural validation only: schema, digest, identity,
-referential integrity, and append-only history. An incomplete or contradictory graph
-is preserved as evidence and reported to the Worker as an advisory limitation. It does
-not block ordinary task work, synthesize missing evidence, or convert uncertainty into
-a Gate decision.
+referential integrity, and append-only history. A structurally invalid mutation fails
+closed and is zero-write; its advisory error does not terminate ordinary task work, and
+the last valid graph remains available. A structurally valid but incomplete or
+contradictory graph is preserved as evidence and reported to the Worker as an advisory
+limitation. It does not block ordinary task work, synthesize missing evidence, or
+convert uncertainty into a Gate decision.
 
-At the official deadline the harness submits the latest complete frozen Worker
-snapshot that existed before the deadline. A later audit cannot replace it. If no such
-snapshot exists, the Study records the predeclared no-submission or invalid outcome
-rather than constructing one after the fact.
+Throughout the task, complete Worker artifact revisions are frozen into continuous
+latest-valid custody. The latest-valid pointer advances atomically only after a
+revision's bytes and manifest validate; an incomplete or invalid revision cannot
+replace the previous valid snapshot. At the official deadline the harness submits the
+latest valid frozen Worker snapshot that existed before the deadline. A later audit
+cannot replace it. If no such snapshot exists, the Study records the predeclared
+no-submission or invalid outcome rather than constructing one after the fact.
 
 ## QA schedule
 
@@ -152,8 +185,8 @@ or create a Gate for the already completed task.
 The arm-native QA observation follows its arm's context: Method-guided in Treatment
 and neutral in Control. Those outcomes are mechanism evidence, not an isolated QA
 effect estimate. Any cross-arm claim specifically about QA quality requires a separate
-blinded re-audit using the same QA Method and same audit rubric on both frozen paths;
-otherwise the QA comparison remains descriptive only.
+preferably blinded re-audit using a byte-identical QA Method and byte-identical audit
+rubric on both frozen paths; otherwise the QA comparison remains descriptive only.
 
 ## Replay and observables
 
@@ -191,6 +224,10 @@ non-blinded arm-native QA comparison does not establish a QA effect.
 This protocol does not require a Method v9. An optional future Method profile may
 formalize the integrated executor-authoring pattern, but the primary Study remains a
 Protocol profile using frozen Method v8.
+
+An optional future repair-loop Study may let witnessed post-score QA findings drive a
+new Worker revision. It must be preregistered as a different Study with a new task
+clock, submission rule, and estimand; it cannot rewrite the primary non-repair result.
 
 Kernel K may be implemented as Corridor Kit 0.6 by a clean rewrite. Compatibility with
 earlier Kit versions is not a requirement when migration would reintroduce a
