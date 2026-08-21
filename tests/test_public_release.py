@@ -406,6 +406,79 @@ class PublicReleaseTests(unittest.TestCase):
             "not a second independent efficacy replication", invitation_words
         )
 
+    def test_method_guided_graph_kernel_protocol_is_explicit_and_bounded(self) -> None:
+        protocol = (
+            REPOSITORY_ROOT
+            / "docs"
+            / "INTEGRATED-GRAPH-EXPERIMENT-PROTOCOL.md"
+        ).read_text(encoding="utf-8")
+        words = " ".join(protocol.split())
+
+        sections = (
+            "## Why this protocol exists",
+            "## Three frozen profiles",
+            "## Estimand and matched arms",
+            "## What Kernel K contains",
+            "## Graph semantics",
+            "## Task-time execution and fail-soft behavior",
+            "## QA schedule",
+            "## Replay and observables",
+            "## Evidence and reporting",
+            "## Implementation boundary",
+        )
+        positions = [protocol.index(section) for section in sections]
+        self.assertEqual(positions, sorted(positions))
+
+        for marker in (
+            "method-guided-graph-kernel-experiment-v1",
+            "### Method profile",
+            "### Protocol profile",
+            "### Study profile",
+            "charting-loop-method-v8",
+            "3c3813444a7d43d0a56837e9cb960be86ce26d06",
+            "sha256:85b5a7a8700312ec1e35b80df6e224221d44a48904247a8d6d32cfe940459446",
+            "sha256:bd70498b2f75e039d88c80ae0c5b0a11fba15d12517820c27e8bccb28da987af",
+            "cf5ac479e208a2401b9358527d58df48e22c0670",
+            "083ca2c18dbbb44804208d081b70e7a161df1187",
+            "f557af476441e814e4d86041969c18fde2299a6a47d28658bdeb8cec2d7296c1",
+            "conditional on the shared Kernel",
+            "byte-identical Kernel K",
+            "The only intended arm difference is Method guidance",
+            "Control is not an infrastructure ablation",
+            "no task-specific Builder phase",
+            "does **not** include task Rules",
+            "Mechanical task I/O and custody binding",
+            "PositionCheckpoint",
+            "DirectionProposal",
+            "DirectionSnapshot",
+            "a candidate, not truth",
+            "Fact admission does not authorize a Rule",
+            "Rule authorization does not admit a Fact",
+            "one official task clock",
+            "latest complete frozen Worker snapshot",
+            "advisory limitation",
+            "does not block ordinary task work",
+            "post-score",
+            "separate audit-only budget",
+            "It does not repair the submission",
+            "same QA Method and same audit rubric",
+            "otherwise the QA comparison remains descriptive only",
+            "convergence observables",
+            "diagnostic and non-gating",
+            "does not require a Method v9",
+            "Corridor Kit 0.6 by a clean rewrite",
+            "Historical Kit bytes and results remain immutable evidence",
+        ):
+            self.assertIn(marker, words)
+
+        for prohibited_claim in (
+            "Kernel proves semantic correctness",
+            "Kernel grants PASS",
+            "QA repairs the official submission",
+            "This study proves multi-task efficacy",
+        ):
+            self.assertNotIn(prohibited_claim, protocol)
+
     def test_result_index_human_detail_and_ai_analysis_are_separate(self) -> None:
         readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
         invitation = (
