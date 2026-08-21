@@ -13,10 +13,12 @@ from corridor_kit import (
     ACCEPTANCE_SCHEMA,
     AUTHORING_SCHEMA,
     CAPABILITY_SCHEMA,
+    FACT_CANDIDATES_SCHEMA,
     KIT_VERSION,
     WITNESSES_SCHEMA,
     WORK_BACKLOG_SCHEMA,
     CorridorKitError,
+    append_admitted_facts,
     append_position_event,
     counterfactual_transition,
     capture_command,
@@ -33,6 +35,7 @@ from corridor_kit import (
     validate_acceptance_ledger,
     validate_authoring_directory,
     validate_capability_registry,
+    validate_fact_candidates,
     validate_work_backlog,
     validate_work_files,
     validate_witnesses,
@@ -410,6 +413,9 @@ class AuthoringCoreTests(unittest.TestCase):
                 {
                     "witness_id": f"WIT-{index + 1}",
                     "acceptance_ids": ["AC-1" if index < 2 else "AC-2"],
+                    "obligation_partitions": [
+                        "positive", "negative", "boundary", "state", "temporal", "coupled"
+                    ],
                     "disposition": disposition,
                     "replay": {
                         "argv": ["python3", "task_adapter.py", "check"],
@@ -460,6 +466,7 @@ class AuthoringCoreTests(unittest.TestCase):
         unknown = self.witnesses(digest)
         unknown["witnesses"][0]["acceptance_ids"] = ["AC-UNKNOWN"]
         unknown["witnesses"][0]["disposition"] = "success"
+        unknown["witnesses"][0]["obligation_partitions"] = ["oracle"]
         unknown["witnesses"][0]["replay"]["shell"] = True
         unknown["witnesses"][0]["replay"]["input_refs"] = []
         unknown["task_answer"] = "PASS"
@@ -475,6 +482,7 @@ class AuthoringCoreTests(unittest.TestCase):
             "EXACT_FIELDS_REQUIRED",
             "UNKNOWN_ACCEPTANCE_ID",
             "WITNESS_DISPOSITION",
+            "UNKNOWN_OBLIGATION_PARTITION",
             "REPLAY_SHELL_FORBIDDEN",
             "INPUT_REFERENCE_REQUIRED",
         ):
@@ -788,6 +796,8 @@ class CoreMechanicsTests(unittest.TestCase):
             cache.mkdir()
             (cache / "volatile.pyc").write_bytes(os.urandom(16))
             self.assertEqual(first, regular_tree_manifest(root))
+            (root / "z.txt").write_text("changed")
+            self.assertNotEqual(first["tree_digest"], regular_tree_manifest(root)["tree_digest"])
             (root / "unsafe").symlink_to(root / "z.txt")
             with self.assertRaises(CorridorKitError):
                 regular_tree_manifest(root)
@@ -1021,6 +1031,185 @@ class WorkRowsAndRuntimeTests(unittest.TestCase):
                     event_type="row_started",
                     status="done",
                     row_id="ROW-2",
+                )
+
+    def test_runner_admits_bound_candidates_and_reprojects_direction(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            timeline = Path(raw) / "POSITION.jsonl"
+            work = valid_work_backlog()
+            ledger = valid_ledger()
+            capabilities = valid_capabilities()
+            append_position_event(
+                timeline,
+                actor="runner",
+                event_type="row_started",
+                status="in_progress",
+                row_id="ROW-1",
+            )
+            before = runtime_guide(
+                work, ledger, capabilities, load_position_timeline(timeline)
+            )
+            timeline_bytes_before_admission = timeline.read_bytes()
+            with self.assertRaisesRegex(CorridorKitError, "validated runner admission"):
+                append_position_event(
+                    timeline,
+                    actor="runner",
+                    event_type="facts_admitted",
+                    status="admitted",
+                    row_id="ROW-1",
+                    details={},
+                )
+            self.assertEqual(timeline_bytes_before_admission, timeline.read_bytes())
+
+            duplicate_timeline = Path(raw) / "DUPLICATE-POSITION.jsonl"
+            duplicate_line = timeline.read_text(encoding="utf-8").rstrip("\n").replace(
+                '"actor":"runner"',
+                '"actor":"runner","actor":"runner"',
+                1,
+            )
+            duplicate_timeline.write_text(duplicate_line + "\n", encoding="utf-8")
+            duplicate_bytes = duplicate_timeline.read_bytes()
+            with self.assertRaisesRegex(CorridorKitError, "duplicate timeline JSON key"):
+                load_position_timeline(duplicate_timeline)
+            with self.assertRaisesRegex(CorridorKitError, "duplicate timeline JSON key"):
+                append_position_event(
+                    duplicate_timeline,
+                    actor="runner",
+                    event_type="row_progress",
+                    status="in_progress",
+                    row_id="ROW-1",
+                )
+            self.assertEqual(duplicate_bytes, duplicate_timeline.read_bytes())
+
+            corridor_digest = "sha256:" + "c" * 64
+            candidate_ref = "worker-snapshot-0001"
+            value = {
+                "schema_version": FACT_CANDIDATES_SCHEMA,
+                "candidates": [{
+                    "candidate_id": "OBS-1",
+                    "role": "worker",
+                    "corridor_digest": corridor_digest,
+                    "position_ref": before["position"]["position_ref"],
+                    "row_id": "ROW-1",
+                    "acceptance_id": "AC-2",
+                    "obligation_partition": "negative",
+                    "observation": "The invalid candidate was rejected.",
+                    "source_ref": "public:task#requirement-2",
+                    "witness_ref": "evidence:negative-1",
+                    "replay_ref": "replay:negative-1",
+                    "candidate_ref": candidate_ref,
+                }],
+            }
+            report = validate_fact_candidates(
+                value,
+                work=work,
+                acceptance=ledger,
+                expected_corridor_digest=corridor_digest,
+                expected_position_ref=before["position"]["position_ref"],
+                expected_role="worker",
+                expected_candidate_ref=candidate_ref,
+            )
+            self.assertTrue(report.ok, report.errors)
+            admitted = append_admitted_facts(
+                timeline,
+                actor="runner",
+                candidates=value,
+                work=work,
+                acceptance=ledger,
+                expected_corridor_digest=corridor_digest,
+                expected_position_ref=before["position"]["position_ref"],
+                expected_role="worker",
+                expected_candidate_ref=candidate_ref,
+            )
+            self.assertEqual(1, admitted["admitted"])
+            after = runtime_guide(
+                work, ledger, capabilities, load_position_timeline(timeline)
+            )
+            self.assertNotEqual(
+                before["direction"]["direction_digest"],
+                after["direction"]["direction_digest"],
+            )
+            self.assertEqual(
+                before["direction"]["rule_closure_digest"],
+                after["direction"]["rule_closure_digest"],
+            )
+            self.assertEqual(1, len(after["position"]["current_row_facts"]))
+            self.assertIn(
+                {"acceptance_id": "AC-2", "partition": "positive"},
+                after["direction"]["witness_gaps"],
+            )
+            self.assertEqual(
+                admitted["event"]["event_hash"],
+                after["position"]["current_row_facts"][0]["admission_event_hash"],
+            )
+
+            timeline_bytes = timeline.read_bytes()
+            replayed = append_admitted_facts(
+                timeline,
+                actor="runner",
+                candidates=value,
+                work=work,
+                acceptance=ledger,
+                expected_corridor_digest=corridor_digest,
+                expected_position_ref=before["position"]["position_ref"],
+                expected_role="worker",
+                expected_candidate_ref=candidate_ref,
+            )
+            self.assertEqual(0, replayed["admitted"])
+            self.assertTrue(replayed["idempotent"])
+            self.assertEqual(timeline_bytes, timeline.read_bytes())
+
+            with self.assertRaises(CorridorKitError):
+                append_admitted_facts(
+                    timeline,
+                    actor="worker",
+                    candidates=value,
+                    work=work,
+                    acceptance=ledger,
+                    expected_corridor_digest=corridor_digest,
+                    expected_position_ref=before["position"]["position_ref"],
+                    expected_role="worker",
+                    expected_candidate_ref=candidate_ref,
+                )
+
+            forged_timeline = Path(raw) / "FORGED-POSITION.jsonl"
+            forged_events = load_position_timeline(timeline)
+            forged_events[-1]["actor"] = "worker"
+            unsigned = {
+                key: value
+                for key, value in forged_events[-1].items()
+                if key != "event_hash"
+            }
+            forged_events[-1]["event_hash"] = sha256_json(unsigned)
+            forged_timeline.write_text(
+                "".join(
+                    json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n"
+                    for event in forged_events
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(CorridorKitError, "invalid runner identity"):
+                runtime_guide(
+                    work,
+                    ledger,
+                    capabilities,
+                    load_position_timeline(forged_timeline),
+                )
+            self.assertEqual(timeline_bytes, timeline.read_bytes())
+
+            stale = json.loads(json.dumps(value))
+            stale["candidates"][0]["candidate_id"] = "OBS-2"
+            with self.assertRaises(CorridorKitError):
+                append_admitted_facts(
+                    timeline,
+                    actor="runner",
+                    candidates=stale,
+                    work=work,
+                    acceptance=ledger,
+                    expected_corridor_digest=corridor_digest,
+                    expected_position_ref=before["position"]["position_ref"],
+                    expected_role="worker",
+                    expected_candidate_ref=candidate_ref,
                 )
 
 

@@ -27,8 +27,8 @@ The frozen reusable layer is deliberately small:
 - strict `charting-loop/task-work-backlog/v1` row, dependency, and join validation;
 - strict `charting-loop/capability-registry/v1` version, digest, contract,
   applicability, and side-effect validation;
-- append-only `charting-loop/position-event/v1` observations plus deterministic
-  current-row, Guide, and reminder projections;
+- append-only `charting-loop/position-event/v1` observations, runner-admitted Facts,
+  and deterministic current-row, Guide, and reminder projections;
 - canonical JSON, content hashes, and deterministic source-tree manifests;
 - labeled inventories of the public task world;
 - atomic JSON/report writes;
@@ -126,11 +126,31 @@ python3 -m corridor_kit runtime reminders \
 ```
 
 The runtime first computes a content-addressed `PositionRef` checkpoint from the
-frozen work digest and visible timeline prefix. It then projects `Direction` from
+frozen work digest, visible timeline prefix, and runner-admitted Fact root. It then projects `Direction` from
 that PositionRef, the transitive frozen Rule closure selected by the current row,
 and the applicable frozen capabilities. `Entrance` and `Guide` are derived from that
 Direction rather than acting as independent authority. Worker and QA therefore see
-the same position-relative acceptance boundary.
+the same position-relative acceptance boundary. Direction exposes current-row Facts,
+six-partition witness coverage, and remaining witness gaps; adding a Fact changes the
+PositionRef and Direction digest but never changes the frozen Rule closure.
+
+Worker and QA may author concise candidate observations, but only the runner may
+admit them. Admission strictly binds role, Corridor digest, PositionRef, work row,
+acceptance ID, obligation partition, source, witness, replay, and candidate identity,
+then appends one hash-linked `facts_admitted` event. Malformed, stale, conflicting,
+or unbound candidates fail closed without becoming Facts or blocking task execution:
+
+```sh
+python3 -m corridor_kit timeline admit-facts \
+  /tmp/charting-loop-position/POSITION.jsonl \
+  --candidate /tmp/fact-candidates.json \
+  --work /tmp/charting-loop/corridor/WORK_ITEMS.json \
+  --acceptance /tmp/charting-loop/corridor/ACCEPTANCE.json \
+  --actor runner --expected-role worker \
+  --expected-corridor-digest sha256:CORRIDOR \
+  --expected-position-ref sha256:POSITION \
+  --expected-candidate-ref worker-snapshot-0001
+```
 
 For diagnosis, a caller may request a read-only counterfactual projection by
 substituting a Position or acceptance ledger. The result is explicitly
@@ -161,11 +181,11 @@ It contains no task ID, Rule, domain algorithm, candidate, or outcome-derived re
 
 `WITNESSES.json` starts empty with `state=uncompiled` and a null acceptance digest.
 After the Builder compiles it, each witness has exactly a stable `witness_id`, one or
-more known `acceptance_ids`, a disposition from `pass`, `deny`, `hold`, or `refusal`,
-and a replay object. The replay object contains a non-empty direct `argv`, at least
+more known `acceptance_ids`, one or more explicit `obligation_partitions`, a disposition
+from `pass`, `deny`, `hold`, or `refusal`, and a replay object. The replay object contains a non-empty direct `argv`, at least
 one labeled input ref and digest, one result ref and digest, and `shell=false`.
 The surface is bounded to finite witness, acceptance-ID, argv, input-ref, and string
-sizes. Its coverage projection only lists witnessed and unwitnessed acceptance IDs;
+sizes. Its coverage projection lists covered and missing acceptance-ID/partition pairs;
 even complete coverage with all `pass` dispositions cannot infer task PASS, an answer,
 authority, or official deliverability.
 
@@ -282,12 +302,13 @@ Claw and does not present that implementation as the method's required architect
 
 ## Freezing and integration
 
-The authoring-core release sets `KIT_VERSION` to `0.5.0`. `KIT_VERSION` identifies
+The Fact-checkpoint release sets `KIT_VERSION` to `0.6.0`. `KIT_VERSION` identifies
 the API, while the exact Git commit plus
 `python3 -m corridor_kit manifest corridor_kit` tree digest identifies the bytes.
 A source-tree manifest excludes interpreter-created `__pycache__`, `.pyc`, and `.pyo`
-files under a declared, digest-bound policy; the runner's later task-Corridor freeze
-remains stricter and closes over every retained task artifact.
+files under a declared, digest-bound policy. The runner removes those derived caches
+before freezing and then uses the same manifest implementation for freeze, verification,
+and private custody, so every retained task-authored byte has one identity at every intake.
 A benchmark harness should verify those two identities, upload the package read-only,
 and tell Builder where it is. Changing any kit byte creates a new kit revision; do not
 learn domain rules from one benchmark and silently add them to the shared revision.
@@ -295,5 +316,9 @@ learn domain rules from one benchmark and silently add them to the shared revisi
 The Harbor adapter uploads the frozen kit before Builder starts, exposes only these
 documented commands, and records its version and tree digest in trial metadata. The
 Builder compiles task-specific rows and adapters; Worker and QA query the same frozen
-rows, capability identities, and runner timeline. Every reminder reports
+rows, capability identities, and runner timeline. Fresh Worker and QA prompts also
+receive the exact frozen Method v8 bytes, version, and digest: the official task remains
+Rule authority and the Method remains procedural self-diagnosis guidance. A partial or
+uncompiled Corridor stays advisory; it cannot abort Worker, QA, or external grading,
+and incompleteness alone is `not_assessed`, not a business `blocked` result. Every reminder reports
 `advisory_only=true`, `authorizes_mutation=false`, and `blocking_gate=false`.

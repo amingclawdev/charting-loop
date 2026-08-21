@@ -21,12 +21,13 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
-KIT_VERSION = "0.5.0"
+KIT_VERSION = "0.6.0"
 MANIFEST_SCHEMA = "charting-loop/corridor-kit-tree-manifest/v1"
 WORLD_INVENTORY_SCHEMA = "charting-loop/corridor-kit-world-inventory/v1"
 CAPTURE_SCHEMA = "charting-loop/corridor-kit-command-capture/v1"
 MAX_JSON_BYTES = 5 * 1024 * 1024
 MAX_MANIFEST_FILE_BYTES = 256 * 1024 * 1024
+TREE_EXCLUSION_POLICY = ("**/__pycache__/**", "**/*.pyc", "**/*.pyo")
 
 
 class CorridorKitError(ValueError):
@@ -161,6 +162,45 @@ def _is_python_cache(path: Path, root: Path) -> bool:
     return "__pycache__" in relative.parts or relative.suffix in {".pyc", ".pyo"}
 
 
+def regular_tree_digest(files: Sequence[Mapping[str, Any]]) -> str:
+    """Bind the exact effective-file list and the frozen cache exclusion policy."""
+
+    return sha256_json(
+        {"exclusion_policy": list(TREE_EXCLUSION_POLICY), "files": list(files)}
+    )
+
+
+def purge_python_caches(root: Path) -> list[str]:
+    """Remove only interpreter cache artifacts before a Corridor is frozen.
+
+    The canonical tree excludes these artifacts because they are derived runtime
+    noise.  Removing them prevents excluded bytecode from influencing execution.
+    """
+
+    if root.is_symlink() or not root.is_dir():
+        raise CorridorKitError(f"cache purge root must be a real directory: {root}")
+    removed: list[str] = []
+    paths = sorted(root.rglob("*"), key=lambda item: item.as_posix(), reverse=True)
+    for path in paths:
+        if path.is_symlink():
+            raise CorridorKitError(f"tree symlink is forbidden: {path}")
+        if not _is_python_cache(path, root):
+            continue
+        relative = path.relative_to(root).as_posix()
+        if path.is_dir():
+            try:
+                path.rmdir()
+            except OSError:
+                continue
+            removed.append(relative + "/")
+        elif path.is_file():
+            path.unlink()
+            removed.append(relative)
+        else:
+            raise CorridorKitError(f"tree special file is forbidden: {path}")
+    return sorted(removed)
+
+
 def regular_tree_manifest(root: Path) -> dict[str, Any]:
     """Describe source bytes without following symlinks or hashing runtime caches."""
 
@@ -193,12 +233,10 @@ def regular_tree_manifest(root: Path) -> dict[str, Any]:
     payload = {
         "schema_version": MANIFEST_SCHEMA,
         "kit_version": KIT_VERSION,
-        "exclusion_policy": ["**/__pycache__/**", "**/*.pyc", "**/*.pyo"],
+        "exclusion_policy": list(TREE_EXCLUSION_POLICY),
         "files": files,
     }
-    payload["tree_digest"] = sha256_json(
-        {"exclusion_policy": payload["exclusion_policy"], "files": files}
-    )
+    payload["tree_digest"] = regular_tree_digest(files)
     return payload
 
 

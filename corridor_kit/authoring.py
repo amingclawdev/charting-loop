@@ -11,14 +11,18 @@ from pathlib import Path
 import re
 from typing import Any
 
-from .acceptance import ACCEPTANCE_SCHEMA, validate_acceptance_file
+from .acceptance import (
+    ACCEPTANCE_SCHEMA,
+    VERIFICATION_OBLIGATION_KINDS,
+    validate_acceptance_file,
+)
 from .capabilities import CAPABILITY_SCHEMA, validate_capability_file
 from .core import KIT_VERSION, CorridorKitError, file_sha256, load_json, sha256_json
 from .runtime import WORK_BACKLOG_SCHEMA, validate_work_files
 
 
 AUTHORING_SCHEMA = "charting-loop/corridor-authoring-contract/v1"
-WITNESSES_SCHEMA = "charting-loop/corridor-coupled-witnesses/v1"
+WITNESSES_SCHEMA = "charting-loop/corridor-coupled-witnesses/v2"
 AUTHORING_REPORT_SCHEMA = "charting-loop/corridor-authoring-validation/v1"
 METHOD_CAPSULE_SCHEMA = "charting-loop/method-capsule/v1"
 KIT_SCHEMA = "charting-loop/corridor-kit-scaffold/v1"
@@ -27,6 +31,7 @@ SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*\Z")
 MAX_WITNESSES = 1024
 MAX_WITNESS_ACCEPTANCE_IDS = 256
+MAX_WITNESS_PARTITIONS = len(VERIFICATION_OBLIGATION_KINDS)
 MAX_REPLAY_ARGV = 256
 MAX_REPLAY_INPUT_REFS = 256
 MAX_REPLAY_STRING = 65536
@@ -373,8 +378,15 @@ def validate_witnesses(
 
     witness_ids: list[str] = []
     witnessed_ids: set[str] = set()
+    witnessed_partitions: set[tuple[str, str]] = set()
     by_disposition = {disposition: set() for disposition in sorted(WITNESS_DISPOSITIONS)}
-    witness_fields = {"witness_id", "acceptance_ids", "disposition", "replay"}
+    witness_fields = {
+        "witness_id",
+        "acceptance_ids",
+        "obligation_partitions",
+        "disposition",
+        "replay",
+    }
     replay_fields = {"argv", "input_refs", "result_ref", "shell"}
     for index, witness_value in enumerate(witnesses_value[:MAX_WITNESSES]):
         location = f"$.witnesses[{index}]"
@@ -399,6 +411,25 @@ def validate_witnesses(
                 report.error("UNKNOWN_ACCEPTANCE_ID", f"{location}.acceptance_ids", f"unknown acceptance ID {acceptance_id!r}")
             else:
                 witnessed_ids.add(acceptance_id)
+        partitions = _string_list(
+            witness_value.get("obligation_partitions"),
+            report,
+            f"{location}.obligation_partitions",
+            maximum=MAX_WITNESS_PARTITIONS,
+            nonempty=True,
+            token=True,
+        )
+        for partition in partitions:
+            if partition not in VERIFICATION_OBLIGATION_KINDS:
+                report.error(
+                    "UNKNOWN_OBLIGATION_PARTITION",
+                    f"{location}.obligation_partitions",
+                    f"must be one of {list(VERIFICATION_OBLIGATION_KINDS)}",
+                )
+                continue
+            for acceptance_id in acceptance_ids:
+                if acceptance_id in known_acceptance_ids:
+                    witnessed_partitions.add((acceptance_id, partition))
         disposition = witness_value.get("disposition")
         if disposition not in WITNESS_DISPOSITIONS:
             report.error("WITNESS_DISPOSITION", f"{location}.disposition", f"must be one of {sorted(WITNESS_DISPOSITIONS)}")
@@ -448,6 +479,12 @@ def validate_witnesses(
         report.error("DUPLICATE_WITNESS_ID", "$.witnesses", "witness IDs must be unique")
     known_sorted = sorted(known_acceptance_ids)
     witnessed_sorted = sorted(witnessed_ids)
+    required_partitions = {
+        (acceptance_id, partition)
+        for acceptance_id in known_acceptance_ids
+        for partition in VERIFICATION_OBLIGATION_KINDS
+    }
+    missing_partitions = sorted(required_partitions - witnessed_partitions)
     report.facts = {
         "schema_version": value.get("schema_version"),
         "state": state,
@@ -456,7 +493,15 @@ def validate_witnesses(
         "known_acceptance_ids": known_sorted,
         "witnessed_acceptance_ids": witnessed_sorted,
         "unwitnessed_acceptance_ids": sorted(known_acceptance_ids - witnessed_ids),
-        "coverage_complete": bool(known_acceptance_ids) and witnessed_ids == known_acceptance_ids,
+        "coverage_complete": bool(required_partitions) and not missing_partitions,
+        "covered_obligation_partitions": [
+            {"acceptance_id": acceptance_id, "partition": partition}
+            for acceptance_id, partition in sorted(witnessed_partitions)
+        ],
+        "missing_obligation_partitions": [
+            {"acceptance_id": acceptance_id, "partition": partition}
+            for acceptance_id, partition in missing_partitions
+        ],
         "coverage_by_disposition": {
             disposition: sorted(acceptance_ids)
             for disposition, acceptance_ids in by_disposition.items()

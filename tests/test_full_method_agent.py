@@ -329,11 +329,16 @@ class FullMethodContractTests(unittest.TestCase):
     def test_worker_and_qa_receive_same_corridor_identity(self) -> None:
         digest = "sha256:" + "a" * 64
         task = "Repair the live system and leave it verifiable."
+        method_text = (REPOSITORY_ROOT / "method-paper" / "METHOD.md").read_text(
+            encoding="utf-8"
+        )
         worker = contract.worker_prompt(
             task,
             digest,
             position_ref="sha256:" + "1" * 64,
             direction_digest="sha256:" + "2" * 64,
+            method_text=method_text,
+            fact_candidate_ref="worker-candidate:test",
         )
         qa = contract.qa_prompt(
             task,
@@ -342,6 +347,8 @@ class FullMethodContractTests(unittest.TestCase):
             expected_acceptance_ids=["ACCEPT-1"],
             position_ref="sha256:" + "3" * 64,
             direction_digest="sha256:" + "4" * 64,
+            method_text=method_text,
+            fact_candidate_ref="worker-000001-deadbeef",
         )
 
         for prompt in (worker, qa):
@@ -356,6 +363,11 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertIn(f"--acceptance {contract.ACCEPTANCE_PATH}", prompt)
             self.assertIn("PositionRef", prompt)
             self.assertIn("Direction digest", prompt)
+            self.assertIn(method_text, prompt)
+            self.assertIn(contract.METHOD_VERSION_ID, prompt)
+            self.assertIn(contract.METHOD_CONTENT_SHA256, prompt)
+            self.assertIn("not chain-of-thought", prompt)
+            self.assertIn("runner alone may admit", " ".join(prompt.lower().split()))
         self.assertIn("independent QA", qa)
         self.assertIn("Do not mutate", qa)
         self.assertIn(contract.QA_PATH, qa)
@@ -378,6 +390,13 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("not an authorization credential or Gate", normalized_qa)
         self.assertIn("write only the assessment path", normalized_qa)
         self.assertNotIn("QA remains advisory and cannot delete", qa)
+        with self.assertRaisesRegex(ValueError, "frozen Method digest"):
+            contract.worker_prompt(
+                task,
+                digest,
+                method_text=method_text + "silent revision",
+                fact_candidate_ref="worker-candidate:test",
+            )
 
     def test_builder_is_task_conditioned_but_must_not_build_a_gate(self) -> None:
         prompt = contract.builder_prompt("Find and repair the fault.")
@@ -1177,8 +1196,13 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertEqual(2, verified.returncode, verified.stderr)
             probe = json.loads(verified.stdout)
             self.assertFalse(probe["ok"])
-            self.assertIn("manifest_file_mismatch", probe["violations"])
-            self.assertIn("corridor_digest_mismatch", probe["violations"])
+            self.assertTrue(
+                any(
+                    item.startswith("excluded_cache_present:")
+                    for item in probe["violations"]
+                ),
+                probe,
+            )
 
     def test_freezer_records_complete_acceptance_ledger(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1456,6 +1480,39 @@ class FullMethodContractTests(unittest.TestCase):
                 context,
             )
 
+    def test_qa_fact_admission_requires_valid_failure_and_verified_worker_snapshot(self) -> None:
+        adapter = load_harbor_agent_with_stubs()
+        owner = object.__new__(adapter.ChartingLoopFullMethodAgent)
+        assessment = {"witnesses": [{"acceptance_id": "ACCEPT-1"}]}
+
+        async def exercise(decision: dict[str, object], candidate_ref: str | None):
+            return await owner._admit_qa_witnesses(
+                object(),
+                assessment=assessment,
+                decision=decision,
+                candidate_ref=candidate_ref,
+                corridor_digest="sha256:" + "a" * 64,
+                guide={},
+            )
+
+        invalid = asyncio.run(
+            exercise({"valid": False, "outcome": "not_assessed"}, "worker-000001")
+        )
+        self.assertEqual("invalid_assessment", invalid["status"])
+        self.assertEqual(0, invalid["admitted"])
+
+        passed = asyncio.run(
+            exercise({"valid": True, "outcome": "pass"}, "worker-000001")
+        )
+        self.assertEqual("non_failure_assessment", passed["status"])
+        self.assertEqual(0, passed["admitted"])
+
+        no_snapshot = asyncio.run(
+            exercise({"valid": True, "outcome": "fail"}, None)
+        )
+        self.assertEqual("no_verified_worker_snapshot", no_snapshot["status"])
+        self.assertEqual(0, no_snapshot["admitted"])
+
     def test_harbor_adapter_preserves_role_and_verifier_boundaries(self) -> None:
         source = (REPOSITORY_ROOT / "benchmark_agents" / "harbor_agent.py").read_text(
             encoding="utf-8"
@@ -1491,6 +1548,11 @@ class FullMethodContractTests(unittest.TestCase):
             "private_custody_",
             "_builder_freeze_metrics",
             '"first_valid_freeze_elapsed_seconds"',
+            "_prepare_worker_fact_path",
+            "_admit_fact_file",
+            "_admit_qa_witnesses",
+            "QA_FAILURE_WITNESS_NOT_ADMITTED_AS_FACT",
+            '"mode": "exact_frozen_bytes"',
         ):
             self.assertIn(marker, source)
         self.assertNotIn("PHASE_TIMEOUT_SECONDS", source)

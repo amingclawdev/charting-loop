@@ -48,6 +48,7 @@ from benchmark_agents.contract import (
     SDK_PACKAGE_PATH,
     SDK_ROOT,
     WORK_PATH,
+    WORKER_FACTS_PATH,
     builder_prompt,
     closure_prompt,
     freeze_program,
@@ -75,6 +76,7 @@ TASK_TIMEOUT_RE = re.compile(
 )
 PHASE_TOKEN_ENV = "CHARTING_LOOP_PHASE_TOKEN"
 PHASE_NO_BYTECODE_EXPORT = "export PYTHONDONTWRITEBYTECODE=1"
+QA_FACTS_PATH = "/tmp/charting-loop-qa-fact-candidates.json"
 
 
 def _task_timeout_seconds(instruction: str) -> int:
@@ -733,6 +735,15 @@ class ChartingLoopFullMethodAgent(Codex):
             "rule_closure_digest": guide.get("direction", {}).get(
                 "rule_closure_digest"
             ),
+            "admitted_fact_digest": guide.get("direction", {}).get(
+                "admitted_fact_digest"
+            ),
+            "current_row_fact_count": len(
+                guide.get("direction", {}).get("current_row_facts", [])
+            ),
+            "witness_gap_count": len(
+                guide.get("direction", {}).get("witness_gaps", [])
+            ),
             "entrance_ref": guide.get("entrance", {}).get("entrance_ref"),
             "reminder_count": len(guide.get("reminders", [])),
             "capability_ids": [
@@ -1121,7 +1132,10 @@ class ChartingLoopFullMethodAgent(Codex):
     async def _freeze_corridor(self, environment: BaseEnvironment) -> dict[str, Any]:
         result = await self.exec_as_root(
             environment,
-            command=f"python3 -c {shlex.quote(freeze_program())}",
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                f"python3 -c {shlex.quote(freeze_program())}"
+            ),
         )
         lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
         if not lines:
@@ -1167,6 +1181,148 @@ class ChartingLoopFullMethodAgent(Codex):
                 f"find {shlex.quote(qa_dir)} -type f -exec chmod 0444 {{}} +; "
                 "fi"
             ),
+        )
+
+    async def _prepare_worker_fact_path(self, environment: BaseEnvironment) -> None:
+        """Create one role-writable candidate file without granting timeline access."""
+
+        user = shlex.quote(str(environment.default_user or "root"))
+        await self.exec_as_root(
+            environment,
+            command=(
+                f"rm -f {shlex.quote(WORKER_FACTS_PATH)} && "
+                f"install -m 0600 -o {user} /dev/null {shlex.quote(WORKER_FACTS_PATH)}"
+            ),
+        )
+
+    async def _seal_worker_fact_path(self, environment: BaseEnvironment) -> None:
+        await self.exec_as_root(
+            environment,
+            command=(
+                f"if test -f {shlex.quote(WORKER_FACTS_PATH)}; then "
+                f"chown 0:0 {shlex.quote(WORKER_FACTS_PATH)} && "
+                f"chmod 0400 {shlex.quote(WORKER_FACTS_PATH)}; fi"
+            ),
+        )
+
+    async def _write_root_json(
+        self, environment: BaseEnvironment, *, path: str, value: dict[str, Any]
+    ) -> None:
+        encoded = json.dumps(value, sort_keys=True, separators=(",", ":"))
+        program = (
+            "import json; from pathlib import Path; "
+            f"p=Path({path!r}); v=json.loads({encoded!r}); "
+            "p.write_text(json.dumps(v,sort_keys=True,separators=(',',':'))+'\\n',encoding='utf-8'); "
+            "p.chmod(0o400)"
+        )
+        await self.exec_as_root(
+            environment,
+            command=f"python3 -c {shlex.quote(program)}",
+        )
+
+    async def _admit_fact_file(
+        self,
+        environment: BaseEnvironment,
+        *,
+        path: str,
+        role: str,
+        candidate_ref: str,
+        corridor_digest: str,
+        guide: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Admit candidates advisory-first; malformed input never stops the task."""
+
+        position_ref = guide.get("position_ref")
+        row_id = guide.get("current_row_id")
+        if not isinstance(position_ref, str) or not position_ref:
+            return {"ok": False, "admitted": 0, "status": "position_unavailable"}
+        present = await self.exec_as_root(
+            environment,
+            command=f"test -s {shlex.quote(path)}",
+        )
+        if present.return_code != 0:
+            return {"ok": True, "admitted": 0, "status": "no_candidates"}
+        result = await self.exec_as_root(
+            environment,
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                "python3 -m corridor_kit timeline admit-facts "
+                f"{shlex.quote(POSITION_PATH)} --candidate {shlex.quote(path)} "
+                f"--work {shlex.quote(WORK_PATH)} --acceptance {shlex.quote(ACCEPTANCE_PATH)} "
+                f"--actor runner --expected-corridor-digest {shlex.quote(corridor_digest)} "
+                f"--expected-position-ref {shlex.quote(position_ref)} "
+                f"--expected-role {shlex.quote(role)} "
+                f"--expected-candidate-ref {shlex.quote(candidate_ref)}"
+            ),
+        )
+        lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
+        if result.return_code != 0 or not lines:
+            return {
+                "ok": False,
+                "admitted": 0,
+                "status": "candidate_rejected",
+                "error": (result.stderr or result.stdout or "no output")[-2000:],
+                "row_id": row_id,
+            }
+        try:
+            return {"status": "admitted", **json.loads(lines[-1])}
+        except json.JSONDecodeError:
+            return {"ok": False, "admitted": 0, "status": "admission_unreadable"}
+
+    async def _admit_qa_witnesses(
+        self,
+        environment: BaseEnvironment,
+        *,
+        assessment: dict[str, Any] | None,
+        decision: dict[str, Any],
+        candidate_ref: str | None,
+        corridor_digest: str,
+        guide: dict[str, Any],
+    ) -> dict[str, Any]:
+        if decision.get("valid") is not True:
+            return {"ok": True, "admitted": 0, "status": "invalid_assessment"}
+        if decision.get("outcome") != "fail":
+            return {"ok": True, "admitted": 0, "status": "non_failure_assessment"}
+        if not isinstance(candidate_ref, str) or not candidate_ref:
+            return {"ok": True, "admitted": 0, "status": "no_verified_worker_snapshot"}
+        witnesses = assessment.get("witnesses", []) if isinstance(assessment, dict) else []
+        candidates: list[dict[str, str]] = []
+        for index, witness in enumerate(witnesses if isinstance(witnesses, list) else []):
+            if not isinstance(witness, dict):
+                continue
+            candidates.append(
+                {
+                    "candidate_id": f"QA-{index + 1:04d}",
+                    "role": "qa",
+                    "corridor_digest": corridor_digest,
+                    "position_ref": witness.get("position_ref"),
+                    "row_id": witness.get("row_id"),
+                    "acceptance_id": witness.get("acceptance_id"),
+                    "obligation_partition": witness.get("obligation_partition"),
+                    "observation": witness.get("evidence"),
+                    "source_ref": witness.get("source_ref"),
+                    "witness_ref": witness.get("witness_ref"),
+                    "replay_ref": witness.get("replay"),
+                    "candidate_ref": witness.get("candidate_ref"),
+                }
+            )
+        if not candidates:
+            return {"ok": True, "admitted": 0, "status": "no_candidates"}
+        await self._write_root_json(
+            environment,
+            path=QA_FACTS_PATH,
+            value={
+                "schema_version": "charting-loop/fact-candidates/v1",
+                "candidates": candidates,
+            },
+        )
+        return await self._admit_fact_file(
+            environment,
+            path=QA_FACTS_PATH,
+            role="qa",
+            candidate_ref=candidate_ref,
+            corridor_digest=corridor_digest,
+            guide=guide,
         )
 
     async def _freeze_submission_paths(
@@ -1315,7 +1471,10 @@ class ChartingLoopFullMethodAgent(Codex):
         expected_digest: str,
     ) -> None:
         result = await environment.exec(
-            command=f"python3 -c {shlex.quote(verify_freeze_program())}",
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                f"python3 -c {shlex.quote(verify_freeze_program())}"
+            ),
             user=environment.default_user,
         )
         lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
@@ -1336,13 +1495,14 @@ class ChartingLoopFullMethodAgent(Codex):
         agent_dir = PurePosixPath(EnvironmentPaths.agent_dir).as_posix()
         result = await self.exec_as_root(
             environment,
-            command="python3 -c "
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} python3 -c "
             + shlex.quote(
                 private_custody_program(
                     agent_dir=agent_dir,
                     expected_corridor_digest=expected_digest,
                 )
-            ),
+            )),
         )
         lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
         if not lines:
@@ -1485,6 +1645,7 @@ class ChartingLoopFullMethodAgent(Codex):
         task_timeout_seconds = _task_timeout_seconds(instruction)
         task_deadline = started_at + task_timeout_seconds
         execution_deadline = task_deadline - FINALIZATION_RESERVE_SECONDS
+        method_text = self._method_source.decode("utf-8")
         metadata: dict[str, Any] = {
             "schema_version": "charting-loop/full-method-run/v3",
             "method": "task-conditioned-corridor",
@@ -1492,6 +1653,12 @@ class ChartingLoopFullMethodAgent(Codex):
             "method_source_commit": METHOD_SOURCE_COMMIT,
             "method_content_sha256": METHOD_CONTENT_SHA256,
             "method_scope_sha256": METHOD_SCOPE_SHA256,
+            "method_prompt_injection": {
+                "roles": ["worker", "qa"],
+                "mode": "exact_frozen_bytes",
+                "version": METHOD_VERSION_ID,
+                "digest": METHOD_CONTENT_SHA256,
+            },
             "method_study_eligible": True,
             "reportable_study": True,
             "roles": ["builder", "worker", "qa"],
@@ -1606,24 +1773,45 @@ class ChartingLoopFullMethodAgent(Codex):
         metadata["builder_construction_metrics"] = builder_metrics
 
         await self._verify_freeze(environment, expected_digest=digest)
+        worker_candidate_ref = "worker-candidate:" + hashlib.sha256(
+            f"{digest}:{worker_guide.get('position_ref')}".encode("utf-8")
+        ).hexdigest()
         if _remaining_seconds(execution_deadline) > 0:
-            _, worker_run = await self._run_new_role(
-                "worker",
-                worker,
-                worker_prompt(
-                    instruction,
-                    digest,
-                    construction_readiness_status=construction_readiness_status,
-                    work_backlog_status=str(worker_guide["status"]),
-                    current_row_id=worker_guide.get("current_row_id"),
-                    position_ref=worker_guide.get("position_ref"),
-                    direction_digest=worker_guide.get("direction_digest"),
-                    remaining_seconds=_remaining_seconds(execution_deadline),
-                ),
-                environment,
-                deadline=execution_deadline,
-            )
+            await self._prepare_worker_fact_path(environment)
+            try:
+                _, worker_run = await self._run_new_role(
+                    "worker",
+                    worker,
+                    worker_prompt(
+                        instruction,
+                        digest,
+                        construction_readiness_status=construction_readiness_status,
+                        work_backlog_status=str(worker_guide["status"]),
+                        current_row_id=worker_guide.get("current_row_id"),
+                        position_ref=worker_guide.get("position_ref"),
+                        direction_digest=worker_guide.get("direction_digest"),
+                        remaining_seconds=_remaining_seconds(execution_deadline),
+                        method_text=method_text,
+                        fact_candidate_ref=worker_candidate_ref,
+                    ),
+                    environment,
+                    deadline=execution_deadline,
+                )
+            finally:
+                await self._seal_worker_fact_path(environment)
             self._record_phase_outcome(metadata, worker_run, context)
+            metadata["worker_revision_progress"] = await self._worker_revision_progress(
+                environment
+            )
+            worker_fact_admission = await self._admit_fact_file(
+                environment,
+                path=WORKER_FACTS_PATH,
+                role="worker",
+                candidate_ref=worker_candidate_ref,
+                corridor_digest=digest,
+                guide=worker_guide,
+            )
+            metadata["worker_fact_admission"] = worker_fact_admission
             await self._record_position_event(
                 metadata,
                 environment,
@@ -1632,13 +1820,21 @@ class ChartingLoopFullMethodAgent(Codex):
                 status=worker_run["status"],
                 details={"quiescent": bool(worker_run.get("quiescent"))},
             )
-            metadata["worker_revision_progress"] = await self._worker_revision_progress(
-                environment
-            )
+            if worker_fact_admission.get("admitted", 0) > 0:
+                worker_guide = await self._runtime_guide(environment)
+                metadata["runtime_guide_projections"].append(
+                    {"phase": "post_worker_fact_admission", **worker_guide}
+                )
         else:
             metadata["phase_events"].append("worker_skipped_task_deadline")
         qa_guide = await self._runtime_guide(environment)
         metadata["runtime_guide_projections"].append({"phase": "qa", **qa_guide})
+        snapshots = metadata.get("worker_revision_progress", {}).get("snapshots", [])
+        qa_candidate_ref = (
+            str(snapshots[-1].get("snapshot_id"))
+            if isinstance(snapshots, list) and snapshots and isinstance(snapshots[-1], dict)
+            else None
+        )
 
         decision: dict[str, Any] = {
             "valid": False,
@@ -1667,6 +1863,8 @@ class ChartingLoopFullMethodAgent(Codex):
                         position_ref=qa_guide.get("position_ref"),
                         direction_digest=qa_guide.get("direction_digest"),
                         remaining_seconds=_remaining_seconds(execution_deadline),
+                        method_text=method_text,
+                        fact_candidate_ref=qa_candidate_ref,
                     ),
                     environment,
                     deadline=execution_deadline,
@@ -1684,15 +1882,7 @@ class ChartingLoopFullMethodAgent(Codex):
             finally:
                 await self._seal_qa_directory(environment)
             self._record_phase_outcome(metadata, qa_run, context)
-            await self._record_position_event(
-                metadata,
-                environment,
-                actor="runner",
-                event_type="qa_completed",
-                status=qa_run["status"],
-                details={"quiescent": bool(qa_run.get("quiescent"))},
-            )
-            _, decision = await self._read_assessment(
+            assessment, decision = await self._read_assessment(
                 environment,
                 path=QA_PATH,
                 expected_digest=digest,
@@ -1703,6 +1893,33 @@ class ChartingLoopFullMethodAgent(Codex):
                 definition_closure_status=definition_closure_status,
                 construction_readiness_status=construction_readiness_status,
             )
+            qa_fact_admission = await self._admit_qa_witnesses(
+                environment,
+                assessment=assessment,
+                decision=decision,
+                candidate_ref=qa_candidate_ref,
+                corridor_digest=digest,
+                guide=qa_guide,
+            )
+            metadata["qa_fact_admission"] = qa_fact_admission
+            if decision.get("repair_required") and qa_fact_admission.get("admitted", 0) < 1:
+                decision["repair_required"] = False
+                decision.setdefault("errors", []).append(
+                    "QA_FAILURE_WITNESS_NOT_ADMITTED_AS_FACT"
+                )
+            await self._record_position_event(
+                metadata,
+                environment,
+                actor="runner",
+                event_type="qa_completed",
+                status=qa_run["status"],
+                details={"quiescent": bool(qa_run.get("quiescent"))},
+            )
+            if qa_fact_admission.get("admitted", 0) > 0:
+                qa_guide = await self._runtime_guide(environment)
+                metadata["runtime_guide_projections"].append(
+                    {"phase": "post_qa_fact_admission", **qa_guide}
+                )
         else:
             metadata["phase_events"].append("qa_skipped_task_deadline")
         metadata["qa_decision"] = decision

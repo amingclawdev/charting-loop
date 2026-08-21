@@ -28,6 +28,7 @@ from .domain.binary import (
     elf_inventory,
 )
 from .runtime import (
+    append_admitted_facts,
     append_position_event,
     counterfactual_transition,
     load_position_timeline,
@@ -177,6 +178,19 @@ def _parser() -> argparse.ArgumentParser:
     timeline_append.add_argument("--observed-at")
     timeline_list = timeline_commands.add_parser("list", help="verify and list the complete chain")
     timeline_list.add_argument("timeline", type=Path)
+    timeline_admit = timeline_commands.add_parser(
+        "admit-facts",
+        help="runner-only admission of strictly bound role-authored Fact candidates",
+    )
+    timeline_admit.add_argument("timeline", type=Path)
+    timeline_admit.add_argument("--candidate", required=True, type=Path)
+    timeline_admit.add_argument("--work", required=True, type=Path)
+    timeline_admit.add_argument("--acceptance", required=True, type=Path)
+    timeline_admit.add_argument("--actor", required=True)
+    timeline_admit.add_argument("--expected-corridor-digest", required=True)
+    timeline_admit.add_argument("--expected-position-ref", required=True)
+    timeline_admit.add_argument("--expected-role", required=True, choices=("worker", "qa"))
+    timeline_admit.add_argument("--expected-candidate-ref", required=True)
 
     runtime = commands.add_parser("runtime", help="project current row, Guide, or reminders")
     runtime_commands = runtime.add_subparsers(dest="runtime_command", required=True)
@@ -330,6 +344,20 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "timeline" and args.timeline_command == "list":
             events = load_position_timeline(args.timeline)
             _emit({"ok": True, "event_count": len(events), "events": events})
+            return 0
+        if args.command == "timeline" and args.timeline_command == "admit-facts":
+            report = append_admitted_facts(
+                args.timeline,
+                actor=args.actor,
+                candidates=load_json(args.candidate),
+                work=load_json(args.work),
+                acceptance=load_json(args.acceptance),
+                expected_corridor_digest=args.expected_corridor_digest,
+                expected_position_ref=args.expected_position_ref,
+                expected_role=args.expected_role,
+                expected_candidate_ref=args.expected_candidate_ref,
+            )
+            _emit(report)
             return 0
         if args.command == "runtime":
             if args.runtime_command == "counterfactual":

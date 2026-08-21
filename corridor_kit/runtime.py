@@ -12,6 +12,7 @@ import re
 from typing import Any
 
 from .acceptance import (
+    VERIFICATION_OBLIGATION_KINDS,
     load_qa_json_text,
     qa_assessment_decision,
     validate_acceptance_ledger,
@@ -28,11 +29,13 @@ from .core import (
 
 WORK_BACKLOG_SCHEMA = "charting-loop/task-work-backlog/v1"
 POSITION_EVENT_SCHEMA = "charting-loop/position-event/v1"
-POSITION_PROJECTION_SCHEMA = "charting-loop/position-projection/v2"
-POSITION_REF_SCHEMA = "charting-loop/position-ref/v1"
-DIRECTION_PROJECTION_SCHEMA = "charting-loop/direction-projection/v1"
-RUNTIME_GUIDE_SCHEMA = "charting-loop/runtime-guide/v2"
+POSITION_PROJECTION_SCHEMA = "charting-loop/position-projection/v3"
+POSITION_REF_SCHEMA = "charting-loop/position-ref/v2"
+DIRECTION_PROJECTION_SCHEMA = "charting-loop/direction-projection/v2"
+RUNTIME_GUIDE_SCHEMA = "charting-loop/runtime-guide/v3"
 COUNTERFACTUAL_TRANSITION_SCHEMA = "charting-loop/counterfactual-transition/v1"
+FACT_CANDIDATES_SCHEMA = "charting-loop/fact-candidates/v1"
+ADMITTED_FACTS_SCHEMA = "charting-loop/admitted-facts/v1"
 ROW_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*\Z")
 SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 BACKLOG_STATES = frozenset({"compiled", "uncompiled"})
@@ -48,6 +51,24 @@ ROW_EVENT_STATES = {
     "row_not_applicable": "not_applicable",
 }
 MAX_TIMELINE_BYTES = 16 * 1024 * 1024
+MAX_FACT_CANDIDATES = 1024
+FACT_ROLES = frozenset({"worker", "qa"})
+FACT_CANDIDATE_FIELDS = frozenset(
+    {
+        "candidate_id",
+        "role",
+        "corridor_digest",
+        "position_ref",
+        "row_id",
+        "acceptance_id",
+        "obligation_partition",
+        "observation",
+        "source_ref",
+        "witness_ref",
+        "replay_ref",
+        "candidate_ref",
+    }
+)
 
 
 @dataclass
@@ -337,8 +358,14 @@ def _load_timeline(path: Path) -> list[dict[str, Any]]:
         if not line.strip():
             raise CorridorKitError(f"timeline contains a blank line at {index}")
         try:
-            event = json.loads(line)
-        except (json.JSONDecodeError, UnicodeError) as exc:
+            event = json.loads(
+                line,
+                object_pairs_hook=_reject_duplicate_timeline_pairs,
+                parse_constant=lambda item: (_ for _ in ()).throw(
+                    CorridorKitError(f"non-finite timeline JSON value: {item}")
+                ),
+            )
+        except (CorridorKitError, json.JSONDecodeError, UnicodeError) as exc:
             raise CorridorKitError(f"invalid timeline JSON at line {index}: {exc}") from exc
         if not isinstance(event, dict):
             raise CorridorKitError(f"timeline event at line {index} must be an object")
@@ -370,6 +397,15 @@ def load_position_timeline(path: Path) -> list[dict[str, Any]]:
     return _load_timeline(Path(path))
 
 
+def _reject_duplicate_timeline_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, child in pairs:
+        if key in value:
+            raise CorridorKitError(f"duplicate timeline JSON key: {key}")
+        value[key] = child
+    return value
+
+
 def append_position_event(
     path: Path,
     *,
@@ -385,6 +421,8 @@ def append_position_event(
     for name, value in (("actor", actor), ("event_type", event_type), ("status", status)):
         if not isinstance(value, str) or not value.strip():
             raise CorridorKitError(f"{name} must be a non-empty string")
+    if event_type.strip() == "facts_admitted":
+        raise CorridorKitError("facts_admitted events require validated runner admission")
     if row_id is not None and (not isinstance(row_id, str) or not ROW_ID_RE.fullmatch(row_id)):
         raise CorridorKitError("row_id must be null or a stable token")
     if event_type.startswith("row_") and row_id is None:
@@ -411,25 +449,326 @@ def append_position_event(
         with os.fdopen(descriptor, "r+", encoding="utf-8") as handle:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
             events = _load_timeline(path)
-            unsigned = {
-                "schema_version": POSITION_EVENT_SCHEMA,
-                "event_id": f"evt-{len(events) + 1:06d}",
-                "observed_at": timestamp,
-                "actor": actor.strip(),
-                "event_type": event_type.strip(),
-                "row_id": row_id,
-                "status": status.strip(),
-                "details": details,
-                "previous_event_hash": events[-1]["event_hash"] if events else None,
-            }
-            event = {**unsigned, "event_hash": sha256_json(unsigned)}
-            handle.seek(0, os.SEEK_END)
-            handle.write(canonical_json_bytes(event).decode("utf-8") + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-            return event
+            return _append_locked_position_event(
+                handle,
+                events,
+                actor=actor.strip(),
+                event_type=event_type.strip(),
+                status=status.strip(),
+                row_id=row_id,
+                details=details,
+                observed_at=timestamp,
+            )
     except Exception:
         raise
+
+
+def _append_locked_position_event(
+    handle: Any,
+    events: list[dict[str, Any]],
+    *,
+    actor: str,
+    event_type: str,
+    status: str,
+    row_id: str | None,
+    details: dict[str, Any],
+    observed_at: str,
+) -> dict[str, Any]:
+    """Append after the caller has locked and verified the current timeline."""
+
+    unsigned = {
+        "schema_version": POSITION_EVENT_SCHEMA,
+        "event_id": f"evt-{len(events) + 1:06d}",
+        "observed_at": observed_at,
+        "actor": actor,
+        "event_type": event_type,
+        "row_id": row_id,
+        "status": status,
+        "details": details,
+        "previous_event_hash": events[-1]["event_hash"] if events else None,
+    }
+    event = {**unsigned, "event_hash": sha256_json(unsigned)}
+    handle.seek(0, os.SEEK_END)
+    handle.write(canonical_json_bytes(event).decode("utf-8") + "\n")
+    handle.flush()
+    os.fsync(handle.fileno())
+    return event
+
+
+def validate_fact_candidates(
+    value: Any,
+    *,
+    work: dict[str, Any],
+    acceptance: dict[str, Any],
+    expected_corridor_digest: str,
+    expected_position_ref: str,
+    expected_role: str,
+    expected_candidate_ref: str,
+) -> WorkBacklogReport:
+    """Validate role-authored observations without admitting them as Facts."""
+
+    report = WorkBacklogReport()
+    work_report = validate_work_backlog(work, allow_draft=True)
+    acceptance_report = validate_acceptance_ledger(acceptance, allow_draft=True)
+    if not work_report.ok:
+        report.error("WORK_INVALID", "$.work", str(work_report.errors))
+    if not acceptance_report.ok:
+        report.error("ACCEPTANCE_INVALID", "$.acceptance", str(acceptance_report.errors))
+    if not isinstance(value, dict):
+        report.error("OBJECT_REQUIRED", "$", "fact candidates must be an object")
+        return report
+    if set(value) != {"schema_version", "candidates"}:
+        report.error(
+            "EXACT_FIELDS_REQUIRED",
+            "$",
+            "must contain exactly schema_version and candidates",
+        )
+    if value.get("schema_version") != FACT_CANDIDATES_SCHEMA:
+        report.error("SCHEMA_VERSION", "$.schema_version", "fact candidate schema mismatch")
+    candidates = value.get("candidates")
+    if not isinstance(candidates, list):
+        report.error("CANDIDATE_LIST_REQUIRED", "$.candidates", "must be a list")
+        candidates = []
+    if len(candidates) > MAX_FACT_CANDIDATES:
+        report.error(
+            "CANDIDATE_LIST_TOO_LARGE",
+            "$.candidates",
+            f"must contain at most {MAX_FACT_CANDIDATES} candidates",
+        )
+    if expected_role not in FACT_ROLES:
+        report.error("EXPECTED_ROLE", "$.role", "expected role must be worker or qa")
+    for name, expected in (
+        ("expected_corridor_digest", expected_corridor_digest),
+        ("expected_position_ref", expected_position_ref),
+    ):
+        if not isinstance(expected, str) or not SHA256_RE.fullmatch(expected):
+            report.error("EXPECTED_DIGEST", f"$.{name}", "must be sha256:<64 lowercase hex>")
+    if not isinstance(expected_candidate_ref, str) or not expected_candidate_ref.strip():
+        report.error("EXPECTED_CANDIDATE_REF", "$.expected_candidate_ref", "must be non-empty")
+
+    rows = {row["row_id"]: row for row in work.get("rows", [])}
+    acceptance_items = {
+        item["acceptance_id"]: item for item in acceptance.get("items", [])
+    }
+    candidate_ids: set[str] = set()
+    candidate_rows: set[str] = set()
+    normalized: list[dict[str, str]] = []
+    for index, candidate in enumerate(candidates[:MAX_FACT_CANDIDATES]):
+        location = f"$.candidates[{index}]"
+        if not isinstance(candidate, dict):
+            report.error("CANDIDATE_OBJECT_REQUIRED", location, "must be an object")
+            continue
+        if set(candidate) != FACT_CANDIDATE_FIELDS:
+            report.error(
+                "EXACT_CANDIDATE_FIELDS",
+                location,
+                f"must contain exactly {sorted(FACT_CANDIDATE_FIELDS)}",
+            )
+        strings: dict[str, str] = {}
+        for field_name in FACT_CANDIDATE_FIELDS:
+            item = candidate.get(field_name)
+            if not isinstance(item, str) or not item.strip():
+                report.error(
+                    "NONEMPTY_STRING_REQUIRED",
+                    f"{location}.{field_name}",
+                    "must be a non-empty string",
+                )
+            else:
+                strings[field_name] = item.strip()
+        candidate_id = strings.get("candidate_id")
+        if candidate_id:
+            if not ROW_ID_RE.fullmatch(candidate_id):
+                report.error("CANDIDATE_ID", f"{location}.candidate_id", "must be a stable token")
+            if candidate_id in candidate_ids:
+                report.error("DUPLICATE_CANDIDATE_ID", f"{location}.candidate_id", "must be unique")
+            candidate_ids.add(candidate_id)
+        for field_name in ("corridor_digest", "position_ref"):
+            item = strings.get(field_name)
+            if item and not SHA256_RE.fullmatch(item):
+                report.error("DIGEST_FORMAT", f"{location}.{field_name}", "must be sha256:<64 lowercase hex>")
+        expected_values = {
+            "corridor_digest": expected_corridor_digest,
+            "position_ref": expected_position_ref,
+            "role": expected_role,
+            "candidate_ref": expected_candidate_ref,
+        }
+        for field_name, expected in expected_values.items():
+            if strings.get(field_name) != expected:
+                report.error(
+                    "CANDIDATE_BINDING_MISMATCH",
+                    f"{location}.{field_name}",
+                    "does not equal the runner-supplied binding",
+                )
+        row_id = strings.get("row_id")
+        acceptance_id = strings.get("acceptance_id")
+        partition = strings.get("obligation_partition")
+        row = rows.get(row_id or "")
+        item = acceptance_items.get(acceptance_id or "")
+        if row is None:
+            report.error("UNKNOWN_ROW", f"{location}.row_id", "does not name a frozen work row")
+        else:
+            candidate_rows.add(row_id or "")
+            if acceptance_id not in row.get("acceptance_ids", []):
+                report.error(
+                    "ACCEPTANCE_NOT_IN_ROW",
+                    f"{location}.acceptance_id",
+                    "is not assigned to the bound work row",
+                )
+        if item is None:
+            report.error("UNKNOWN_ACCEPTANCE_ID", f"{location}.acceptance_id", "is not frozen")
+        if partition not in VERIFICATION_OBLIGATION_KINDS:
+            report.error(
+                "UNKNOWN_OBLIGATION_PARTITION",
+                f"{location}.obligation_partition",
+                f"must be one of {list(VERIFICATION_OBLIGATION_KINDS)}",
+            )
+        elif item is not None and not item.get("verification_obligations", {}).get(partition):
+            report.error(
+                "UNDECLARED_OBLIGATION_PARTITION",
+                f"{location}.obligation_partition",
+                "the frozen acceptance item has no such obligation",
+            )
+        if len(strings) == len(FACT_CANDIDATE_FIELDS):
+            normalized.append(strings)
+    if len(candidate_rows) > 1:
+        report.error("MULTIPLE_ROWS", "$.candidates", "one candidate document may bind only one row")
+    report.facts = {
+        "schema_version": value.get("schema_version"),
+        "candidate_count": len(candidates),
+        "candidate_ids": sorted(candidate_ids),
+        "row_id": next(iter(candidate_rows)) if len(candidate_rows) == 1 else None,
+        "candidate_set_digest": sha256_json(normalized) if not report.errors else None,
+        "candidates": normalized if not report.errors else [],
+        "admitted": False,
+        "authorizes_mutation": False,
+        "blocking_gate": False,
+    }
+    return report
+
+
+def append_admitted_facts(
+    timeline: Path,
+    *,
+    actor: str,
+    candidates: dict[str, Any],
+    work: dict[str, Any],
+    acceptance: dict[str, Any],
+    expected_corridor_digest: str,
+    expected_position_ref: str,
+    expected_role: str,
+    expected_candidate_ref: str,
+) -> dict[str, Any]:
+    """Runner-only conversion of validated candidates into one atomic Fact event."""
+
+    if not isinstance(actor, str) or actor.strip() != "runner":
+        raise CorridorKitError("Fact admission actor must be runner")
+    timeline = Path(timeline)
+    if timeline.parent.is_symlink() or not timeline.parent.is_dir():
+        raise CorridorKitError(f"timeline parent must be a real directory: {timeline.parent}")
+    if timeline.is_symlink():
+        raise CorridorKitError(f"timeline symlink is forbidden: {timeline}")
+    descriptor = os.open(timeline, os.O_RDWR | os.O_CREAT, 0o600)
+    with os.fdopen(descriptor, "r+", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        events = _load_timeline(timeline)
+        current_position = project_position(work, events)
+        report = validate_fact_candidates(
+            candidates,
+            work=work,
+            acceptance=acceptance,
+            expected_corridor_digest=expected_corridor_digest,
+            expected_position_ref=expected_position_ref,
+            expected_role=expected_role,
+            expected_candidate_ref=expected_candidate_ref,
+        )
+        if not report.ok:
+            raise CorridorKitError(f"invalid Fact candidates: {report.errors}")
+        existing_by_candidate = {
+            fact["candidate_id"]: fact["fact_id"]
+            for fact in _project_admitted_facts(events)
+        }
+        new_facts: list[dict[str, Any]] = []
+        for candidate in report.facts["candidates"]:
+            fact_id = sha256_json(candidate)
+            existing = existing_by_candidate.get(candidate["candidate_id"])
+            if existing is not None and existing != fact_id:
+                raise CorridorKitError(
+                    "candidate_id conflicts with an already admitted Fact"
+                )
+            if existing is None:
+                new_facts.append({**candidate, "fact_id": fact_id})
+        if not new_facts:
+            return {"ok": True, "admitted": 0, "event": None, "idempotent": True}
+        if current_position["position_ref"] != expected_position_ref:
+            raise CorridorKitError("Fact candidates bind a stale PositionRef")
+        details = {
+            "schema_version": ADMITTED_FACTS_SCHEMA,
+            "candidate_set_digest": report.facts["candidate_set_digest"],
+            "facts": new_facts,
+            "runner_role": "runner",
+        }
+        event = _append_locked_position_event(
+            handle,
+            events,
+            actor="runner",
+            event_type="facts_admitted",
+            status="admitted",
+            row_id=report.facts["row_id"],
+            details=details,
+            observed_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        )
+        return {
+            "ok": True,
+            "admitted": len(new_facts),
+            "event": event,
+            "idempotent": False,
+        }
+
+
+def _project_admitted_facts(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    facts: list[dict[str, Any]] = []
+    candidate_ids: dict[str, str] = {}
+    for event in events:
+        if event.get("event_type") != "facts_admitted":
+            continue
+        if event.get("status") != "admitted":
+            raise CorridorKitError("facts_admitted event must have admitted status")
+        details = event.get("details")
+        if not isinstance(details, dict) or set(details) != {
+            "schema_version", "candidate_set_digest", "facts", "runner_role"
+        }:
+            raise CorridorKitError("facts_admitted event has invalid details")
+        if (
+            event.get("actor") != "runner"
+            or details.get("schema_version") != ADMITTED_FACTS_SCHEMA
+            or details.get("runner_role") != "runner"
+        ):
+            raise CorridorKitError("facts_admitted event has invalid runner identity")
+        values = details.get("facts")
+        if not isinstance(values, list) or not values:
+            raise CorridorKitError("facts_admitted event must contain Facts")
+        candidates_for_digest: list[dict[str, Any]] = []
+        for value in values:
+            if not isinstance(value, dict) or set(value) != set(FACT_CANDIDATE_FIELDS) | {"fact_id"}:
+                raise CorridorKitError("admitted Fact has invalid fields")
+            candidate = {key: value[key] for key in FACT_CANDIDATE_FIELDS}
+            if value.get("fact_id") != sha256_json(candidate):
+                raise CorridorKitError("admitted Fact identity mismatch")
+            if value.get("row_id") != event.get("row_id"):
+                raise CorridorKitError("admitted Fact row mismatch")
+            previous = candidate_ids.get(value["candidate_id"])
+            if previous is not None and previous != value["fact_id"]:
+                raise CorridorKitError("conflicting admitted candidate identity")
+            candidate_ids[value["candidate_id"]] = value["fact_id"]
+            candidates_for_digest.append(candidate)
+            facts.append({
+                **value,
+                "admission_event_id": event["event_id"],
+                "admission_event_hash": event["event_hash"],
+            })
+        if details.get("candidate_set_digest") != sha256_json(candidates_for_digest):
+            raise CorridorKitError("admitted candidate-set digest mismatch")
+    return facts
 
 
 def project_position(work: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
@@ -482,13 +821,53 @@ def project_position(work: dict[str, Any], events: list[dict[str, Any]]) -> dict
         warnings.append("multiple_active_rows_observed")
     if unknown_event_rows:
         warnings.append("timeline_references_unknown_rows")
+    admitted_facts = _project_admitted_facts(events)
+    for fact in admitted_facts:
+        row = known.get(fact["row_id"])
+        if row is None or fact["acceptance_id"] not in row["acceptance_ids"]:
+            raise CorridorKitError("admitted Fact is not bound to its work row")
+        if fact["obligation_partition"] not in VERIFICATION_OBLIGATION_KINDS:
+            raise CorridorKitError("admitted Fact has an unknown obligation partition")
+    current_row_id = current["row_id"] if current else None
+    current_row_facts = [
+        fact for fact in admitted_facts if fact["row_id"] == current_row_id
+    ]
+    current_row = known.get(current_row_id or "")
+    expected_coverage = [
+        {"acceptance_id": acceptance_id, "partition": partition}
+        for acceptance_id in (current_row.get("acceptance_ids", []) if current_row else [])
+        for partition in VERIFICATION_OBLIGATION_KINDS
+    ]
+    observed_coverage = sorted(
+        {
+            (fact["acceptance_id"], fact["obligation_partition"])
+            for fact in current_row_facts
+        }
+    )
+    observed_set = set(observed_coverage)
+    missing_coverage = [
+        item for item in expected_coverage
+        if (item["acceptance_id"], item["partition"]) not in observed_set
+    ]
+    coverage = {
+        "expected": expected_coverage,
+        "observed": [
+            {"acceptance_id": acceptance_id, "partition": partition}
+            for acceptance_id, partition in observed_coverage
+        ],
+        "missing": missing_coverage,
+        "complete": bool(expected_coverage) and not missing_coverage,
+    }
     checkpoint = {
         "schema_version": POSITION_REF_SCHEMA,
         "work_backlog_digest": sha256_json(work),
         "timeline_head": events[-1]["event_hash"] if events else None,
         "event_count": len(events),
-        "current_row_id": current["row_id"] if current else None,
+        "current_row_id": current_row_id,
         "row_state_digest": sha256_json(projected_rows),
+        "admitted_fact_digest": sha256_json(admitted_facts),
+        "current_row_fact_digest": sha256_json(current_row_facts),
+        "obligation_coverage_digest": sha256_json(coverage),
         "warnings_digest": sha256_json(warnings),
     }
     return {
@@ -499,7 +878,10 @@ def project_position(work: dict[str, Any], events: list[dict[str, Any]]) -> dict
         "checkpoint": checkpoint,
         "position_ref": sha256_json(checkpoint),
         "rows": projected_rows,
-        "current_row_id": current["row_id"] if current else None,
+        "current_row_id": current_row_id,
+        "admitted_facts": admitted_facts,
+        "current_row_facts": current_row_facts,
+        "obligation_coverage": coverage,
         "complete": bool(projected_rows) and all(
             row["state"] in {"done", "not_applicable"} for row in projected_rows
         ),
@@ -598,6 +980,21 @@ def project_direction(
         warnings
     ):
         raise CorridorKitError("PositionRef does not bind projection warnings")
+    admitted_facts = position.get("admitted_facts")
+    current_row_facts = position.get("current_row_facts")
+    obligation_coverage = position.get("obligation_coverage")
+    if not isinstance(admitted_facts, list) or checkpoint.get(
+        "admitted_fact_digest"
+    ) != sha256_json(admitted_facts):
+        raise CorridorKitError("PositionRef does not bind admitted Facts")
+    if not isinstance(current_row_facts, list) or checkpoint.get(
+        "current_row_fact_digest"
+    ) != sha256_json(current_row_facts):
+        raise CorridorKitError("PositionRef does not bind current-row Facts")
+    if not isinstance(obligation_coverage, dict) or checkpoint.get(
+        "obligation_coverage_digest"
+    ) != sha256_json(obligation_coverage):
+        raise CorridorKitError("PositionRef does not bind obligation coverage")
     if (
         not hypothetical
         and work.get("state") == "compiled"
@@ -620,6 +1017,9 @@ def project_direction(
         "root_acceptance_ids": root_acceptance_ids,
         "capability_registry_digest": capability_report.facts.get("registry_digest"),
         "capability_ids": [item["capability_id"] for item in selected],
+        "admitted_fact_digest": checkpoint["admitted_fact_digest"],
+        "current_row_fact_digest": checkpoint["current_row_fact_digest"],
+        "obligation_coverage_digest": checkpoint["obligation_coverage_digest"],
         "position_warnings": list(position.get("warnings", [])),
     }
     return {
@@ -627,6 +1027,9 @@ def project_direction(
         **direction_identity,
         "direction_digest": sha256_json(direction_identity),
         "rule_closure": closure,
+        "current_row_facts": current_row_facts,
+        "obligation_coverage": obligation_coverage,
+        "witness_gaps": obligation_coverage.get("missing", []),
         "capabilities": selected,
         "hypothetical": hypothetical,
         "advisory_only": True,
@@ -680,6 +1083,8 @@ def _guide_from_position(
         "scope": row["scope"] if row else None,
         "done_when": row["done_when"] if row else [],
         "capability_ids": direction["capability_ids"],
+        "admitted_fact_digest": direction["admitted_fact_digest"],
+        "obligation_coverage_digest": direction["obligation_coverage_digest"],
     }
     guide = {
         "schema_version": RUNTIME_GUIDE_SCHEMA,
@@ -835,7 +1240,10 @@ def _canonical_freeze_qa_identity(value: Any) -> dict[str, Any] | None:
 
     if not isinstance(value, dict):
         return None
-    if value.get("schema_version") != "charting-loop/frozen-task-corridor/v1":
+    if value.get("schema_version") not in {
+        "charting-loop/frozen-task-corridor/v1",
+        "charting-loop/frozen-task-corridor/v2",
+    }:
         return None
     ledger = value.get("acceptance_ledger")
     if not isinstance(ledger, dict):

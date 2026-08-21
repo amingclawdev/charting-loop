@@ -22,6 +22,7 @@ from corridor_kit.acceptance import (
     validate_qa_assessment as validate_corridor_qa_assessment,
 )
 from corridor_kit.scaffold import method_capsule
+from corridor_kit.core import regular_tree_digest, regular_tree_manifest
 
 
 RUNTIME_ROOT = "/tmp/charting-loop"
@@ -37,9 +38,10 @@ CAPABILITIES_PATH = f"{CORRIDOR_PATH}/CAPABILITIES.json"
 FREEZE_PATH = f"{RUNTIME_ROOT}/FREEZE.json"
 QA_PATH = f"{RUNTIME_ROOT}/qa/assessment.json"
 CLOSURE_PATH = f"{RUNTIME_ROOT}/qa/closure.json"
+WORKER_FACTS_PATH = "/tmp/charting-loop-worker-fact-candidates.json"
 SUBMISSION_ROOT = "/logs/agent/submissions"
 
-FREEZE_SCHEMA = "charting-loop/frozen-task-corridor/v1"
+FREEZE_SCHEMA = "charting-loop/frozen-task-corridor/v2"
 ACCEPTANCE_SCHEMA = "charting-loop/task-acceptance-ledger/v2"
 ASSESSMENT_SCHEMA = QA_ASSESSMENT_SCHEMA
 QA_OUTCOMES = frozenset({"pass", "fail", "blocked", "not_assessed"})
@@ -117,6 +119,7 @@ def private_custody_program(
         import tempfile
         from datetime import datetime, timezone
         from pathlib import Path
+        from corridor_kit.core import regular_tree_manifest
 
         agent_dir = Path({agent_dir!r})
         runtime_root = Path({runtime_root!r})
@@ -135,26 +138,10 @@ def private_custody_program(
             ).encode("utf-8")
 
         def corridor_identity(root):
-            if root.is_symlink() or not root.is_dir():
-                raise ValueError("archived Corridor must be a real directory")
-            records = []
-            for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
-                if path.is_symlink():
-                    raise ValueError(f"custody symlink is forbidden: {{path}}")
-                if path.is_dir():
-                    continue
-                if not path.is_file():
-                    raise ValueError(f"custody special file is forbidden: {{path}}")
-                data = path.read_bytes()
-                records.append({{
-                    "path": path.relative_to(root).as_posix(),
-                    "bytes": len(data),
-                    "sha256": digest(data),
-                    "executable": bool(stat.S_IMODE(path.stat().st_mode) & 0o111),
-                }})
-            if not records:
+            tree = regular_tree_manifest(root)
+            if not tree["files"]:
                 raise ValueError("archived Corridor is empty")
-            return records, digest(canonical(records))
+            return tree["files"], tree["tree_digest"]
 
         def file_manifest(root):
             if root.is_symlink() or not root.is_dir():
@@ -362,25 +349,10 @@ def corridor_manifest(corridor: Path) -> list[dict[str, Any]]:
     closed byte set.  Directories are structural and are not separately hashed.
     """
 
-    if corridor.is_symlink() or not corridor.is_dir():
-        raise ValueError("corridor must be a real directory")
-    files: list[dict[str, Any]] = []
-    for path in sorted(corridor.rglob("*"), key=lambda item: item.as_posix()):
-        if path.is_symlink():
-            raise ValueError(f"corridor symlink is forbidden: {path}")
-        if path.is_dir():
-            continue
-        if not path.is_file():
-            raise ValueError(f"corridor special file is forbidden: {path}")
-        data = path.read_bytes()
-        files.append(
-            {
-                "path": path.relative_to(corridor).as_posix(),
-                "bytes": len(data),
-                "sha256": sha256_bytes(data),
-                "executable": bool(stat.S_IMODE(path.stat().st_mode) & 0o111),
-            }
-        )
+    try:
+        files = regular_tree_manifest(corridor)["files"]
+    except Exception as exc:
+        raise ValueError(str(exc)) from exc
     if not files:
         raise ValueError("corridor contains no regular files")
     return files
@@ -389,7 +361,7 @@ def corridor_manifest(corridor: Path) -> list[dict[str, Any]]:
 def corridor_digest(files: list[dict[str, Any]]) -> str:
     """Digest a manifest, including relative paths, sizes, and file hashes."""
 
-    return sha256_bytes(canonical_json_bytes(files))
+    return regular_tree_digest(files)
 
 
 def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
@@ -415,6 +387,7 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
         import shutil
         import stat
         from pathlib import Path
+        from corridor_kit.core import purge_python_caches, regular_tree_manifest
 
         root = Path({runtime_root!r})
         corridor = root / "corridor"
@@ -437,26 +410,11 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
             ).encode("utf-8")
 
         def scan():
-            if corridor.is_symlink() or not corridor.is_dir():
-                raise ValueError("corridor must be a real directory")
-            records = []
-            for path in sorted(corridor.rglob("*"), key=lambda p: p.as_posix()):
-                if path.is_symlink():
-                    raise ValueError(f"corridor symlink is forbidden: {{path}}")
-                if path.is_dir():
-                    continue
-                if not path.is_file():
-                    raise ValueError(f"corridor special file is forbidden: {{path}}")
-                data = path.read_bytes()
-                records.append({{
-                    "path": path.relative_to(corridor).as_posix(),
-                    "bytes": len(data),
-                    "sha256": digest(data),
-                    "executable": bool(stat.S_IMODE(path.stat().st_mode) & 0o111),
-                }})
-            if not records:
+            purge_python_caches(corridor)
+            tree = regular_tree_manifest(corridor)
+            if not tree["files"]:
                 raise ValueError("corridor contains no regular files")
-            return records
+            return tree
 
         def strict_json(path):
             if path.is_symlink() or not path.is_file():
@@ -823,7 +781,7 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
         status = "frozen"
         failure = None
         try:
-            files = scan()
+            tree = scan()
         except Exception as exc:
             status = "fallback"
             failure = f"{{type(exc).__name__}}: {{exc}}"[:1000]
@@ -838,7 +796,9 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
                 "Worker and QA receive this same frozen failure record.\\n",
                 encoding="utf-8",
             )
-            files = scan()
+            tree = scan()
+
+        files = tree["files"]
 
         acceptance = summarize_acceptance()
         capsule = summarize_method_capsule()
@@ -847,7 +807,8 @@ def freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
             "builder_corridor_status": status,
             "builder_failure": failure,
             "method_sha256": digest(method.read_bytes()) if method.is_file() else None,
-            "corridor_tree_sha256": digest(canonical(files)),
+            "corridor_tree_sha256": tree["tree_digest"],
+            "corridor_exclusion_policy": tree["exclusion_policy"],
             "method_capsule": capsule,
             "acceptance_ledger": acceptance,
             "files": files,
@@ -921,6 +882,7 @@ def verify_freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
         import json
         import stat
         from pathlib import Path
+        from corridor_kit.core import TREE_EXCLUSION_POLICY, regular_tree_manifest
 
         root = Path({runtime_root!r})
         corridor = root / "corridor"
@@ -939,7 +901,6 @@ def verify_freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
             ).encode("utf-8")
 
         manifest = json.loads(freeze.read_text(encoding="utf-8"))
-        files = []
         violations = []
         if corridor.is_symlink() or not corridor.is_dir():
             violations.append("corridor_not_real_directory")
@@ -961,20 +922,25 @@ def verify_freeze_program(runtime_root: str = RUNTIME_ROOT) -> str:
                     violations.append("writable:" + path.as_posix())
                 if stat.S_IMODE(path.stat().st_mode) & 0o044 != 0o044:
                     violations.append("not_readable:" + path.as_posix())
-                data = path.read_bytes()
-                files.append({{
-                    "path": path.relative_to(corridor).as_posix(),
-                    "bytes": len(data),
-                    "sha256": digest(data),
-                    "executable": bool(stat.S_IMODE(path.stat().st_mode) & 0o111),
-                }})
+                relative = path.relative_to(corridor)
+                if "__pycache__" in relative.parts or relative.suffix in (".pyc", ".pyo"):
+                    violations.append("excluded_cache_present:" + relative.as_posix())
 
-        actual = digest(canonical(files))
+        try:
+            tree = regular_tree_manifest(corridor)
+            files = tree["files"]
+            actual = tree["tree_digest"]
+        except Exception as exc:
+            files = []
+            actual = None
+            violations.append("manifest_error:" + type(exc).__name__)
         expected = manifest.get("corridor_tree_sha256")
         if files != manifest.get("files"):
             violations.append("manifest_file_mismatch")
         if actual != expected:
             violations.append("corridor_digest_mismatch")
+        if manifest.get("corridor_exclusion_policy") != list(TREE_EXCLUSION_POLICY):
+            violations.append("corridor_exclusion_policy_mismatch")
         if stat.S_IMODE(freeze.stat().st_mode) & 0o222:
             violations.append("freeze_manifest_writable")
         print(json.dumps({{
@@ -1009,6 +975,20 @@ def _task_block(task_instruction: str) -> str:
     return f"<official_task>\n{task}\n</official_task>"
 
 
+def _frozen_method_block(method_text: str) -> str:
+    """Embed the exact frozen Method bytes, rejecting summaries or revisions."""
+
+    if not isinstance(method_text, str):
+        raise ValueError("method_text must be the exact frozen Method text")
+    if sha256_bytes(method_text.encode("utf-8")) != METHOD_CONTENT_SHA256:
+        raise ValueError("method_text does not match the frozen Method digest")
+    return (
+        f'<frozen_method version="{METHOD_VERSION_ID}" sha256="{METHOD_CONTENT_SHA256}">\n'
+        + method_text
+        + "</frozen_method>"
+    )
+
+
 def builder_prompt(task_instruction: str) -> str:
     """Prompt the construction role with the method and official task goal."""
 
@@ -1041,7 +1021,9 @@ not expose to ordinary agents.
 
 Compile the generated {ACCEPTANCE_PATH}, {WORK_PATH}, {CAPABILITIES_PATH},
 {CORRIDOR_PATH}/SOURCE-MAP.json, {CORRIDOR_PATH}/EVIDENCE.json, and
-{CORRIDOR_PATH}/REPLAY.json in place. Preserve their schema field names. Bind every
+{CORRIDOR_PATH}/REPLAY.json in place. Compile `{CORRIDOR_PATH}/WITNESSES.json` only
+from task-derived replay evidence; every witness must explicitly name the acceptance
+IDs and one or more of the same six `obligation_partitions`. Preserve schema field names. Bind every
 acceptance ID to work and replay evidence, and include only capabilities selected by
 a row. Reusable mechanics may never contain a task answer, fixed task offset, hidden
 verifier Fact, or outcome-derived repair.
@@ -1089,6 +1071,8 @@ become approval, pre-mutation, or workflow Gates. Before finishing, run:
 
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit validate-work {WORK_PATH} --acceptance {ACCEPTANCE_PATH} --capabilities {CAPABILITIES_PATH}`
 
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit authoring validate {CORRIDOR_PATH} --expected-method-version {METHOD_VERSION_ID} --expected-method-digest {METHOD_CONTENT_SHA256} --expected-method-scope-digest {METHOD_SCOPE_SHA256}`
+
 Build in bounded milestones: first write the exact acceptance ledger and a minimal
 README, then make the global replay check executable, then deepen diagnostics only
 if time remains. A partial but honest `unresolved` Corridor is preferable to an
@@ -1119,12 +1103,20 @@ def worker_prompt(
     position_ref: str | None = None,
     direction_digest: str | None = None,
     remaining_seconds: int | None = None,
+    method_text: str,
+    fact_candidate_ref: str,
 ) -> str:
     """Prompt the execution role with the exact frozen Corridor identity."""
 
     return f"""You are the Worker responsible for completing the official task.
 
 {_task_block(task_instruction)}
+
+The official task above is the Rule authority. The following exact frozen Method is
+procedural guidance, not task authority, a stored answer, or a Gate. Use it to
+diagnose your own drift and keep Position, Direction, evidence, and action coherent.
+
+{_frozen_method_block(method_text)}
 
 The Builder's frozen task-conditioned Corridor is available read-only at
 {CORRIDOR_PATH}. Its freeze manifest is {FREEZE_PATH}, and the harness-verified
@@ -1156,6 +1148,16 @@ acceptance bindings, dependencies, done-when conditions, bounded capabilities, a
 reminders to avoid losing place. Direction is a projection at that Position, not a
 stored answer. Re-check live state: row events and reminders are RAW observations,
 not authority or proof of completion.
+
+Record concise evidence candidates, not chain-of-thought, at
+{WORKER_FACTS_PATH}. The optional file must contain one JSON object with schema
+`charting-loop/fact-candidates/v1` and a `candidates` list. Each candidate has
+exactly these string fields: `candidate_id`, `role` (`worker`), `corridor_digest`
+(`{corridor_digest_value}`), `position_ref` ({json.dumps(position_ref)}), `row_id`,
+`acceptance_id`, `obligation_partition` (positive|negative|boundary|state|temporal|coupled),
+`observation`, `source_ref`, `witness_ref`, `replay_ref`, and `candidate_ref`
+(`{fact_candidate_ref}`). These are observations only. The runner alone may admit a
+well-bound candidate as a Fact and then reproject Position and Direction.
 
 All roles share one task-level deadline. At this handoff the runner reports about
 {json.dumps(remaining_seconds)} seconds remaining; this is a progress signal, not a
@@ -1190,12 +1192,20 @@ def qa_prompt(
     position_ref: str | None = None,
     direction_digest: str | None = None,
     remaining_seconds: int | None = None,
+    method_text: str,
+    fact_candidate_ref: str | None,
 ) -> str:
     """Prompt an independent QA session that can use the same frozen Corridor."""
 
     return f"""You are the independent QA reviewer. Audit the Worker's current result.
 
 {_task_block(task_instruction)}
+
+The official task above is the Rule authority. The following exact frozen Method is
+procedural guidance, not task authority, a stored answer, or a Gate. Use it to
+diagnose your own drift and keep Position, Direction, evidence, and action coherent.
+
+{_frozen_method_block(method_text)}
 
 You MUST read and may execute the same frozen, read-only Corridor at {CORRIDOR_PATH}.
 The freeze manifest is {FREEZE_PATH}; the expected digest is
@@ -1215,6 +1225,10 @@ partitions, audit row done-when evidence, and replay applicable capabilities. Th
 `runtime counterfactual` command may test an explicitly substituted Position or
 acceptance Rule set, but its output is hypothetical and read-only. Never treat a row
 state, Direction, counterfactual, or reminder as sufficient acceptance evidence.
+
+The latest verified Worker snapshot reference is {json.dumps(fact_candidate_ref)}.
+If it is null, you may still report an assessment, but no QA witness can be admitted
+as a Fact and no repair is available; leave `witnesses` empty.
 
 All roles share one task-level deadline. At this handoff the runner reports about
 {json.dumps(remaining_seconds)} seconds remaining; this is not a QA-owned time
@@ -1252,7 +1266,13 @@ Diagnostic reads are allowed. Your only write is {QA_PATH}. Write one JSON objec
     "acceptance_id": "...",
     "constraint": "...",
     "evidence": "...",
-    "replay": "..."
+    "replay": "...",
+    "row_id": "...",
+    "obligation_partition": "positive|negative|boundary|state|temporal|coupled",
+    "position_ref": {json.dumps(position_ref)},
+    "candidate_ref": {json.dumps(fact_candidate_ref)},
+    "source_ref": "stable public or live-state source reference",
+    "witness_ref": "stable witness reference"
   }}]
 }}
 
@@ -1279,10 +1299,16 @@ ID set is exact, every applicable item passes, every inapplicable item is justif
 and no requirement or relation remains unmapped, unresolved, unknown, or not
 reached. Witness closure is not task closure.
 
-A fail verdict is valid only with at least one concrete witness tied to an
+A partial or uncompiled Corridor is advisory evidence about construction, not a
+business inability to execute the official task. Incompleteness alone must be
+reported as `not_assessed`, not `blocked`. A fail verdict is valid only with at least one concrete witness tied to an
 acceptance ID whose constraint, observed evidence, and safe replay procedure are all
 non-empty. If complete task closure cannot be established, use blocked or
 not_assessed.
+
+Keep the assessment concise and structured, not chain-of-thought. QA
+witnesses are Fact candidates only. The runner validates every binding. The runner
+alone may admit them before repair or Direction reprojection.
 
 Persist evidence witness-first. As soon as you establish an invalid acceptance
 ledger, an unresolved required coupled check, or one concrete failure witness, write
