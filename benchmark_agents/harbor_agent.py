@@ -36,6 +36,8 @@ from benchmark_agents.contract import (
     CLOSURE_PATH,
     CAPABILITIES_PATH,
     FREEZE_PATH,
+    GRAPH_PATH,
+    STUDY_PROFILE_PATH,
     METHOD_PATH,
     METHOD_CONTENT_SHA256,
     METHOD_SCOPE_SHA256,
@@ -60,10 +62,13 @@ from benchmark_agents.contract import (
     validate_qa_assessment,
     verify_freeze_program,
     worker_prompt,
+    graph_study_profile,
+    graph_worker_prompt,
 )
 
 
 AGENT_VERSION = "0.9.0"
+GRAPH_AGENT_VERSION = "1.0.0"
 METHOD_SOURCE_COMMIT = "3c3813444a7d43d0a56837e9cb960be86ce26d06"
 METHOD_SOURCE_PATH = "method-paper/METHOD.md"
 METHOD_SCOPE_PATH = "method-paper/SCOPE-DATUM.md"
@@ -591,6 +596,13 @@ class ChartingLoopFullMethodAgent(Codex):
     """Build, freeze, use, and independently audit one Corridor per trial."""
 
     SUPPORTS_HANDOFF = False
+    ROLE_SEQUENCE = ROLE_ORDER
+    ORCHESTRATION_MESSAGE = (
+        "Deterministic orchestration: Builder -> frozen Corridor -> Worker -> "
+        "independent Corridor-visible QA -> optional same-Worker repair and "
+        "same-QA closure."
+    )
+    ORCHESTRATION_METHOD = "task-conditioned-corridor"
 
     @staticmethod
     def name() -> str:
@@ -2101,7 +2113,7 @@ class ChartingLoopFullMethodAgent(Codex):
 
         trajectories = [
             trajectory
-            for role in ROLE_ORDER
+            for role in self.ROLE_SEQUENCE
             if (trajectory := self._phase_trajectory(role)) is not None
         ]
         if not trajectories:
@@ -2131,7 +2143,7 @@ class ChartingLoopFullMethodAgent(Codex):
                 version=self.version(),
                 model_name=self.model_name,
                 extra={
-                    "method": "task-conditioned-corridor",
+                    "method": self.ORCHESTRATION_METHOD,
                     "role_count": len(trajectories),
                 },
             ),
@@ -2139,11 +2151,7 @@ class ChartingLoopFullMethodAgent(Codex):
                 Step(
                     step_id=1,
                     source="agent",
-                    message=(
-                        "Deterministic orchestration: Builder -> frozen Corridor -> "
-                        "Worker -> independent Corridor-visible QA -> optional "
-                        "same-Worker repair and same-QA closure."
-                    ),
+                    message=self.ORCHESTRATION_MESSAGE,
                     llm_call_count=0,
                     extra={"subagent_trajectory_ids": trajectory_ids},
                 )
@@ -2179,3 +2187,256 @@ class ChartingLoopFullMethodAgent(Codex):
             context.n_cache_tokens = int(cached_tokens)
         if cost_usd is not None:
             context.cost_usd = float(cost_usd)
+
+
+class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
+    """Task-clock Worker authoring with a shared task-neutral Graph Kernel."""
+
+    ARM = ""
+    ROLE_SEQUENCE = ("worker",)
+    ORCHESTRATION_MESSAGE = (
+        "Deterministic orchestration: frozen Study profile plus shared Graph "
+        "Kernel -> integrated Worker execution/authoring -> official scoring. "
+        "Independent audit-only QA runs externally after scoring."
+    )
+    ORCHESTRATION_METHOD = "method-guided-graph-kernel"
+
+    def version(self) -> str:
+        return GRAPH_AGENT_VERSION
+
+    async def setup(self, environment: BaseEnvironment) -> None:
+        await super().setup(environment)
+        user = shlex.quote(str(environment.default_user or "root"))
+        method_cleanup = (
+            f"rm -f {shlex.quote(METHOD_PATH)} && " if self.ARM == "neutral" else ""
+        )
+        initialized = await self.exec_as_root(
+            environment,
+            command=(
+                f"rm -rf {shlex.quote(str(PurePosixPath(GRAPH_PATH).parent))} && "
+                f"install -d -m 0700 -o {user} "
+                f"{shlex.quote(str(PurePosixPath(GRAPH_PATH).parent))} && "
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                f"python3 -m corridor_kit graph init {shlex.quote(GRAPH_PATH)} && "
+                f"chown {user} {shlex.quote(GRAPH_PATH)} && "
+                f"chmod 0600 {shlex.quote(GRAPH_PATH)} && "
+                + method_cleanup
+                + "true"
+            ),
+        )
+        if initialized.return_code != 0:
+            raise RuntimeError(
+                "Graph Kernel initialization failed: "
+                + (initialized.stderr or initialized.stdout or "no output")[-2000:]
+            )
+
+    async def _seal_graph_corridor(
+        self, environment: BaseEnvironment
+    ) -> dict[str, Any]:
+        validation = await self.exec_as_root(
+            environment,
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                f"python3 -m corridor_kit graph validate {shlex.quote(GRAPH_PATH)}"
+            ),
+        )
+        validation_lines = [
+            line for line in (validation.stdout or "").splitlines() if line.strip()
+        ]
+        try:
+            graph_report = json.loads("\n".join(validation_lines))
+        except (TypeError, json.JSONDecodeError):
+            graph_report = {
+                "ok": False,
+                "structurally_valid": False,
+                "error": (validation.stderr or validation.stdout or "unreadable")[-2000:],
+            }
+        raw_identity = await self.exec_as_root(
+            environment,
+            command=(
+                "python3 -c "
+                + shlex.quote(
+                    "import hashlib,json; from pathlib import Path; "
+                    f"p=Path({GRAPH_PATH!r}); b=p.read_bytes(); "
+                    "print(json.dumps({'graph_bytes_digest':'sha256:'+hashlib.sha256(b).hexdigest(),"
+                    "'graph_bytes':len(b)},sort_keys=True))"
+                )
+            ),
+        )
+        raw_lines = [line for line in (raw_identity.stdout or "").splitlines() if line.strip()]
+        raw_report = json.loads(raw_lines[-1]) if raw_lines else {}
+        await self.exec_as_root(
+            environment,
+            command=(
+                f"chown -R 0:0 {shlex.quote(CORRIDOR_PATH)} && "
+                f"find {shlex.quote(CORRIDOR_PATH)} -type d -exec chmod 0555 {{}} + && "
+                f"find {shlex.quote(CORRIDOR_PATH)} -type f -exec chmod 0444 {{}} +"
+            ),
+        )
+        manifest = await self.exec_as_root(
+            environment,
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                f"python3 -m corridor_kit manifest {shlex.quote(CORRIDOR_PATH)}"
+            ),
+        )
+        manifest_lines = [line for line in (manifest.stdout or "").splitlines() if line.strip()]
+        if manifest.return_code != 0 or not manifest_lines:
+            raise RuntimeError("Graph Corridor manifest failed")
+        tree = json.loads("\n".join(manifest_lines))
+        freeze = {
+            "schema_version": "charting-loop/frozen-graph-kernel-run/v1",
+            "corridor_digest": tree["tree_digest"],
+            "corridor_files": tree["files"],
+            "graph_bytes_digest": raw_report.get("graph_bytes_digest"),
+            "graph_bytes": raw_report.get("graph_bytes"),
+            "graph_validation": graph_report,
+            "graph_structurally_valid": validation.return_code == 0
+            and graph_report.get("ok") is True,
+            "study_profile_path": STUDY_PROFILE_PATH,
+            "advisory_only": True,
+            "authorizes_mutation": False,
+            "blocking_gate": False,
+        }
+        await self._write_root_json(environment, path=FREEZE_PATH, value=freeze)
+        return freeze
+
+    async def _run_task(
+        self,
+        instruction: str,
+        environment: BaseEnvironment,
+        context: AgentContext,
+    ) -> None:
+        if not self.model_name:
+            raise ValueError("Model name is required")
+        if self.ARM not in {"method", "neutral"}:
+            raise ValueError("Graph Kernel agent arm is not configured")
+
+        worker = self._child_agent("worker")
+        loop = asyncio.get_running_loop()
+        started_at = loop.time()
+        task_timeout_seconds = _task_timeout_seconds(instruction)
+        task_deadline = started_at + task_timeout_seconds
+        execution_deadline = task_deadline - FINALIZATION_RESERVE_SECONDS
+        method_text = (
+            self._method_source.decode("utf-8") if self.ARM == "method" else None
+        )
+        profile = graph_study_profile(
+            arm=self.ARM,
+            task_instruction=instruction,
+            model_name=self.model_name,
+            task_timeout_seconds=task_timeout_seconds,
+            agent_version=GRAPH_AGENT_VERSION,
+            kit_version=str(self._sdk_identity["kit_version"]),
+            kit_tree_digest=str(self._sdk_identity["tree_digest"]),
+        )
+        await self._write_root_json(
+            environment, path=STUDY_PROFILE_PATH, value=profile
+        )
+        metadata: dict[str, Any] = {
+            "schema_version": "charting-loop/graph-kernel-run/v1",
+            "method": "method-guided-graph-kernel",
+            "arm": self.ARM,
+            "study_profile": profile,
+            "study_profile_digest": profile["profile_digest"],
+            "builder_present": False,
+            "roles": ["worker", "qa"],
+            "task_clock_roles": ["worker"],
+            "qa_schedule": "post_score_external",
+            "qa_budget_is_separate": True,
+            "qa_pending": True,
+            "phase_events": ["study_profile_frozen", "graph_kernel_ready"],
+            "phase_runs": [],
+            "deadline_policy": "single_task_deadline",
+            "task_timeout_seconds": task_timeout_seconds,
+            "finalization_reserve_seconds": FINALIZATION_RESERVE_SECONDS,
+            "phase_time_allocations": None,
+            "corridor_sdk": dict(self._sdk_identity),
+            "submission_root": SUBMISSION_ROOT,
+            "submission_snapshots": [],
+            "graph_path": GRAPH_PATH,
+            "qa_is_advisory": True,
+            "qa_can_repair": False,
+            "last_worker_snapshot_owns_fallback": True,
+            "grading_owned_by_harbor": True,
+        }
+        context.metadata = metadata
+
+        if _remaining_seconds(execution_deadline) > 0:
+            _, worker_run = await self._run_new_role(
+                "worker",
+                worker,
+                graph_worker_prompt(
+                    instruction,
+                    arm=self.ARM,
+                    study_profile_digest=profile["profile_digest"],
+                    remaining_seconds=_remaining_seconds(execution_deadline),
+                    method_text=method_text,
+                ),
+                environment,
+                deadline=execution_deadline,
+            )
+            self._record_phase_outcome(metadata, worker_run, context)
+            metadata["worker_revision_progress"] = await self._worker_revision_progress(
+                environment
+            )
+        else:
+            metadata["phase_events"].append("worker_skipped_task_deadline")
+
+        freeze = await self._seal_graph_corridor(environment)
+        metadata["corridor_digest"] = freeze["corridor_digest"]
+        metadata["graph_bytes_digest"] = freeze.get("graph_bytes_digest")
+        metadata["graph_validation"] = freeze.get("graph_validation")
+        metadata["graph_structurally_valid"] = freeze.get("graph_structurally_valid")
+        metadata["phase_events"].append("worker_graph_sealed")
+        progress = metadata.get("worker_revision_progress", {})
+        snapshots = progress.get("snapshots", []) if isinstance(progress, dict) else []
+        snapshot_ref = (
+            str(snapshots[-1].get("snapshot_id"))
+            if isinstance(snapshots, list)
+            and snapshots
+            and isinstance(snapshots[-1], dict)
+            else None
+        )
+
+        metadata["qa_graph_audit"] = None
+        metadata["qa_decision"] = {
+            "outcome": "pending_post_score_audit",
+            "valid": False,
+            "repair_required": False,
+            "advisory_only": True,
+        }
+        metadata["phase_events"].append("qa_deferred_until_after_official_scoring")
+        metadata["submission_fallback"] = await self._restore_latest_worker_submission(
+            environment
+        )
+        metadata["worker_revision_progress"] = await self._worker_revision_progress(
+            environment
+        )
+        metadata["task_deadline_reached"] = loop.time() >= execution_deadline
+        metadata["elapsed_seconds"] = round(loop.time() - started_at, 3)
+        metadata["remaining_finalization_seconds"] = max(
+            0.0, round(task_deadline - loop.time(), 3)
+        )
+        metadata["phase_events"].append("agent_returned_for_grading")
+        context.metadata = metadata
+
+
+class ChartingLoopGraphKernelMethodAgent(_ChartingLoopGraphKernelAgent):
+    """Treatment: frozen Method v8 plus the shared Graph Kernel."""
+
+    ARM = "method"
+
+    @staticmethod
+    def name() -> str:
+        return "charting-loop-graph-kernel-method"
+
+
+class ChartingLoopGraphKernelNeutralAgent(_ChartingLoopGraphKernelAgent):
+    """Control: frozen neutral instruction plus the same Graph Kernel bytes."""
+
+    ARM = "neutral"
+
+    @staticmethod
+    def name() -> str:
+        return "charting-loop-graph-kernel-neutral"

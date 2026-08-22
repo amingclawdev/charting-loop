@@ -42,6 +42,7 @@ from .submission import (
     restore_submission,
     verify_submission,
 )
+from .graph import append_graph_record, initialize_graph, replay_graph
 
 
 def _emit(value: Any, output: Path | None = None) -> None:
@@ -148,6 +149,24 @@ def _parser() -> argparse.ArgumentParser:
         "builtins", help="emit the task-neutral binary capability registry"
     )
     capability_builtins.add_argument("--output", type=Path)
+
+    graph = commands.add_parser(
+        "graph", help="append and replay task-neutral Method execution records"
+    )
+    graph_commands = graph.add_subparsers(dest="graph_command", required=True)
+    graph_init = graph_commands.add_parser("init", help="create an empty graph chain")
+    graph_init.add_argument("path", type=Path)
+    graph_append = graph_commands.add_parser("append", help="append one validated record")
+    graph_append.add_argument("path", type=Path)
+    graph_append.add_argument("--type", required=True, dest="record_type")
+    graph_append.add_argument("--actor", required=True)
+    body_source = graph_append.add_mutually_exclusive_group(required=True)
+    body_source.add_argument("--body-json")
+    body_source.add_argument("--body-file", type=Path)
+    for graph_command_name in ("replay", "validate"):
+        graph_command = graph_commands.add_parser(graph_command_name)
+        graph_command.add_argument("path", type=Path)
+        graph_command.add_argument("--output", type=Path)
 
     manifest = commands.add_parser("manifest", help="hash a closed regular-file tree")
     manifest.add_argument("root", type=Path)
@@ -301,6 +320,30 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if report["structurally_valid"] else 1
         if args.command == "capabilities" and args.capability_command == "builtins":
             _emit(builtin_binary_registry(), args.output)
+            return 0
+        if args.command == "graph":
+            if args.graph_command == "init":
+                _emit(initialize_graph(args.path))
+                return 0
+            if args.graph_command == "append":
+                body = (
+                    load_json(args.body_file)
+                    if args.body_file is not None
+                    else _json_object(args.body_json, name="--body-json")
+                )
+                _emit(
+                    append_graph_record(
+                        args.path,
+                        record_type=args.record_type,
+                        actor=args.actor,
+                        body=body,
+                    )
+                )
+                return 0
+            report = replay_graph(args.path)
+            if args.graph_command == "validate":
+                report = {key: value for key, value in report.items() if key != "records"}
+            _emit(report, args.output)
             return 0
         if args.command == "manifest":
             _emit(regular_tree_manifest(args.root), args.output)

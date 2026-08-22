@@ -502,6 +502,42 @@ class PublicReleaseTests(unittest.TestCase):
         ):
             self.assertNotIn(prohibited_claim, protocol)
 
+    def test_no_builder_graph_kernel_runbook_preserves_study_identity(self) -> None:
+        protocol = (
+            REPOSITORY_ROOT / "docs" / "INTEGRATED-GRAPH-EXPERIMENT-PROTOCOL.md"
+        ).read_text(encoding="utf-8")
+        runbook = (
+            REPOSITORY_ROOT / "docs" / "TERMINAL-BENCH-3-RUNBOOK.md"
+        ).read_text(encoding="utf-8")
+        words = " ".join(runbook.split())
+
+        for marker in (
+            "method-guided-graph-kernel-experiment-v1.1",
+            "task-specific Builder",
+            "corridor_kit` v0.7.0",
+            "Agent v1.0.0",
+            "ChartingLoopGraphKernelMethodAgent",
+            "ChartingLoopGraphKernelNeutralAgent",
+            "--study-arm method",
+            "--study-arm neutral",
+            "bun-sourcemap-leak",
+            "music-harmony",
+            "same-task adaptive regression probes",
+            "not fresh transfer samples, independent replications, or causal proof",
+            "does not choose a Direction",
+            "no QA repair",
+            "Only the Worker runs inside each paid Harbor task clock",
+            "fresh external, audit-only session",
+            "QA cannot repair the submission or change the official score",
+            "## Historical Builder-first full-method runbook",
+        ):
+            self.assertIn(marker, words)
+        self.assertIn("charting-loop-method-v8", protocol)
+        self.assertIn(
+            "3c3813444a7d43d0a56837e9cb960be86ce26d06", protocol
+        )
+        self.assertIn("does not require a Method v9", protocol)
+
     def test_result_index_human_detail_and_ai_analysis_are_separate(self) -> None:
         readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
         invitation = (

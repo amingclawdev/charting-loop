@@ -32,6 +32,8 @@ POSITION_ROOT = "/tmp/charting-loop-position"
 POSITION_PATH = f"{POSITION_ROOT}/POSITION.jsonl"
 METHOD_PATH = f"{RUNTIME_ROOT}/method/METHOD.md"
 CORRIDOR_PATH = f"{RUNTIME_ROOT}/corridor"
+GRAPH_PATH = f"{CORRIDOR_PATH}/GRAPH.jsonl"
+STUDY_PROFILE_PATH = f"{CORRIDOR_PATH}/STUDY.json"
 ACCEPTANCE_PATH = f"{CORRIDOR_PATH}/ACCEPTANCE.json"
 WORK_PATH = f"{CORRIDOR_PATH}/WORK_ITEMS.json"
 CAPABILITIES_PATH = f"{CORRIDOR_PATH}/CAPABILITIES.json"
@@ -59,6 +61,17 @@ METHOD_CONTENT_SHA256 = (
 METHOD_SCOPE_SHA256 = (
     "sha256:bd70498b2f75e039d88c80ae0c5b0a11fba15d12517820c27e8bccb28da987af"
 )
+GRAPH_STUDY_SCHEMA = "charting-loop/method-guided-graph-study/v1"
+GRAPH_AUDIT_SCHEMA = "charting-loop/graph-path-audit/v1"
+NEUTRAL_GRAPH_INSTRUCTION = (
+    "Use the supplied task-neutral graph utilities as optional note-taking tools. "
+    "The official task remains the only task authority. Inspect live state, choose "
+    "your own plan, verify changes, preserve a usable result before the deadline, "
+    "and do not treat graph structure as correctness or completion evidence."
+)
+NEUTRAL_GRAPH_INSTRUCTION_SHA256 = "sha256:" + hashlib.sha256(
+    NEUTRAL_GRAPH_INSTRUCTION.encode("utf-8")
+).hexdigest()
 
 
 def canonical_json_bytes(value: Any) -> bytes:
@@ -987,6 +1000,249 @@ def _frozen_method_block(method_text: str) -> str:
         + method_text
         + "</frozen_method>"
     )
+
+
+def graph_study_profile(
+    *,
+    arm: str,
+    task_instruction: str,
+    model_name: str,
+    task_timeout_seconds: int,
+    agent_version: str,
+    kit_version: str,
+    kit_tree_digest: str,
+) -> dict[str, Any]:
+    """Freeze the matched study identity; only the condition block varies by arm."""
+
+    if arm not in {"method", "neutral"}:
+        raise ValueError("graph study arm must be method or neutral")
+    condition = (
+        {
+            "kind": "frozen_method",
+            "version": METHOD_VERSION_ID,
+            "digest": METHOD_CONTENT_SHA256,
+            "scope_digest": METHOD_SCOPE_SHA256,
+        }
+        if arm == "method"
+        else {
+            "kind": "frozen_neutral_instruction",
+            "version": "graph-neutral-v1",
+            "digest": NEUTRAL_GRAPH_INSTRUCTION_SHA256,
+            "scope_digest": None,
+        }
+    )
+    profile = {
+        "schema_version": GRAPH_STUDY_SCHEMA,
+        "study_profile": "integrated_executor_authoring",
+        "task_identity": sha256_bytes(task_instruction.strip().encode("utf-8")),
+        "model_name": model_name,
+        "task_timeout_seconds": task_timeout_seconds,
+        "agent_version": agent_version,
+        "kit_version": kit_version,
+        "kit_tree_digest": kit_tree_digest,
+        "roles": ["worker", "qa"],
+        "task_clock_roles": ["worker"],
+        "builder_present": False,
+        "qa_schedule": "post_score_external",
+        "qa_budget_is_separate": True,
+        "qa_can_repair": False,
+        "graph_is_advisory": True,
+        "graph_authorizes_mutation": False,
+        "condition": condition,
+    }
+    profile["profile_digest"] = sha256_bytes(canonical_json_bytes(profile))
+    return profile
+
+
+def _graph_condition_block(arm: str, method_text: str | None) -> str:
+    if arm == "method":
+        if method_text is None:
+            raise ValueError("method arm requires exact Method text")
+        return (
+            "The following frozen Method is procedural guidance for diagnosing your "
+            "own drift. It is not task authority, a stored answer, or a Gate.\n\n"
+            + _frozen_method_block(method_text)
+        )
+    if arm == "neutral":
+        if method_text is not None:
+            raise ValueError("neutral arm must not receive Method text")
+        return (
+            '<frozen_neutral_instruction version="graph-neutral-v1" '
+            f'sha256="{NEUTRAL_GRAPH_INSTRUCTION_SHA256}">\n'
+            f"{NEUTRAL_GRAPH_INSTRUCTION}\n</frozen_neutral_instruction>"
+        )
+    raise ValueError("graph study arm must be method or neutral")
+
+
+def graph_worker_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    remaining_seconds: int,
+    method_text: str | None,
+) -> str:
+    """Prompt one integrated Worker; no task-specific Builder runs first."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""You are the Worker responsible for completing the official task.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+There is no Builder phase and no precomputed task-specific Corridor. A byte-identical,
+task-neutral Graph Kernel is available at `{SDK_PACKAGE_PATH}` in both study arms.
+The frozen Study profile is `{STUDY_PROFILE_PATH}` with digest
+`{study_profile_digest}`. The append-only execution graph is `{GRAPH_PATH}`.
+
+Use the graph while doing the task, not as a separate construction project. First
+record the official task requirements you rely on as `rule_proposal` records and
+bind each current Rule to its public source with `rule_ratification`. Add
+`rule_dependency` edges when one Rule requires, overlaps, conflicts with, or derives
+from another. Propose evidence as `fact_proposal`; admit it only through a current
+ratified admission Rule and an explicit `fact_admission` receipt.
+
+At meaningful state changes, append a whole-state `position_checkpoint` that binds
+the current Rule records, admitted Fact receipts, task/world identity, scope, role
+assignments, and known artifact revisions. Then write one or more
+`direction_proposal` records against that exact Position. You choose Direction; the
+Kernel only checks identity and reference closure. A later QA reviews the path but
+does not authoritatively choose Direction for you.
+
+Use:
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph append {GRAPH_PATH} --type <record-type> --actor worker --body-file <json-file>`
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph replay {GRAPH_PATH}`
+
+An invalid graph mutation fails closed and leaves graph bytes unchanged, but it is
+advisory: correct the record or continue the official task. Never wait for graph
+completeness, create a Gate, or infer truth/PASS from a structurally valid graph.
+Do not build a task-specific harness unless the official task itself requires one.
+
+About {remaining_seconds} seconds remain on the single official task clock. Create a
+complete scorable result early. After each verified improvement, preserve the
+official output paths with:
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit submission freeze --root {SUBMISSION_ROOT} --role worker --path <absolute-output-path> [--path <absolute-output-path> ...]`
+
+Execute the task now. QA is audit-only and cannot repair your result.
+"""
+
+
+def graph_qa_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    graph_digest: str,
+    latest_worker_snapshot_ref: str | None,
+    remaining_seconds: int,
+    method_text: str | None,
+    study_profile_path: str = STUDY_PROFILE_PATH,
+    graph_path: str = GRAPH_PATH,
+    qa_output_path: str | None = QA_PATH,
+    scored_snapshot_path: str | None = None,
+    official_score: dict[str, Any] | None = None,
+) -> str:
+    """Prompt a post-score audit-only QA over one frozen Worker result."""
+
+    condition = _graph_condition_block(arm, method_text)
+    output_instruction = (
+        f"Write exactly one JSON object to `{qa_output_path}`"
+        if qa_output_path is not None
+        else "Return exactly one JSON object as your final response"
+    )
+    return f"""You are the independent audit-only QA reviewer.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+There was no Builder. Read the byte-identical Graph Kernel, frozen Study profile
+`{study_profile_path}` (`{study_profile_digest}`), and sealed Worker graph
+`{graph_path}` (`{graph_digest}`). Replay it with:
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph replay {graph_path}`
+
+Audit the entire path: official-source Rule coverage and dependencies, authority
+receipts, evidence-bound Facts, whole-state Position checkpoints, whether each
+Direction is projected from its claimed Position, and whether the latest official
+outputs agree with the evidence. Inspect the frozen scored Worker snapshot at
+{json.dumps(scored_snapshot_path)} and the preserved verifier evidence. The official
+score observation is {json.dumps(official_score, sort_keys=True)}. It is evidence from
+the evaluator, not task truth or authority. Graph validity is not task truth or PASS.
+You may report a better Direction. You must not mutate the task, graph, Worker
+snapshot, official outputs, or score, and you cannot trigger repair.
+The latest verified Worker snapshot ref is
+{json.dumps(latest_worker_snapshot_ref)}. This QA runs after official scoring on a
+separate audit-only budget of about {remaining_seconds} seconds.
+
+{output_instruction} with schema `{GRAPH_AUDIT_SCHEMA}` and
+fields: `schema_version`, `study_profile_digest`, `graph_digest`, `snapshot_ref`,
+`path_assessment` (`coherent|drifted|incomplete|not_assessed`), `rule_gaps`,
+`fact_gaps`, `position_gaps`, `direction_gaps`, `evidence_refs`, and
+`scope_limitations`. Gap/evidence fields are lists of concise strings, not hidden
+reasoning. This report is advisory and grants no task authority, mutation authority,
+deliverability, correctness, or PASS.
+"""
+
+
+def validate_graph_audit(
+    value: Any,
+    *,
+    study_profile_digest: str,
+    graph_digest: str,
+    snapshot_ref: str | None,
+) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(value, dict):
+        return ["GRAPH_AUDIT_OBJECT_REQUIRED"]
+    expected_keys = {
+        "schema_version",
+        "study_profile_digest",
+        "graph_digest",
+        "snapshot_ref",
+        "path_assessment",
+        "rule_gaps",
+        "fact_gaps",
+        "position_gaps",
+        "direction_gaps",
+        "evidence_refs",
+        "scope_limitations",
+    }
+    if set(value) != expected_keys:
+        errors.append("GRAPH_AUDIT_FIELDS")
+    if value.get("schema_version") != GRAPH_AUDIT_SCHEMA:
+        errors.append("GRAPH_AUDIT_SCHEMA")
+    if value.get("study_profile_digest") != study_profile_digest:
+        errors.append("GRAPH_AUDIT_STUDY_IDENTITY")
+    if value.get("graph_digest") != graph_digest:
+        errors.append("GRAPH_AUDIT_GRAPH_IDENTITY")
+    if value.get("snapshot_ref") != snapshot_ref:
+        errors.append("GRAPH_AUDIT_SNAPSHOT_IDENTITY")
+    if value.get("path_assessment") not in {
+        "coherent",
+        "drifted",
+        "incomplete",
+        "not_assessed",
+    }:
+        errors.append("GRAPH_AUDIT_PATH_ASSESSMENT")
+    for field in (
+        "rule_gaps",
+        "fact_gaps",
+        "position_gaps",
+        "direction_gaps",
+        "evidence_refs",
+        "scope_limitations",
+    ):
+        items = value.get(field)
+        if not isinstance(items, list) or any(
+            not isinstance(item, str) or not item.strip() for item in items
+        ):
+            errors.append(f"GRAPH_AUDIT_{field.upper()}_LIST")
+    return errors
 
 
 def builder_prompt(task_instruction: str) -> str:

@@ -1561,5 +1561,139 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertNotIn("verifier.run", source)
 
 
+    def test_graph_study_profiles_are_matched_except_condition(self) -> None:
+        common = {
+            "task_instruction": "Repair the task in 1800 seconds.",
+            "model_name": "openai/gpt-5.6-sol",
+            "task_timeout_seconds": 1800,
+            "agent_version": "1.0.0",
+            "kit_version": "0.7.0",
+            "kit_tree_digest": "sha256:" + "7" * 64,
+        }
+        treatment = contract.graph_study_profile(arm="method", **common)
+        control = contract.graph_study_profile(arm="neutral", **common)
+        for profile in (treatment, control):
+            self.assertFalse(profile["builder_present"])
+            self.assertFalse(profile["qa_can_repair"])
+            self.assertEqual(profile["roles"], ["worker", "qa"])
+            self.assertEqual(profile["task_clock_roles"], ["worker"])
+            self.assertEqual(profile["qa_schedule"], "post_score_external")
+            self.assertTrue(profile["qa_budget_is_separate"])
+            self.assertTrue(profile["graph_is_advisory"])
+            self.assertFalse(profile["graph_authorizes_mutation"])
+        treatment_shared = {
+            key: value
+            for key, value in treatment.items()
+            if key not in {"condition", "profile_digest"}
+        }
+        control_shared = {
+            key: value
+            for key, value in control.items()
+            if key not in {"condition", "profile_digest"}
+        }
+        self.assertEqual(treatment_shared, control_shared)
+        self.assertEqual(treatment["condition"]["kind"], "frozen_method")
+        self.assertEqual(
+            control["condition"]["digest"],
+            contract.NEUTRAL_GRAPH_INSTRUCTION_SHA256,
+        )
+
+    def test_graph_prompts_have_no_builder_and_qa_cannot_repair(self) -> None:
+        method_text = (REPOSITORY_ROOT / "method-paper" / "METHOD.md").read_text(
+            encoding="utf-8"
+        )
+        digest = "sha256:" + "8" * 64
+        treatment = contract.graph_worker_prompt(
+            "Repair the public task.",
+            arm="method",
+            study_profile_digest=digest,
+            remaining_seconds=1700,
+            method_text=method_text,
+        )
+        control = contract.graph_worker_prompt(
+            "Repair the public task.",
+            arm="neutral",
+            study_profile_digest=digest,
+            remaining_seconds=1700,
+            method_text=None,
+        )
+        for prompt in (treatment, control):
+            self.assertIn("There is no Builder phase", prompt)
+            self.assertIn("corridor_kit graph append", prompt)
+            self.assertIn(contract.GRAPH_PATH, prompt)
+            self.assertIn("You choose Direction", prompt)
+            self.assertIn("invalid graph mutation", prompt)
+            self.assertIn("submission freeze", prompt)
+        self.assertIn(method_text, treatment)
+        self.assertNotIn(method_text, control)
+        qa = contract.graph_qa_prompt(
+            "Repair the public task.",
+            arm="method",
+            study_profile_digest=digest,
+            graph_digest="sha256:" + "9" * 64,
+            latest_worker_snapshot_ref="worker-000001-example",
+            remaining_seconds=200,
+            method_text=method_text,
+            study_profile_path="/audit/STUDY.json",
+            graph_path="/audit/GRAPH.jsonl",
+            qa_output_path=None,
+            scored_snapshot_path="/audit/scored-worker-snapshot",
+            official_score={"reward": 1.0},
+        )
+        self.assertIn("audit-only", qa)
+        self.assertIn("must not mutate", qa)
+        self.assertIn("cannot trigger repair", qa)
+        self.assertIn("after official scoring", qa)
+        self.assertIn("/audit/scored-worker-snapshot", qa)
+        self.assertIn('"reward": 1.0', qa)
+        self.assertIn("Return exactly one JSON object", qa)
+        self.assertIn(contract.GRAPH_AUDIT_SCHEMA, qa)
+
+    def test_graph_audit_is_identity_bound_and_never_requests_repair(self) -> None:
+        value = {
+            "schema_version": contract.GRAPH_AUDIT_SCHEMA,
+            "study_profile_digest": "sha256:" + "a" * 64,
+            "graph_digest": "sha256:" + "b" * 64,
+            "snapshot_ref": None,
+            "path_assessment": "drifted",
+            "rule_gaps": ["R-2 source is missing"],
+            "fact_gaps": [],
+            "position_gaps": [],
+            "direction_gaps": ["D-1 used a stale Position"],
+            "evidence_refs": ["graph:record-7"],
+            "scope_limitations": ["official grader not inspected"],
+        }
+        self.assertEqual(
+            contract.validate_graph_audit(
+                value,
+                study_profile_digest="sha256:" + "a" * 64,
+                graph_digest="sha256:" + "b" * 64,
+                snapshot_ref=None,
+            ),
+            [],
+        )
+        value["graph_digest"] = "sha256:" + "c" * 64
+        self.assertIn(
+            "GRAPH_AUDIT_GRAPH_IDENTITY",
+            contract.validate_graph_audit(
+                value,
+                study_profile_digest="sha256:" + "a" * 64,
+                graph_digest="sha256:" + "b" * 64,
+                snapshot_ref=None,
+            ),
+        )
+
+    def test_graph_agent_profiles_have_worker_only_task_clock(self) -> None:
+        adapter = load_harbor_agent_with_stubs()
+        method = object.__new__(adapter.ChartingLoopGraphKernelMethodAgent)
+        neutral = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
+        self.assertEqual(method.version(), "1.0.0")
+        self.assertEqual(neutral.version(), "1.0.0")
+        self.assertEqual(method.ROLE_SEQUENCE, ("worker",))
+        self.assertEqual(neutral.ROLE_SEQUENCE, ("worker",))
+        self.assertIn("after scoring", method.ORCHESTRATION_MESSAGE)
+        self.assertNotEqual(method.name(), neutral.name())
+
+
 if __name__ == "__main__":
     unittest.main()

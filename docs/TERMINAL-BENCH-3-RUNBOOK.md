@@ -1,4 +1,125 @@
-# Terminal-Bench 3.0 full-method runbook
+# Terminal-Bench 3.0 runbook
+
+## Current no-Builder Graph Kernel study
+
+The current prospective study is
+`method-guided-graph-kernel-experiment-v1.1`. It does **not** run a task-specific
+Builder. Both arms receive the same task-neutral `corridor_kit` v0.7.0 Graph Kernel
+and Agent v1.0.0. The Method arm gives Worker and audit-only QA the exact frozen
+`charting-loop-method-v8`; the neutral arm gives both roles a frozen neutral
+instruction of the same declared role. The Kernel stores Rules, Rule authority and
+dependencies, admitted Facts, whole-state Position checkpoints, and Direction
+proposals/snapshots. It validates structure and provenance only: it does not choose a
+Direction, establish task truth or PASS, authorize mutation, repair output, or act as
+a Gate.
+
+Run two matched profiles on each of two same-task adaptive regression probes:
+
+- `bun-sourcemap-leak` probes Rule authoring and Fact admission;
+- `music-harmony` probes Position-to-Direction reprojection.
+
+These tasks have already informed engineering, so the runs are mechanism regressions,
+not fresh transfer samples, independent replications, or causal proof. The comparison
+is Method-guided execution versus a neutral instruction conditional on byte-identical
+Kernel infrastructure. There is one official task clock, no phase budget, no Builder,
+no QA repair, one trial per job, zero automatic retries, private upload, and the latest
+complete frozen Worker snapshot is restored for external grading.
+
+Only the Worker runs inside each paid Harbor task clock. Harbor freezes and scores
+that Worker result first. The arm-native QA is then run as a fresh external,
+audit-only session against the scored snapshot, frozen graph, Study profile, and
+verifier evidence on a separate budget. QA cannot repair the submission or change
+the official score. This ordering is part of the frozen protocol, not an optional
+operational shortcut.
+
+Before every paid job, run the non-paid doctor with the exact job name, task, arm,
+committed HEAD, and current Modal cap. It must return `ready: true`:
+
+```bash
+export CHARTING_LOOP_ROOT="$PWD"
+export PYTHONPATH="$CHARTING_LOOP_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+export CODEX_FORCE_AUTH_JSON=1
+export CHARTING_LOOP_MODAL_SPEND_LIMIT_USD='<current dashboard cap>'
+export CHARTING_LOOP_EXPERIMENT_HEAD="$(git rev-parse HEAD)"
+
+python3 tools/terminal_bench_doctor.py \
+  --job-name charting-loop-tb3-bun-graph-method-001 \
+  --task bun-sourcemap-leak --study-arm method \
+  --expected-head "$CHARTING_LOOP_EXPERIMENT_HEAD" \
+  --jobs-dir jobs \
+  --modal-spend-limit-usd "$CHARTING_LOOP_MODAL_SPEND_LIMIT_USD" \
+  --min-modal-headroom-usd 1.00 --trusted-cyber-access-confirmed --json
+
+python3 tools/terminal_bench_doctor.py \
+  --job-name charting-loop-tb3-bun-graph-neutral-001 \
+  --task bun-sourcemap-leak --study-arm neutral \
+  --expected-head "$CHARTING_LOOP_EXPERIMENT_HEAD" \
+  --jobs-dir jobs \
+  --modal-spend-limit-usd "$CHARTING_LOOP_MODAL_SPEND_LIMIT_USD" \
+  --min-modal-headroom-usd 1.00 --trusted-cyber-access-confirmed --json
+
+python3 tools/terminal_bench_doctor.py \
+  --job-name charting-loop-tb3-music-graph-method-001 \
+  --task music-harmony --study-arm method \
+  --expected-head "$CHARTING_LOOP_EXPERIMENT_HEAD" \
+  --jobs-dir jobs \
+  --modal-spend-limit-usd "$CHARTING_LOOP_MODAL_SPEND_LIMIT_USD" \
+  --min-modal-headroom-usd 1.00 --trusted-cyber-access-confirmed --json
+
+python3 tools/terminal_bench_doctor.py \
+  --job-name charting-loop-tb3-music-graph-neutral-001 \
+  --task music-harmony --study-arm neutral \
+  --expected-head "$CHARTING_LOOP_EXPERIMENT_HEAD" \
+  --jobs-dir jobs \
+  --modal-spend-limit-usd "$CHARTING_LOOP_MODAL_SPEND_LIMIT_USD" \
+  --min-modal-headroom-usd 1.00 --trusted-cyber-access-confirmed --json
+```
+
+After the matching doctor succeeds, launch the corresponding private jobs. Do not
+change any flag between doctor and launch:
+
+```bash
+harbor run --job-name charting-loop-tb3-bun-graph-method-001 -o jobs \
+  -d terminal-bench/terminal-bench@3.0.0 -i terminal-bench/bun-sourcemap-leak \
+  --n-tasks 1 -e modal \
+  -a benchmark_agents.harbor_agent:ChartingLoopGraphKernelMethodAgent \
+  -m openai/gpt-5.6-sol --ak reasoning_effort=max -n 1 --max-retries 0 \
+  --upload --private
+
+harbor run --job-name charting-loop-tb3-bun-graph-neutral-001 -o jobs \
+  -d terminal-bench/terminal-bench@3.0.0 -i terminal-bench/bun-sourcemap-leak \
+  --n-tasks 1 -e modal \
+  -a benchmark_agents.harbor_agent:ChartingLoopGraphKernelNeutralAgent \
+  -m openai/gpt-5.6-sol --ak reasoning_effort=max -n 1 --max-retries 0 \
+  --upload --private
+
+harbor run --job-name charting-loop-tb3-music-graph-method-001 -o jobs \
+  -d terminal-bench/terminal-bench@3.0.0 -i terminal-bench/music-harmony \
+  --n-tasks 1 -e modal \
+  -a benchmark_agents.harbor_agent:ChartingLoopGraphKernelMethodAgent \
+  -m openai/gpt-5.6-sol --ak reasoning_effort=max -n 1 --max-retries 0 \
+  --upload --private
+
+harbor run --job-name charting-loop-tb3-music-graph-neutral-001 -o jobs \
+  -d terminal-bench/terminal-bench@3.0.0 -i terminal-bench/music-harmony \
+  --n-tasks 1 -e modal \
+  -a benchmark_agents.harbor_agent:ChartingLoopGraphKernelNeutralAgent \
+  -m openai/gpt-5.6-sol --ak reasoning_effort=max -n 1 --max-retries 0 \
+  --upload --private
+```
+
+Preserve job output, Worker role logs, Study profile, graph JSONL, graph freeze, every
+Worker snapshot, ATIF, verifier output, and private custody. Then run one fresh
+post-score QA per arm with the same frozen condition used by that arm and preserve its
+JSON audit beside—not inside—the immutable Harbor job custody. Record its separate
+model, effort, elapsed time, and token usage. Do not reopen the task container or feed
+the QA report into a Worker repair. Only after that audit may the arm be interpreted.
+
+Compare path structure as well as reward: Rule coverage/authority,
+Fact-admission receipts, checkpoint count and completeness, Position-bound Direction
+changes, invalid append attempts, last-valid fallback, and QA path findings.
+
+## Historical Builder-first full-method runbook
 
 This runbook launches the performance probe defined in
 `protocol/TASK-CONDITIONED-CORRIDOR-BENCHMARK-V4.md`. It does not run a treatment /

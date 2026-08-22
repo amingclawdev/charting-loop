@@ -19,14 +19,17 @@ from corridor_kit import (
     WORK_BACKLOG_SCHEMA,
     CorridorKitError,
     append_admitted_facts,
+    append_graph_record,
     append_position_event,
     counterfactual_transition,
     capture_command,
     create_scaffold,
     freeze_submission,
+    initialize_graph,
     list_submissions,
     public_world_inventory,
     regular_tree_manifest,
+    replay_graph,
     restore_submission,
     runtime_guide,
     sha256_json,
@@ -1460,6 +1463,189 @@ class SubmissionSnapshotTests(unittest.TestCase):
             )
             self.assertEqual(0, restore.returncode, restore.stderr)
             self.assertEqual("frozen", output.read_text(encoding="utf-8"))
+
+
+class GraphKernelTests(unittest.TestCase):
+    def _append(self, path: Path, record_type: str, body: dict, actor: str = "worker"):
+        return append_graph_record(
+            path, record_type=record_type, actor=actor, body=body
+        )["record"]
+
+    def test_graph_replays_authority_position_and_direction_without_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            source_digest = "sha256:" + "1" * 64
+            accept = self._append(
+                path,
+                "rule_proposal",
+                {
+                    "rule_id": "R-ADMIT",
+                    "statement": "Evidence may become a Fact only with a replay receipt.",
+                    "source_ref": "official-task:admission",
+                    "source_digest": source_digest,
+                },
+            )
+            self._append(
+                path,
+                "rule_ratification",
+                {
+                    "rule_id": "R-ADMIT",
+                    "rule_record_id": accept["record_id"],
+                    "authority_ref": "official-task",
+                    "authority_digest": source_digest,
+                    "receipt_ref": "receipt:admit-rule",
+                },
+                actor="runner",
+            )
+            task_rule = self._append(
+                path,
+                "rule_proposal",
+                {
+                    "rule_id": "R-TASK",
+                    "statement": "Complete every official deliverable.",
+                    "source_ref": "official-task:deliverables",
+                    "source_digest": source_digest,
+                },
+            )
+            self._append(
+                path,
+                "rule_ratification",
+                {
+                    "rule_id": "R-TASK",
+                    "rule_record_id": task_rule["record_id"],
+                    "authority_ref": "official-task",
+                    "authority_digest": source_digest,
+                    "receipt_ref": "receipt:task-rule",
+                },
+                actor="runner",
+            )
+            self._append(
+                path,
+                "rule_dependency",
+                {
+                    "from_rule_id": "R-TASK",
+                    "to_rule_id": "R-ADMIT",
+                    "relationship": "requires",
+                },
+            )
+            fact = self._append(
+                path,
+                "fact_proposal",
+                {
+                    "fact_id": "F-1",
+                    "statement": "The target artifact exists.",
+                    "evidence_ref": "probe:stat",
+                    "evidence_digest": "sha256:" + "2" * 64,
+                    "position_ref": "task-intake",
+                },
+            )
+            receipt = self._append(
+                path,
+                "fact_admission",
+                {
+                    "fact_id": "F-1",
+                    "fact_record_id": fact["record_id"],
+                    "admission_rule_id": "R-ADMIT",
+                    "admission_rule_record_id": accept["record_id"],
+                    "admitter_ref": "worker:replay",
+                    "receipt_ref": "receipt:fact-1",
+                },
+            )
+            position = self._append(
+                path,
+                "position_checkpoint",
+                {
+                    "position_id": "P-1",
+                    "previous_position_ref": None,
+                    "task_identity": {"task_ref": "terminal-bench/example"},
+                    "scope": {"working_set": ["/app"]},
+                    "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                    "rule_record_ids": [accept["record_id"], task_rule["record_id"]],
+                    "fact_receipt_ids": [receipt["record_id"]],
+                    "artifact_record_ids": [],
+                },
+            )
+            direction = self._append(
+                path,
+                "direction_proposal",
+                {
+                    "direction_id": "D-1",
+                    "position_ref": position["record_id"],
+                    "statement": "Inspect all deliverables before editing.",
+                    "rule_record_ids": [task_rule["record_id"]],
+                    "fact_receipt_ids": [receipt["record_id"]],
+                    "evidence_refs": ["probe:stat"],
+                },
+            )
+            self._append(
+                path,
+                "direction_snapshot",
+                {
+                    "position_ref": position["record_id"],
+                    "direction_record_ids": [direction["record_id"]],
+                    "selected_direction_record_id": direction["record_id"],
+                },
+            )
+            report = replay_graph(path)
+            self.assertTrue(report["structurally_valid"])
+            self.assertEqual(report["latest_position_ref"], position["record_id"])
+            self.assertFalse(report["task_truth_assessed"])
+            self.assertFalse(report["pass_assessed"])
+            self.assertFalse(report["authorizes_mutation"])
+            self.assertFalse(report["blocking_gate"])
+
+    def test_graph_invalid_append_is_zero_write_and_exact_replay_is_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            body = {
+                "rule_id": "R-1",
+                "statement": "Use the official task.",
+                "source_ref": "official-task",
+                "source_digest": "sha256:" + "3" * 64,
+            }
+            first = append_graph_record(
+                path, record_type="rule_proposal", actor="worker", body=body
+            )
+            before = path.read_bytes()
+            repeated = append_graph_record(
+                path, record_type="rule_proposal", actor="worker", body=body
+            )
+            self.assertTrue(repeated["idempotent"])
+            self.assertEqual(path.read_bytes(), before)
+            with self.assertRaisesRegex(CorridorKitError, "unknown artifact"):
+                append_graph_record(
+                    path,
+                    record_type="position_checkpoint",
+                    actor="worker",
+                    body={
+                        "position_id": "P-1",
+                        "previous_position_ref": None,
+                        "task_identity": {"task_ref": "terminal-bench/example"},
+                        "scope": {"working_set": ["/app"]},
+                        "role_assignments": {"executor": "worker"},
+                        "rule_record_ids": [first["record"]["record_id"]],
+                        "fact_receipt_ids": [],
+                        "artifact_record_ids": ["sha256:" + "9" * 64],
+                    },
+                )
+            self.assertEqual(path.read_bytes(), before)
+            with self.assertRaisesRegex(CorridorKitError, "current rule"):
+                append_graph_record(
+                    path,
+                    record_type="rule_ratification",
+                    actor="runner",
+                    body={
+                        "rule_id": "R-1",
+                        "rule_record_id": "sha256:" + "0" * 64,
+                        "authority_ref": "official-task",
+                        "authority_digest": "sha256:" + "3" * 64,
+                        "receipt_ref": "receipt:bad",
+                    },
+                )
+            self.assertEqual(path.read_bytes(), before)
+            self.assertEqual(first["record"]["sequence"], 1)
 
 
 if __name__ == "__main__":

@@ -21,6 +21,8 @@ from tools.terminal_bench_doctor import (
     HEAT_PUMP_WARRANTY_TASK_NAME,
     MUSIC_HARMONY_TASK_CACHE_DIGEST,
     MUSIC_HARMONY_TASK_NAME,
+    METHOD_AGENT_IMPORT,
+    NEUTRAL_AGENT_IMPORT,
     PHASE_ISOLATION_COMMIT,
     SESSION_WINDOW_TASK_CACHE_DIGEST,
     SESSION_WINDOW_TASK_NAME,
@@ -98,6 +100,7 @@ class FakeRunner:
                     0, "Logged in as test (API key sk-harbor-DO-NOT-REPORT)\n"
                 )
             if command[1:3] == ["run", "--print-config"]:
+                agent_import = command[command.index("-a") + 1]
                 return CommandResult(
                     0,
                     json.dumps(
@@ -108,7 +111,7 @@ class FakeRunner:
                             "environment": {"type": "modal"},
                             "agents": [
                                 {
-                                    "name": "benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent",
+                                    "name": agent_import,
                                     "model_name": "openai/gpt-5.6-sol",
                                     "kwargs": {"reasoning_effort": "max"},
                                 }
@@ -153,6 +156,7 @@ class FakeRunner:
                                 "authoring.py",
                                 "capabilities.py",
                                 "core.py",
+                                "graph.py",
                                 "domain/binary.py",
                                 "runtime.py",
                                 "scaffold.py",
@@ -354,6 +358,7 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         spend_limit: str = "10.00",
         trusted: bool = True,
         task_name: str = "ico-path-patch",
+        study_arm: str = "method",
     ) -> DoctorConfig:
         task_cache = self.task_caches[task_name]
         return DoctorConfig(
@@ -362,6 +367,7 @@ class TerminalBenchDoctorTests(unittest.TestCase):
             jobs_dir=self.jobs_dir,
             modal_spend_limit_usd=Decimal(spend_limit),
             task_name=task_name,
+            study_arm=study_arm,
             min_modal_headroom_usd=Decimal("1.00"),
             trusted_cyber_access_confirmed=trusted,
             force_auth_json="1",
@@ -396,6 +402,8 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         self.assertEqual(report["condition"]["task_filter"], TASK_FILTER)
         self.assertEqual(report["condition"]["max_retries"], 0)
         self.assertEqual(report["condition"]["upload_visibility"], "private")
+        self.assertEqual(report["condition"]["study_arm"], "method")
+        self.assertEqual(report["condition"]["agent"], METHOD_AGENT_IMPORT)
         self.assertEqual(
             report["condition"]["corridor_sdk_version"], CORRIDOR_SDK_VERSION
         )
@@ -424,6 +432,46 @@ class TerminalBenchDoctorTests(unittest.TestCase):
                 for call in git_show_calls
             )
         )
+
+    def test_method_and_neutral_arms_only_change_the_agent_profile(self) -> None:
+        method_report, method_runner = self.run_fake(
+            self.config(job_name="graph-method-001", study_arm="method")
+        )
+        neutral_report, neutral_runner = self.run_fake(
+            self.config(job_name="graph-neutral-001", study_arm="neutral")
+        )
+
+        self.assertTrue(method_report["ready"])
+        self.assertTrue(neutral_report["ready"])
+        self.assertEqual(method_report["condition"]["agent"], METHOD_AGENT_IMPORT)
+        self.assertEqual(neutral_report["condition"]["agent"], NEUTRAL_AGENT_IMPORT)
+        for key in (
+            "dataset",
+            "dataset_content_sha256",
+            "task",
+            "task_filter",
+            "task_cache_digest",
+            "agent_version",
+            "model",
+            "reasoning_effort",
+            "method_version_id",
+            "corridor_sdk_version",
+            "max_retries",
+            "upload_visibility",
+        ):
+            self.assertEqual(method_report["condition"][key], neutral_report["condition"][key])
+        method_command = next(
+            call
+            for call in method_runner.calls
+            if call[:3] == ["fake-harbor", "run", "--print-config"]
+        )
+        neutral_command = next(
+            call
+            for call in neutral_runner.calls
+            if call[:3] == ["fake-harbor", "run", "--print-config"]
+        )
+        self.assertEqual(method_command[method_command.index("-a") + 1], METHOD_AGENT_IMPORT)
+        self.assertEqual(neutral_command[neutral_command.index("-a") + 1], NEUTRAL_AGENT_IMPORT)
 
     def test_session_window_task_binds_exact_canonical_identity(self) -> None:
         config = self.config(

@@ -72,6 +72,17 @@ from .submission import (
     restore_submission,
     verify_submission,
 )
+from .graph import (
+    GRAPH_ACTORS,
+    GRAPH_RECORD_SCHEMA,
+    GRAPH_RECORD_TYPES,
+    GRAPH_REPLAY_SCHEMA,
+    append_graph_record,
+    initialize_graph,
+    load_graph,
+    replay_graph,
+    validate_graph_records,
+)
 
 __all__ = [
     "ACCEPTANCE_SCHEMA",
@@ -135,4 +146,13 @@ __all__ = [
     "validate_fact_candidates",
     "validate_witnesses",
     "verify_submission",
+    "GRAPH_ACTORS",
+    "GRAPH_RECORD_SCHEMA",
+    "GRAPH_RECORD_TYPES",
+    "GRAPH_REPLAY_SCHEMA",
+    "append_graph_record",
+    "initialize_graph",
+    "load_graph",
+    "replay_graph",
+    "validate_graph_records",
 ]

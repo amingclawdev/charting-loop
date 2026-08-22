@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
-SCHEMA_VERSION = "charting-loop/terminal-bench-doctor/v1"
+SCHEMA_VERSION = "charting-loop/terminal-bench-doctor/v2"
 DATASET = "terminal-bench/terminal-bench@3.0.0"
 DATASET_NAME = "terminal-bench/terminal-bench"
 DATASET_REF = "3.0.0"
@@ -56,9 +56,15 @@ HEAT_PUMP_WARRANTY_TASK_NAME = "heat-pump-warranty"
 HEAT_PUMP_WARRANTY_TASK_CACHE_DIGEST = (
     "195e39da0c97ea45552d216f04b204d438ec397e1003300be3edc064aa9859b6"
 )
-AGENT_IMPORT = "benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent"
-AGENT_VERSION = "0.9.0"
-CORRIDOR_SDK_VERSION = "0.6.0"
+METHOD_AGENT_IMPORT = (
+    "benchmark_agents.harbor_agent:ChartingLoopGraphKernelMethodAgent"
+)
+NEUTRAL_AGENT_IMPORT = (
+    "benchmark_agents.harbor_agent:ChartingLoopGraphKernelNeutralAgent"
+)
+AGENT_IMPORT = METHOD_AGENT_IMPORT
+AGENT_VERSION = "1.0.0"
+CORRIDOR_SDK_VERSION = "0.7.0"
 MODEL = "openai/gpt-5.6-sol"
 REASONING_EFFORT = "max"
 METHOD_VERSION_ID = "charting-loop-method-v8"
@@ -305,6 +311,7 @@ class DoctorConfig:
     jobs_dir: Path
     modal_spend_limit_usd: Decimal
     task_name: str = TASK_NAME
+    study_arm: str = "method"
     min_modal_headroom_usd: Decimal = Decimal("1.00")
     trusted_cyber_access_confirmed: bool = False
     expected_head: str | None = None
@@ -326,6 +333,14 @@ def _task_spec(config: DoctorConfig) -> TaskSpec | None:
 
 def _task_filter(config: DoctorConfig) -> str:
     return f"terminal-bench/{config.task_name}"
+
+
+def _agent_import(config: DoctorConfig) -> str:
+    if config.study_arm == "method":
+        return METHOD_AGENT_IMPORT
+    if config.study_arm == "neutral":
+        return NEUTRAL_AGENT_IMPORT
+    raise ValueError("study_arm must be method or neutral")
 
 
 def _scrub_text(value: str) -> str:
@@ -506,7 +521,9 @@ def _check_git_and_method(
         and record.get("scope_datum_path") == METHOD_SCOPE_PATH
         and record.get("scope_datum_sha256") == METHOD_SCOPE_SHA256
     )
-    agent_match = re.search(r'^AGENT_VERSION\s*=\s*"([^"]+)"', agent_source, re.MULTILINE)
+    agent_match = re.search(
+        r'^GRAPH_AGENT_VERSION\s*=\s*"([^"]+)"', agent_source, re.MULTILINE
+    )
     sdk_program = (
         "import json; from pathlib import Path; "
         "from corridor_kit import KIT_VERSION, regular_tree_manifest; "
@@ -530,6 +547,7 @@ def _check_git_and_method(
         "authoring.py",
         "capabilities.py",
         "core.py",
+        "graph.py",
         "domain/binary.py",
         "runtime.py",
         "scaffold.py",
@@ -554,7 +572,7 @@ def _check_git_and_method(
         return _failed(
             "immutable_inputs",
             "Frozen method or agent bytes do not match the declared condition.",
-            "Restore the frozen v8 method, Agent v0.9.0, and Corridor SDK v0.5.0 before running.",
+            "Restore the frozen v8 method, Graph Agent v1.0.0, and Corridor SDK v0.7.0 before running.",
             {
                 "head": actual_head,
                 "method_version_id": METHOD_VERSION_ID,
@@ -758,7 +776,7 @@ def _print_config_command(
         "-e",
         "modal",
         "-a",
-        AGENT_IMPORT,
+        _agent_import(config),
         "-m",
         MODEL,
         "--ak",
@@ -797,7 +815,7 @@ def _check_resolved_config(
             and data.get("n_concurrent_trials") == 1
             and data.get("environment", {}).get("type") == "modal"
             and len(data.get("agents", [])) == 1
-            and agent.get("name") == AGENT_IMPORT
+            and agent.get("name") == _agent_import(config)
             and agent.get("model_name") == MODEL
             and agent.get("kwargs") == {"reasoning_effort": REASONING_EFFORT}
             and len(data.get("datasets", [])) == 1
@@ -817,7 +835,8 @@ def _check_resolved_config(
         "max_retries": 0,
         "upload_visibility": "private",
         "environment": "modal",
-        "agent": AGENT_IMPORT,
+        "agent": _agent_import(config),
+        "study_arm": config.study_arm,
         "model": MODEL,
         "reasoning_effort": REASONING_EFFORT,
     }
@@ -1187,8 +1206,9 @@ def run_doctor(config: DoctorConfig, runner: Runner | None = None) -> dict[str, 
             "task_cache_digest": (
                 _task_spec(config).cache_digest if _task_spec(config) else "unregistered"
             ),
-            "agent": AGENT_IMPORT,
+            "agent": _agent_import(config),
             "agent_version": AGENT_VERSION,
+            "study_arm": config.study_arm,
             "model": MODEL,
             "reasoning_effort": REASONING_EFFORT,
             "method_version_id": METHOD_VERSION_ID,
@@ -1224,6 +1244,9 @@ def _parser() -> argparse.ArgumentParser:
         default=TASK_NAME,
         help="Pinned bare task name; the doctor constructs terminal-bench/<task>.",
     )
+    parser.add_argument(
+        "--study-arm", choices=("method", "neutral"), default="method"
+    )
     parser.add_argument("--jobs-dir", type=Path, default=Path("jobs"))
     parser.add_argument("--expected-head")
     parser.add_argument(
@@ -1257,6 +1280,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         jobs_dir=jobs_dir,
         modal_spend_limit_usd=args.modal_spend_limit_usd,
         task_name=args.task,
+        study_arm=args.study_arm,
         min_modal_headroom_usd=args.min_modal_headroom_usd,
         trusted_cyber_access_confirmed=args.trusted_cyber_access_confirmed,
         expected_head=args.expected_head,
