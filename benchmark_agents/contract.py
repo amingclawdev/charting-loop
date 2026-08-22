@@ -61,8 +61,8 @@ METHOD_CONTENT_SHA256 = (
 METHOD_SCOPE_SHA256 = (
     "sha256:bd70498b2f75e039d88c80ae0c5b0a11fba15d12517820c27e8bccb28da987af"
 )
-GRAPH_STUDY_SCHEMA = "charting-loop/method-guided-graph-study/v1"
-GRAPH_AUDIT_SCHEMA = "charting-loop/graph-path-audit/v1"
+GRAPH_STUDY_SCHEMA = "charting-loop/method-guided-graph-study/v2"
+GRAPH_AUDIT_SCHEMA = "charting-loop/graph-path-audit/v2"
 NEUTRAL_GRAPH_INSTRUCTION = (
     "Use the supplied task-neutral graph utilities as optional note-taking tools. "
     "The official task remains the only task authority. Inspect live state, choose "
@@ -1041,11 +1041,16 @@ def graph_study_profile(
         "kit_version": kit_version,
         "kit_tree_digest": kit_tree_digest,
         "roles": ["worker", "qa"],
-        "task_clock_roles": ["worker"],
+        "task_clock_roles": ["worker", "qa"],
         "builder_present": False,
-        "qa_schedule": "post_score_external",
-        "qa_budget_is_separate": True,
+        "qa_schedule": "in_clock_after_each_worker_freeze",
+        "qa_budget_is_separate": False,
+        "qa_can_recommend_repair": True,
         "qa_can_repair": False,
+        "repair_actor": "same_worker_session",
+        "phase_time_allocations": None,
+        "submission_rule": "latest_valid_worker_freeze_before_official_verifier",
+        "official_verifier_schedule": "after_agent_return",
         "graph_is_advisory": True,
         "graph_authorizes_mutation": False,
         "condition": condition,
@@ -1127,7 +1132,10 @@ official output paths with:
 
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit submission freeze --root {SUBMISSION_ROOT} --role worker --path <absolute-output-path> [--path <absolute-output-path> ...]`
 
-Execute the task now. QA is audit-only and cannot repair your result.
+As soon as the first complete, locally verified, scorable freeze exists, return so QA
+can audit that exact version while the same total task clock continues. QA is
+advisory: it cannot mutate the task or choose Direction. If it returns a replayable
+failure witness, the harness may resume this same Worker session for repair.
 """
 
 
@@ -1143,10 +1151,9 @@ def graph_qa_prompt(
     study_profile_path: str = STUDY_PROFILE_PATH,
     graph_path: str = GRAPH_PATH,
     qa_output_path: str | None = QA_PATH,
-    scored_snapshot_path: str | None = None,
-    official_score: dict[str, Any] | None = None,
+    audit_iteration: int = 1,
 ) -> str:
-    """Prompt a post-score audit-only QA over one frozen Worker result."""
+    """Prompt in-clock QA over one immutable Worker/graph revision."""
 
     condition = _graph_condition_block(arm, method_text)
     output_instruction = (
@@ -1154,7 +1161,7 @@ def graph_qa_prompt(
         if qa_output_path is not None
         else "Return exactly one JSON object as your final response"
     )
-    return f"""You are the independent audit-only QA reviewer.
+    return f"""You are the independent advisory QA reviewer.
 
 {_task_block(task_instruction)}
 
@@ -1169,23 +1176,73 @@ There was no Builder. Read the byte-identical Graph Kernel, frozen Study profile
 Audit the entire path: official-source Rule coverage and dependencies, authority
 receipts, evidence-bound Facts, whole-state Position checkpoints, whether each
 Direction is projected from its claimed Position, and whether the latest official
-outputs agree with the evidence. Inspect the frozen scored Worker snapshot at
-{json.dumps(scored_snapshot_path)} and the preserved verifier evidence. The official
-score observation is {json.dumps(official_score, sort_keys=True)}. It is evidence from
-the evaluator, not task truth or authority. Graph validity is not task truth or PASS.
-You may report a better Direction. You must not mutate the task, graph, Worker
-snapshot, official outputs, or score, and you cannot trigger repair.
-The latest verified Worker snapshot ref is
-{json.dumps(latest_worker_snapshot_ref)}. This QA runs after official scoring on a
-separate audit-only budget of about {remaining_seconds} seconds.
+outputs agree with the evidence. Inspect the exact frozen Worker snapshot identified
+below and the frozen graph copy. Verify the Worker snapshot before inspecting its
+manifest and immutable blobs:
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit submission verify --root {SUBMISSION_ROOT} --role worker --snapshot-id {latest_worker_snapshot_ref}`
+
+Its manifest and blobs are under
+`{SUBMISSION_ROOT}/snapshots/worker/{latest_worker_snapshot_ref}/`; use the manifest's
+destination mapping to interpret each blob. The official verifier has not run yet. Graph validity
+is not task truth or PASS. You may identify a better Direction, but you must not
+mutate the task, graph, Worker snapshot, or official outputs. Only a concrete
+replayable witness may recommend that the harness resume the same Worker for repair;
+QA itself never repairs or blocks final submission.
+The latest verified Worker snapshot ref is {json.dumps(latest_worker_snapshot_ref)}.
+This is audit iteration {audit_iteration}. About {remaining_seconds} seconds remain
+on the same total task clock; there is no QA-owned time slice. Write a complete
+assessment early and return promptly.
 
 {output_instruction} with schema `{GRAPH_AUDIT_SCHEMA}` and
 fields: `schema_version`, `study_profile_digest`, `graph_digest`, `snapshot_ref`,
-`path_assessment` (`coherent|drifted|incomplete|not_assessed`), `rule_gaps`,
-`fact_gaps`, `position_gaps`, `direction_gaps`, `evidence_refs`, and
-`scope_limitations`. Gap/evidence fields are lists of concise strings, not hidden
-reasoning. This report is advisory and grants no task authority, mutation authority,
-deliverability, correctness, or PASS.
+`path_assessment` (`coherent|drifted|incomplete|not_assessed`),
+`repair_recommended` (boolean), `witnesses`, and `scope_limitations`. Each witness is
+an exact object with non-empty `witness_id`, `category`
+(`rule|fact|position|direction|output`), `observation`, `expected`, `evidence_ref`,
+`replay`, `position_ref`, and `candidate_ref`. `candidate_ref` must equal the audited
+Worker snapshot ref. A repair recommendation is valid only for `drifted` or
+`incomplete` with at least one such witness. This report is concise audit evidence,
+not hidden reasoning, and grants no task authority, mutation authority,
+deliverability, correctness, Gate decision, or PASS.
+"""
+
+
+def graph_repair_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    graph_digest: str,
+    audited_snapshot_ref: str,
+    qa_path: str,
+    remaining_seconds: int,
+    method_text: str | None,
+) -> str:
+    """Resume the same Worker against one identity-bound advisory QA finding."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""Resume as the SAME Worker for an evidence-bound repair pass.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+QA audited Worker snapshot `{audited_snapshot_ref}` against graph digest
+`{graph_digest}` under frozen Study `{study_profile_digest}`. Read its advisory
+assessment at `{qa_path}`. Reproduce every witness before changing anything. QA is
+not authority: reject a suggested repair if replay or the current ratified Rules and
+admitted Facts do not support it.
+
+If a repair is justified, update the official task, append new evidence/Position and
+Direction records to the live graph, verify the complete task, and freeze a new
+complete scorable Worker revision. Never overwrite or invalidate the prior freeze.
+If no witness reproduces or the repair remains incomplete, preserve the prior freeze
+and return without advancing it.
+
+About {remaining_seconds} seconds remain on the same total task clock. There is no
+repair-owned time slice. Return promptly after either freezing a newer valid revision
+or determining that the prior freeze should remain current.
 """
 
 
@@ -1205,11 +1262,8 @@ def validate_graph_audit(
         "graph_digest",
         "snapshot_ref",
         "path_assessment",
-        "rule_gaps",
-        "fact_gaps",
-        "position_gaps",
-        "direction_gaps",
-        "evidence_refs",
+        "repair_recommended",
+        "witnesses",
         "scope_limitations",
     }
     if set(value) != expected_keys:
@@ -1229,19 +1283,50 @@ def validate_graph_audit(
         "not_assessed",
     }:
         errors.append("GRAPH_AUDIT_PATH_ASSESSMENT")
-    for field in (
-        "rule_gaps",
-        "fact_gaps",
-        "position_gaps",
-        "direction_gaps",
-        "evidence_refs",
-        "scope_limitations",
+    if not isinstance(value.get("repair_recommended"), bool):
+        errors.append("GRAPH_AUDIT_REPAIR_RECOMMENDED_BOOL")
+    limitations = value.get("scope_limitations")
+    if not isinstance(limitations, list) or any(
+        not isinstance(item, str) or not item.strip() for item in limitations
     ):
-        items = value.get(field)
-        if not isinstance(items, list) or any(
-            not isinstance(item, str) or not item.strip() for item in items
+        errors.append("GRAPH_AUDIT_SCOPE_LIMITATIONS_LIST")
+    witnesses = value.get("witnesses")
+    witness_keys = {
+        "witness_id",
+        "category",
+        "observation",
+        "expected",
+        "evidence_ref",
+        "replay",
+        "position_ref",
+        "candidate_ref",
+    }
+    if not isinstance(witnesses, list):
+        errors.append("GRAPH_AUDIT_WITNESSES_LIST")
+        witnesses = []
+    seen_witness_ids: set[str] = set()
+    for witness in witnesses:
+        if not isinstance(witness, dict) or set(witness) != witness_keys:
+            errors.append("GRAPH_AUDIT_WITNESS_FIELDS")
+            continue
+        if any(
+            not isinstance(witness.get(field), str) or not witness[field].strip()
+            for field in witness_keys
         ):
-            errors.append(f"GRAPH_AUDIT_{field.upper()}_LIST")
+            errors.append("GRAPH_AUDIT_WITNESS_TEXT")
+            continue
+        if witness["category"] not in {"rule", "fact", "position", "direction", "output"}:
+            errors.append("GRAPH_AUDIT_WITNESS_CATEGORY")
+        if witness["candidate_ref"] != snapshot_ref:
+            errors.append("GRAPH_AUDIT_WITNESS_SNAPSHOT_IDENTITY")
+        if witness["witness_id"] in seen_witness_ids:
+            errors.append("GRAPH_AUDIT_WITNESS_DUPLICATE_ID")
+        seen_witness_ids.add(witness["witness_id"])
+    repair_recommended = value.get("repair_recommended") is True
+    if repair_recommended and value.get("path_assessment") not in {"drifted", "incomplete"}:
+        errors.append("GRAPH_AUDIT_REPAIR_OUTCOME_CONTRADICTION")
+    if repair_recommended and not witnesses:
+        errors.append("GRAPH_AUDIT_REPAIR_WITNESS_REQUIRED")
     return errors
 
 

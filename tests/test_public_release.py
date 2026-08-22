@@ -504,7 +504,9 @@ class PublicReleaseTests(unittest.TestCase):
 
     def test_no_builder_graph_kernel_runbook_preserves_study_identity(self) -> None:
         protocol = (
-            REPOSITORY_ROOT / "docs" / "INTEGRATED-GRAPH-EXPERIMENT-PROTOCOL.md"
+            REPOSITORY_ROOT
+            / "docs"
+            / "INTEGRATED-GRAPH-EXPERIMENT-PROTOCOL-V1.2.md"
         ).read_text(encoding="utf-8")
         runbook = (
             REPOSITORY_ROOT / "docs" / "TERMINAL-BENCH-3-RUNBOOK.md"
@@ -512,10 +514,10 @@ class PublicReleaseTests(unittest.TestCase):
         words = " ".join(runbook.split())
 
         for marker in (
-            "method-guided-graph-kernel-experiment-v1.1",
+            "method-guided-graph-kernel-experiment-v1.2",
             "task-specific Builder",
             "corridor_kit` v0.7.0",
-            "Agent v1.0.0",
+            "Graph Agent v1.1.0",
             "ChartingLoopGraphKernelMethodAgent",
             "ChartingLoopGraphKernelNeutralAgent",
             "--study-arm method",
@@ -524,11 +526,15 @@ class PublicReleaseTests(unittest.TestCase):
             "music-harmony",
             "same-task adaptive regression probes",
             "not fresh transfer samples, independent replications, or causal proof",
-            "does not choose a Direction",
-            "no QA repair",
-            "Only the Worker runs inside each paid Harbor task clock",
-            "fresh external, audit-only session",
-            "QA cannot repair the submission or change the official score",
+            "does not choose Direction",
+            "one official task clock",
+            "no phase allocation",
+            "Worker freezes the first complete scorable revision",
+            "before official verification",
+            "same Worker session for repair",
+            "QA is advisory",
+            "latest valid Worker freeze",
+            "Harbor then runs the official verifier",
             "## Historical Builder-first full-method runbook",
         ):
             self.assertIn(marker, words)
@@ -536,7 +542,56 @@ class PublicReleaseTests(unittest.TestCase):
         self.assertIn(
             "3c3813444a7d43d0a56837e9cb960be86ce26d06", protocol
         )
-        self.assertIn("does not require a Method v9", protocol)
+        self.assertIn("This protocol revision changes the Study schedule, not the Method", protocol)
+
+    def test_graph_kernel_v12_freezes_the_in_clock_revision_loop_without_a_gate(self) -> None:
+        protocol = (
+            REPOSITORY_ROOT
+            / "docs"
+            / "INTEGRATED-GRAPH-EXPERIMENT-PROTOCOL-V1.2.md"
+        ).read_text(encoding="utf-8")
+        words = " ".join(protocol.split())
+        sections = (
+            "## Why this revision exists",
+            "## Frozen identities and matched arms",
+            "## Kernel authority boundary",
+            "## One-clock execution sequence",
+            "## Replay, convergence observations, and QA scope",
+            "## Prospective probes and reporting boundary",
+            "## Launch rule",
+        )
+        positions = [protocol.index(section) for section in sections]
+        self.assertEqual(positions, sorted(positions))
+        for marker in (
+            "prospective, unlaunched protocol",
+            "does not rewrite v1.1, Method v8, Theory v1, or any prior result",
+            "diagnostic application profile",
+            "long engineering loop",
+            "Graph Agent v1.1.0",
+            "The only intended arm difference is Method guidance",
+            "current revision",
+            "Reused Position or Direction IDs",
+            "There is one official task clock",
+            "no fixed Builder, Worker, QA, or repair allocation",
+            "entirely **before** the official verifier",
+            "same Worker session",
+            "same QA session",
+            "restores the latest valid Worker freeze",
+            "Invalid, missing, contradictory, unwitnessed, or `not_assessed` QA",
+            "cannot erase a valid Worker freeze",
+            "revision-scoped convergence observations",
+            "No threshold proves a contraction theorem",
+            "adaptive same-task engineering probes",
+            "not establish general Method efficacy",
+            "No paid job may start",
+        ):
+            self.assertIn(marker, words)
+        for prohibited in (
+            "QA grants PASS",
+            "Kernel chooses Direction",
+            "This Study proves multi-task efficacy",
+        ):
+            self.assertNotIn(prohibited, protocol)
 
     def test_result_index_human_detail_and_ai_analysis_are_separate(self) -> None:
         readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")

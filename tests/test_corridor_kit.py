@@ -1529,6 +1529,20 @@ class GraphKernelTests(unittest.TestCase):
                     "relationship": "requires",
                 },
             )
+            intake_position = self._append(
+                path,
+                "position_checkpoint",
+                {
+                    "position_id": "P-INTAKE",
+                    "previous_position_ref": None,
+                    "task_identity": {"task_ref": "terminal-bench/example"},
+                    "scope": {"working_set": ["/app"]},
+                    "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                    "rule_record_ids": [accept["record_id"], task_rule["record_id"]],
+                    "fact_receipt_ids": [],
+                    "artifact_record_ids": [],
+                },
+            )
             fact = self._append(
                 path,
                 "fact_proposal",
@@ -1537,7 +1551,7 @@ class GraphKernelTests(unittest.TestCase):
                     "statement": "The target artifact exists.",
                     "evidence_ref": "probe:stat",
                     "evidence_digest": "sha256:" + "2" * 64,
-                    "position_ref": "task-intake",
+                    "position_ref": intake_position["record_id"],
                 },
             )
             receipt = self._append(
@@ -1557,7 +1571,7 @@ class GraphKernelTests(unittest.TestCase):
                 "position_checkpoint",
                 {
                     "position_id": "P-1",
-                    "previous_position_ref": None,
+                    "previous_position_ref": intake_position["record_id"],
                     "task_identity": {"task_ref": "terminal-bench/example"},
                     "scope": {"working_set": ["/app"]},
                     "role_assignments": {"executor": "worker", "reviewer": "qa"},
@@ -1595,6 +1609,170 @@ class GraphKernelTests(unittest.TestCase):
             self.assertFalse(report["authorizes_mutation"])
             self.assertFalse(report["blocking_gate"])
 
+    def test_graph_rejects_unratified_rules_unknown_positions_and_duplicate_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            source_digest = "sha256:" + "4" * 64
+            rule = self._append(
+                path,
+                "rule_proposal",
+                {
+                    "rule_id": "R-1",
+                    "statement": "Use the official task requirements.",
+                    "source_ref": "official-task",
+                    "source_digest": source_digest,
+                },
+            )
+            before = path.read_bytes()
+            with self.assertRaisesRegex(CorridorKitError, "ratified Rule closure"):
+                append_graph_record(
+                    path,
+                    record_type="position_checkpoint",
+                    actor="worker",
+                    body={
+                        "position_id": "P-1",
+                        "previous_position_ref": None,
+                        "task_identity": {"task_ref": "terminal-bench/example"},
+                        "scope": {"working_set": ["/app"]},
+                        "role_assignments": {"executor": "worker"},
+                        "rule_record_ids": [rule["record_id"]],
+                        "fact_receipt_ids": [],
+                        "artifact_record_ids": [],
+                    },
+                )
+            self.assertEqual(before, path.read_bytes())
+            with self.assertRaisesRegex(CorridorKitError, "unknown Position"):
+                append_graph_record(
+                    path,
+                    record_type="fact_proposal",
+                    actor="worker",
+                    body={
+                        "fact_id": "F-UNKNOWN",
+                        "statement": "An observation.",
+                        "evidence_ref": "probe:unknown",
+                        "evidence_digest": "sha256:" + "5" * 64,
+                        "position_ref": "sha256:" + "0" * 64,
+                    },
+                )
+            self.assertEqual(before, path.read_bytes())
+            with self.assertRaisesRegex(CorridorKitError, "current rule source"):
+                append_graph_record(
+                    path,
+                    record_type="rule_ratification",
+                    actor="runner",
+                    body={
+                        "rule_id": "R-1",
+                        "rule_record_id": rule["record_id"],
+                        "authority_ref": "official-task",
+                        "authority_digest": "sha256:" + "6" * 64,
+                        "receipt_ref": "receipt:mismatched-source",
+                    },
+                )
+            self.assertEqual(before, path.read_bytes())
+            self._append(
+                path,
+                "rule_ratification",
+                {
+                    "rule_id": "R-1",
+                    "rule_record_id": rule["record_id"],
+                    "authority_ref": "official-task",
+                    "authority_digest": source_digest,
+                    "receipt_ref": "receipt:r-1",
+                },
+                actor="runner",
+            )
+            position = self._append(
+                path,
+                "position_checkpoint",
+                {
+                    "position_id": "P-1",
+                    "previous_position_ref": None,
+                    "task_identity": {"task_ref": "terminal-bench/example"},
+                    "scope": {"working_set": ["/app"]},
+                    "role_assignments": {"executor": "worker"},
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [],
+                    "artifact_record_ids": [],
+                },
+            )
+            before_duplicate = path.read_bytes()
+            with self.assertRaisesRegex(CorridorKitError, "already exists"):
+                append_graph_record(
+                    path,
+                    record_type="position_checkpoint",
+                    actor="worker",
+                    body={
+                        "position_id": "P-1",
+                        "previous_position_ref": position["record_id"],
+                        "task_identity": {"task_ref": "terminal-bench/example"},
+                        "scope": {"working_set": ["/app", "/tmp"]},
+                        "role_assignments": {"executor": "worker"},
+                        "rule_record_ids": [rule["record_id"]],
+                        "fact_receipt_ids": [],
+                        "artifact_record_ids": [],
+                    },
+                )
+            self.assertEqual(before_duplicate, path.read_bytes())
+            direction = self._append(
+                path,
+                "direction_proposal",
+                {
+                    "direction_id": "D-1",
+                    "position_ref": position["record_id"],
+                    "statement": "Inspect the current artifact.",
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [],
+                    "evidence_refs": [],
+                },
+            )
+            before_duplicate = path.read_bytes()
+            with self.assertRaisesRegex(CorridorKitError, "already exists"):
+                append_graph_record(
+                    path,
+                    record_type="direction_proposal",
+                    actor="worker",
+                    body={
+                        "direction_id": "D-1",
+                        "position_ref": position["record_id"],
+                        "statement": "Choose a conflicting next action.",
+                        "rule_record_ids": [rule["record_id"]],
+                        "fact_receipt_ids": [],
+                        "evidence_refs": ["probe:alternate"],
+                    },
+                )
+            self.assertEqual(before_duplicate, path.read_bytes())
+            self.assertEqual("D-1", direction["body"]["direction_id"])
+            revised = self._append(
+                path,
+                "rule_revision",
+                {
+                    "rule_id": "R-1",
+                    "supersedes_record_id": rule["record_id"],
+                    "statement": "Use the revised official task requirements.",
+                    "source_ref": "official-task:revision-2",
+                    "source_digest": "sha256:" + "7" * 64,
+                },
+            )
+            before_unratified_revision = path.read_bytes()
+            with self.assertRaisesRegex(CorridorKitError, "ratified Rule closure"):
+                append_graph_record(
+                    path,
+                    record_type="position_checkpoint",
+                    actor="worker",
+                    body={
+                        "position_id": "P-2",
+                        "previous_position_ref": position["record_id"],
+                        "task_identity": {"task_ref": "terminal-bench/example"},
+                        "scope": {"working_set": ["/app"]},
+                        "role_assignments": {"executor": "worker"},
+                        "rule_record_ids": [revised["record_id"]],
+                        "fact_receipt_ids": [],
+                        "artifact_record_ids": [],
+                    },
+                )
+            self.assertEqual(before_unratified_revision, path.read_bytes())
+
     def test_graph_invalid_append_is_zero_write_and_exact_replay_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "GRAPH.jsonl"
@@ -1614,7 +1792,7 @@ class GraphKernelTests(unittest.TestCase):
             )
             self.assertTrue(repeated["idempotent"])
             self.assertEqual(path.read_bytes(), before)
-            with self.assertRaisesRegex(CorridorKitError, "unknown artifact"):
+            with self.assertRaisesRegex(CorridorKitError, "ratified Rule closure"):
                 append_graph_record(
                     path,
                     record_type="position_checkpoint",

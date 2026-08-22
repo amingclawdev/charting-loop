@@ -1557,7 +1557,6 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertIn(marker, source)
         self.assertNotIn("PHASE_TIMEOUT_SECONDS", source)
         self.assertNotIn('"phase_timeout_seconds"', source)
-        self.assertNotIn("official verifier", source.lower())
         self.assertNotIn("verifier.run", source)
 
 
@@ -1566,7 +1565,7 @@ class FullMethodContractTests(unittest.TestCase):
             "task_instruction": "Repair the task in 1800 seconds.",
             "model_name": "openai/gpt-5.6-sol",
             "task_timeout_seconds": 1800,
-            "agent_version": "1.0.0",
+            "agent_version": "1.1.0",
             "kit_version": "0.7.0",
             "kit_tree_digest": "sha256:" + "7" * 64,
         }
@@ -1574,11 +1573,23 @@ class FullMethodContractTests(unittest.TestCase):
         control = contract.graph_study_profile(arm="neutral", **common)
         for profile in (treatment, control):
             self.assertFalse(profile["builder_present"])
+            self.assertTrue(profile["qa_can_recommend_repair"])
             self.assertFalse(profile["qa_can_repair"])
+            self.assertEqual(profile["repair_actor"], "same_worker_session")
             self.assertEqual(profile["roles"], ["worker", "qa"])
-            self.assertEqual(profile["task_clock_roles"], ["worker"])
-            self.assertEqual(profile["qa_schedule"], "post_score_external")
-            self.assertTrue(profile["qa_budget_is_separate"])
+            self.assertEqual(profile["task_clock_roles"], ["worker", "qa"])
+            self.assertEqual(
+                profile["qa_schedule"], "in_clock_after_each_worker_freeze"
+            )
+            self.assertFalse(profile["qa_budget_is_separate"])
+            self.assertIsNone(profile["phase_time_allocations"])
+            self.assertEqual(
+                profile["submission_rule"],
+                "latest_valid_worker_freeze_before_official_verifier",
+            )
+            self.assertEqual(
+                profile["official_verifier_schedule"], "after_agent_return"
+            )
             self.assertTrue(profile["graph_is_advisory"])
             self.assertFalse(profile["graph_authorizes_mutation"])
         treatment_shared = {
@@ -1598,7 +1609,7 @@ class FullMethodContractTests(unittest.TestCase):
             contract.NEUTRAL_GRAPH_INSTRUCTION_SHA256,
         )
 
-    def test_graph_prompts_have_no_builder_and_qa_cannot_repair(self) -> None:
+    def test_graph_prompts_have_no_builder_and_use_in_clock_witnessed_repair(self) -> None:
         method_text = (REPOSITORY_ROOT / "method-paper" / "METHOD.md").read_text(
             encoding="utf-8"
         )
@@ -1624,6 +1635,8 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertIn("You choose Direction", prompt)
             self.assertIn("invalid graph mutation", prompt)
             self.assertIn("submission freeze", prompt)
+            self.assertIn("first complete, locally verified, scorable freeze", prompt)
+            self.assertIn("same total task clock", prompt)
         self.assertIn(method_text, treatment)
         self.assertNotIn(method_text, control)
         qa = contract.graph_qa_prompt(
@@ -1637,30 +1650,56 @@ class FullMethodContractTests(unittest.TestCase):
             study_profile_path="/audit/STUDY.json",
             graph_path="/audit/GRAPH.jsonl",
             qa_output_path=None,
-            scored_snapshot_path="/audit/scored-worker-snapshot",
-            official_score={"reward": 1.0},
+            audit_iteration=2,
         )
-        self.assertIn("audit-only", qa)
-        self.assertIn("must not mutate", qa)
-        self.assertIn("cannot trigger repair", qa)
-        self.assertIn("after official scoring", qa)
-        self.assertIn("/audit/scored-worker-snapshot", qa)
-        self.assertIn('"reward": 1.0', qa)
+        self.assertIn("advisory QA", qa)
+        self.assertIn("you must not\nmutate", qa)
+        self.assertIn("official verifier has not run yet", qa)
+        self.assertIn("same total task clock", qa)
+        self.assertIn("audit iteration 2", qa)
+        self.assertIn("replayable witness", qa)
+        self.assertIn("candidate_ref", qa)
+        self.assertIn("submission verify", qa)
+        self.assertIn(contract.SUBMISSION_ROOT, qa)
+        self.assertIn("snapshots/worker/worker-000001-example", qa)
         self.assertIn("Return exactly one JSON object", qa)
         self.assertIn(contract.GRAPH_AUDIT_SCHEMA, qa)
+        repair = contract.graph_repair_prompt(
+            "Repair the public task.",
+            arm="method",
+            study_profile_digest=digest,
+            graph_digest="sha256:" + "9" * 64,
+            audited_snapshot_ref="worker-000001-example",
+            qa_path="/audit/qa.json",
+            remaining_seconds=120,
+            method_text=method_text,
+        )
+        self.assertIn("SAME Worker", repair)
+        self.assertIn("Reproduce every witness", repair)
+        self.assertIn("Never overwrite or invalidate the prior freeze", repair)
+        self.assertIn("same total task clock", repair)
 
-    def test_graph_audit_is_identity_bound_and_never_requests_repair(self) -> None:
+    def test_graph_audit_is_identity_bound_and_requires_replayable_repair_witness(self) -> None:
+        snapshot_ref = "worker-000001-example"
         value = {
             "schema_version": contract.GRAPH_AUDIT_SCHEMA,
             "study_profile_digest": "sha256:" + "a" * 64,
             "graph_digest": "sha256:" + "b" * 64,
-            "snapshot_ref": None,
+            "snapshot_ref": snapshot_ref,
             "path_assessment": "drifted",
-            "rule_gaps": ["R-2 source is missing"],
-            "fact_gaps": [],
-            "position_gaps": [],
-            "direction_gaps": ["D-1 used a stale Position"],
-            "evidence_refs": ["graph:record-7"],
+            "repair_recommended": True,
+            "witnesses": [
+                {
+                    "witness_id": "W-1",
+                    "category": "direction",
+                    "observation": "D-1 used a stale Position.",
+                    "expected": "Direction must bind the latest Position.",
+                    "evidence_ref": "graph:record-7",
+                    "replay": "Replay graph and compare D-1.position_ref.",
+                    "position_ref": "sha256:" + "c" * 64,
+                    "candidate_ref": snapshot_ref,
+                }
+            ],
             "scope_limitations": ["official grader not inspected"],
         }
         self.assertEqual(
@@ -1668,7 +1707,7 @@ class FullMethodContractTests(unittest.TestCase):
                 value,
                 study_profile_digest="sha256:" + "a" * 64,
                 graph_digest="sha256:" + "b" * 64,
-                snapshot_ref=None,
+                snapshot_ref=snapshot_ref,
             ),
             [],
         )
@@ -1679,20 +1718,209 @@ class FullMethodContractTests(unittest.TestCase):
                 value,
                 study_profile_digest="sha256:" + "a" * 64,
                 graph_digest="sha256:" + "b" * 64,
-                snapshot_ref=None,
+                snapshot_ref=snapshot_ref,
+            ),
+        )
+        value["graph_digest"] = "sha256:" + "b" * 64
+        value["witnesses"] = []
+        self.assertIn(
+            "GRAPH_AUDIT_REPAIR_WITNESS_REQUIRED",
+            contract.validate_graph_audit(
+                value,
+                study_profile_digest="sha256:" + "a" * 64,
+                graph_digest="sha256:" + "b" * 64,
+                snapshot_ref=snapshot_ref,
+            ),
+        )
+        value["path_assessment"] = "coherent"
+        self.assertIn(
+            "GRAPH_AUDIT_REPAIR_OUTCOME_CONTRADICTION",
+            contract.validate_graph_audit(
+                value,
+                study_profile_digest="sha256:" + "a" * 64,
+                graph_digest="sha256:" + "b" * 64,
+                snapshot_ref=snapshot_ref,
             ),
         )
 
-    def test_graph_agent_profiles_have_worker_only_task_clock(self) -> None:
+    def test_graph_agent_profiles_use_one_in_clock_worker_qa_repair_loop(self) -> None:
         adapter = load_harbor_agent_with_stubs()
         method = object.__new__(adapter.ChartingLoopGraphKernelMethodAgent)
         neutral = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
-        self.assertEqual(method.version(), "1.0.0")
-        self.assertEqual(neutral.version(), "1.0.0")
-        self.assertEqual(method.ROLE_SEQUENCE, ("worker",))
-        self.assertEqual(neutral.ROLE_SEQUENCE, ("worker",))
-        self.assertIn("after scoring", method.ORCHESTRATION_MESSAGE)
+        self.assertEqual(method.version(), "1.1.0")
+        self.assertEqual(neutral.version(), "1.1.0")
+        self.assertEqual(method.ROLE_SEQUENCE, ("worker", "qa"))
+        self.assertEqual(neutral.ROLE_SEQUENCE, ("worker", "qa"))
+        self.assertIn("Worker freeze", method.ORCHESTRATION_MESSAGE)
+        self.assertIn("same-Worker", method.ORCHESTRATION_MESSAGE)
+        self.assertIn("official scoring", method.ORCHESTRATION_MESSAGE)
         self.assertNotEqual(method.name(), neutral.name())
+        source = (REPOSITORY_ROOT / "benchmark_agents" / "harbor_agent.py").read_text(
+            encoding="utf-8"
+        )
+        for marker in (
+            '"deadline_policy": "single_task_deadline"',
+            '"phase_time_allocations": None',
+            "while _remaining_seconds(execution_deadline) > 0",
+            "_freeze_graph_revision(",
+            'self._resume_role(\n                        "qa"',
+            'self._resume_role(\n                "worker"',
+            "graph_repair_prompt(",
+            '"target.write_bytes(source.read_bytes()); target.chmod(0o444)"',
+            'f"chmod 0555 {shlex.quote(revision_root.as_posix())}"',
+            "_restore_latest_worker_submission(",
+            '"agent_returned_for_grading"',
+        ):
+            self.assertIn(marker, source)
+
+    def test_graph_agent_audits_each_freeze_before_returning_for_verification(self) -> None:
+        adapter = load_harbor_agent_with_stubs()
+        agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
+        agent.model_name = "openai/gpt-5.6-sol"
+        agent._sdk_identity = {
+            "kit_version": "0.7.0",
+            "tree_digest": "sha256:" + "7" * 64,
+        }
+        roles = {"worker": object(), "qa": object()}
+        agent._child_agent = lambda role: roles[role]
+        events: list[str] = []
+        state = {"worker_snapshot": "worker-000001-a"}
+
+        async def write_root_json(self, environment, *, path, value):
+            events.append("study-frozen")
+
+        async def run_new(self, role, child, prompt, environment, *, deadline):
+            events.append(f"{role}-new")
+            return adapter.AgentContext(), {
+                "phase": role,
+                "role": role,
+                "status": "completed",
+                "quiescent": True,
+            }
+
+        async def resume(self, role, child, prompt, environment, *, phase, deadline):
+            events.append(f"{role}-resume")
+            if role == "worker":
+                state["worker_snapshot"] = "worker-000002-b"
+            return adapter.AgentContext(), {
+                "phase": phase,
+                "role": role,
+                "status": "completed",
+                "quiescent": True,
+            }
+
+        async def progress(self, environment):
+            return {
+                "available": True,
+                "snapshot_count": 1,
+                "snapshots": [{"snapshot_id": state["worker_snapshot"]}],
+            }
+
+        async def freeze_graph(self, environment, *, iteration, worker_snapshot_ref):
+            events.append(f"graph-freeze-{iteration}:{worker_snapshot_ref}")
+            return {
+                "ok": True,
+                "graph_path": f"/audit/graph-{iteration}.jsonl",
+                "graph_digest": "sha256:" + str(iteration) * 64,
+            }
+
+        async def open_qa(self, environment):
+            events.append("qa-open")
+
+        async def seal_qa(self, environment):
+            events.append("qa-seal")
+
+        async def freeze_submission(self, environment, *, role, paths):
+            events.append(f"{role}-report-frozen")
+            return {"ok": True, "role": role}
+
+        async def read_audit(
+            self,
+            environment,
+            *,
+            path,
+            study_profile_digest,
+            graph_digest,
+            snapshot_ref,
+        ):
+            repair = snapshot_ref == "worker-000001-a"
+            events.append(f"qa-decision:{snapshot_ref}:{repair}")
+            return {"snapshot_ref": snapshot_ref}, {
+                "valid": True,
+                "errors": [],
+                "path_assessment": "drifted" if repair else "coherent",
+                "repair_required": repair,
+                "advisory_only": True,
+                "blocking_gate": False,
+                "authorizes_mutation": False,
+            }
+
+        async def seal_graph(self, environment):
+            events.append("final-graph-sealed")
+            return {
+                "corridor_digest": "sha256:" + "c" * 64,
+                "graph_bytes_digest": "sha256:" + "d" * 64,
+                "graph_validation": {"ok": True},
+                "graph_structurally_valid": True,
+            }
+
+        async def restore(self, environment):
+            events.append("latest-worker-restored")
+            return {"ok": True, "snapshot_id": state["worker_snapshot"]}
+
+        for name, function in (
+            ("_write_root_json", write_root_json),
+            ("_run_new_role", run_new),
+            ("_resume_role", resume),
+            ("_worker_revision_progress", progress),
+            ("_freeze_graph_revision", freeze_graph),
+            ("_open_qa_directory", open_qa),
+            ("_seal_qa_directory", seal_qa),
+            ("_freeze_submission_paths", freeze_submission),
+            ("_read_graph_audit", read_audit),
+            ("_seal_graph_corridor", seal_graph),
+            ("_restore_latest_worker_submission", restore),
+        ):
+            setattr(agent, name, types.MethodType(function, agent))
+
+        context = adapter.AgentContext()
+        asyncio.run(
+            agent._run_task(
+                "You have 100 seconds to complete the official task.",
+                object(),
+                context,
+            )
+        )
+
+        self.assertEqual(
+            events,
+            [
+                "study-frozen",
+                "worker-new",
+                "graph-freeze-1:worker-000001-a",
+                "qa-open",
+                "qa-new",
+                "qa-report-frozen",
+                "qa-seal",
+                "qa-decision:worker-000001-a:True",
+                "worker-resume",
+                "graph-freeze-2:worker-000002-b",
+                "qa-open",
+                "qa-resume",
+                "qa-report-frozen",
+                "qa-seal",
+                "qa-decision:worker-000002-b:False",
+                "final-graph-sealed",
+                "latest-worker-restored",
+            ],
+        )
+        self.assertEqual(context.metadata["qa_schedule"], "in_clock_after_each_worker_freeze")
+        self.assertFalse(context.metadata["qa_budget_is_separate"])
+        self.assertFalse(context.metadata["qa_can_repair"])
+        self.assertEqual(context.metadata["repair_actor"], "same_worker_session")
+        self.assertEqual(context.metadata["submission_fallback"]["snapshot_id"], "worker-000002-b")
+        self.assertEqual(context.metadata["official_verifier_schedule"], "after_agent_return")
+        self.assertEqual(context.metadata["phase_events"][-1], "agent_returned_for_grading")
 
 
 if __name__ == "__main__":

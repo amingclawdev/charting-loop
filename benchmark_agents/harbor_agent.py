@@ -63,12 +63,15 @@ from benchmark_agents.contract import (
     verify_freeze_program,
     worker_prompt,
     graph_study_profile,
+    graph_qa_prompt,
+    graph_repair_prompt,
     graph_worker_prompt,
+    validate_graph_audit,
 )
 
 
 AGENT_VERSION = "0.9.0"
-GRAPH_AGENT_VERSION = "1.0.0"
+GRAPH_AGENT_VERSION = "1.1.0"
 METHOD_SOURCE_COMMIT = "3c3813444a7d43d0a56837e9cb960be86ce26d06"
 METHOD_SOURCE_PATH = "method-paper/METHOD.md"
 METHOD_SCOPE_PATH = "method-paper/SCOPE-DATUM.md"
@@ -2193,11 +2196,11 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
     """Task-clock Worker authoring with a shared task-neutral Graph Kernel."""
 
     ARM = ""
-    ROLE_SEQUENCE = ("worker",)
+    ROLE_SEQUENCE = ("worker", "qa")
     ORCHESTRATION_MESSAGE = (
         "Deterministic orchestration: frozen Study profile plus shared Graph "
-        "Kernel -> integrated Worker execution/authoring -> official scoring. "
-        "Independent audit-only QA runs externally after scoring."
+        "Kernel -> Worker freeze -> in-clock advisory QA -> same-Worker "
+        "repair/refreeze when witnessed -> latest-valid submission -> official scoring."
     )
     ORCHESTRATION_METHOD = "method-guided-graph-kernel"
 
@@ -2301,6 +2304,146 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
         await self._write_root_json(environment, path=FREEZE_PATH, value=freeze)
         return freeze
 
+    async def _freeze_graph_revision(
+        self,
+        environment: BaseEnvironment,
+        *,
+        iteration: int,
+        worker_snapshot_ref: str,
+    ) -> dict[str, Any]:
+        """Copy one exact graph revision for QA without freezing the live graph."""
+
+        revision_root = (
+            PurePosixPath(RUNTIME_ROOT)
+            / "graph-freezes"
+            / f"revision-{iteration:04d}"
+        )
+        frozen_graph_path = (revision_root / "GRAPH.jsonl").as_posix()
+        manifest_path = (revision_root / "GRAPH-FREEZE.json").as_posix()
+        copy_program = (
+            "from pathlib import Path; "
+            f"source=Path({GRAPH_PATH!r}); root=Path({revision_root.as_posix()!r}); "
+            f"target=Path({frozen_graph_path!r}); "
+            "assert source.is_file() and not source.is_symlink(); "
+            "assert not root.exists(); root.mkdir(parents=True,mode=0o700); "
+            "target.write_bytes(source.read_bytes()); target.chmod(0o444)"
+        )
+        copied = await self.exec_as_root(
+            environment,
+            command=f"python3 -c {shlex.quote(copy_program)}",
+        )
+        if copied.return_code != 0:
+            return {
+                "ok": False,
+                "iteration": iteration,
+                "worker_snapshot_ref": worker_snapshot_ref,
+                "status": "graph_revision_copy_failed",
+                "error": (copied.stderr or copied.stdout or "no output")[-2000:],
+            }
+        validation = await self.exec_as_root(
+            environment,
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                f"python3 -m corridor_kit graph validate {shlex.quote(frozen_graph_path)}"
+            ),
+        )
+        lines = [line for line in (validation.stdout or "").splitlines() if line.strip()]
+        try:
+            report = json.loads("\n".join(lines))
+        except (TypeError, json.JSONDecodeError):
+            report = {}
+        graph_digest = report.get("graph_digest")
+        if (
+            validation.return_code != 0
+            or report.get("ok") is not True
+            or not isinstance(graph_digest, str)
+        ):
+            return {
+                "ok": False,
+                "iteration": iteration,
+                "worker_snapshot_ref": worker_snapshot_ref,
+                "status": "graph_revision_invalid",
+                "validation": report,
+            }
+        identity = {
+            "schema_version": "charting-loop/frozen-graph-revision/v1",
+            "iteration": iteration,
+            "worker_snapshot_ref": worker_snapshot_ref,
+            "graph_path": frozen_graph_path,
+            "graph_digest": graph_digest,
+            "head_record_id": report.get("head_record_id"),
+            "record_count": report.get("record_count"),
+        }
+        await self._write_root_json(
+            environment,
+            path=manifest_path,
+            value=identity,
+        )
+        await self.exec_as_root(
+            environment,
+            command=(
+                f"chmod 0444 {shlex.quote(manifest_path)} && "
+                f"chmod 0555 {shlex.quote(revision_root.as_posix())}"
+            ),
+        )
+        return {"ok": True, **identity, "manifest_path": manifest_path}
+
+    async def _read_graph_audit(
+        self,
+        environment: BaseEnvironment,
+        *,
+        path: str,
+        study_profile_digest: str,
+        graph_digest: str,
+        snapshot_ref: str,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        result = await environment.exec(
+            command=f"python3 -c {shlex.quote(remote_json_read_program(path))}",
+            user=environment.default_user,
+        )
+        if result.return_code != 0 or not result.stdout:
+            return None, {
+                "valid": False,
+                "errors": ["GRAPH_AUDIT_UNREADABLE"],
+                "path_assessment": "not_assessed",
+                "repair_required": False,
+            }
+        try:
+            value = load_qa_json_text(result.stdout)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None, {
+                "valid": False,
+                "errors": ["GRAPH_AUDIT_JSON"],
+                "path_assessment": "not_assessed",
+                "repair_required": False,
+            }
+        errors = validate_graph_audit(
+            value,
+            study_profile_digest=study_profile_digest,
+            graph_digest=graph_digest,
+            snapshot_ref=snapshot_ref,
+        )
+        repair_required = (
+            not errors
+            and isinstance(value, dict)
+            and value.get("repair_recommended") is True
+            and value.get("path_assessment") in {"drifted", "incomplete"}
+            and bool(value.get("witnesses"))
+        )
+        return value, {
+            "valid": not errors,
+            "errors": errors,
+            "path_assessment": (
+                value.get("path_assessment")
+                if not errors and isinstance(value, dict)
+                else "not_assessed"
+            ),
+            "repair_required": repair_required,
+            "advisory_only": True,
+            "blocking_gate": False,
+            "authorizes_mutation": False,
+        }
+
     async def _run_task(
         self,
         instruction: str,
@@ -2313,6 +2456,7 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
             raise ValueError("Graph Kernel agent arm is not configured")
 
         worker = self._child_agent("worker")
+        qa = self._child_agent("qa")
         loop = asyncio.get_running_loop()
         started_at = loop.time()
         task_timeout_seconds = _task_timeout_seconds(instruction)
@@ -2334,17 +2478,16 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
             environment, path=STUDY_PROFILE_PATH, value=profile
         )
         metadata: dict[str, Any] = {
-            "schema_version": "charting-loop/graph-kernel-run/v1",
+            "schema_version": "charting-loop/graph-kernel-run/v2",
             "method": "method-guided-graph-kernel",
             "arm": self.ARM,
             "study_profile": profile,
             "study_profile_digest": profile["profile_digest"],
             "builder_present": False,
             "roles": ["worker", "qa"],
-            "task_clock_roles": ["worker"],
-            "qa_schedule": "post_score_external",
-            "qa_budget_is_separate": True,
-            "qa_pending": True,
+            "task_clock_roles": ["worker", "qa"],
+            "qa_schedule": "in_clock_after_each_worker_freeze",
+            "qa_budget_is_separate": False,
             "phase_events": ["study_profile_frozen", "graph_kernel_ready"],
             "phase_runs": [],
             "deadline_policy": "single_task_deadline",
@@ -2355,8 +2498,13 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
             "submission_root": SUBMISSION_ROOT,
             "submission_snapshots": [],
             "graph_path": GRAPH_PATH,
+            "graph_revision_freezes": [],
+            "qa_audits": [],
             "qa_is_advisory": True,
+            "qa_can_recommend_repair": True,
             "qa_can_repair": False,
+            "repair_actor": "same_worker_session",
+            "official_verifier_schedule": "after_agent_return",
             "last_worker_snapshot_owns_fallback": True,
             "grading_owned_by_harbor": True,
         }
@@ -2383,30 +2531,145 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
         else:
             metadata["phase_events"].append("worker_skipped_task_deadline")
 
+        qa_started = False
+        audited_snapshot_refs: set[str] = set()
+        audit_iteration = 0
+        last_decision: dict[str, Any] = {
+            "valid": False,
+            "errors": ["QA_NOT_RUN"],
+            "path_assessment": "not_assessed",
+            "repair_required": False,
+            "advisory_only": True,
+            "blocking_gate": False,
+            "authorizes_mutation": False,
+        }
+        while _remaining_seconds(execution_deadline) > 0:
+            progress = await self._worker_revision_progress(environment)
+            metadata["worker_revision_progress"] = progress
+            snapshots = progress.get("snapshots", []) if isinstance(progress, dict) else []
+            snapshot_ref = (
+                str(snapshots[-1].get("snapshot_id"))
+                if isinstance(snapshots, list)
+                and snapshots
+                and isinstance(snapshots[-1], dict)
+                and isinstance(snapshots[-1].get("snapshot_id"), str)
+                else None
+            )
+            if snapshot_ref is None:
+                metadata["phase_events"].append("qa_skipped_no_valid_worker_freeze")
+                break
+            if snapshot_ref in audited_snapshot_refs:
+                metadata["phase_events"].append("repair_did_not_advance_worker_freeze")
+                break
+            audit_iteration += 1
+            graph_revision = await self._freeze_graph_revision(
+                environment,
+                iteration=audit_iteration,
+                worker_snapshot_ref=snapshot_ref,
+            )
+            metadata["graph_revision_freezes"].append(graph_revision)
+            if graph_revision.get("ok") is not True:
+                metadata["phase_events"].append("qa_skipped_invalid_graph_revision")
+                break
+            audited_snapshot_refs.add(snapshot_ref)
+            qa_path = (
+                PurePosixPath(RUNTIME_ROOT)
+                / "qa"
+                / f"graph-audit-{audit_iteration:04d}.json"
+            ).as_posix()
+            await self._open_qa_directory(environment)
+            try:
+                prompt = graph_qa_prompt(
+                    instruction,
+                    arm=self.ARM,
+                    study_profile_digest=str(profile["profile_digest"]),
+                    graph_digest=str(graph_revision["graph_digest"]),
+                    latest_worker_snapshot_ref=snapshot_ref,
+                    remaining_seconds=_remaining_seconds(execution_deadline),
+                    method_text=method_text,
+                    graph_path=str(graph_revision["graph_path"]),
+                    qa_output_path=qa_path,
+                    audit_iteration=audit_iteration,
+                )
+                if qa_started:
+                    _, qa_run = await self._resume_role(
+                        "qa",
+                        qa,
+                        prompt,
+                        environment,
+                        phase=f"qa-audit-{audit_iteration:04d}",
+                        deadline=execution_deadline,
+                    )
+                else:
+                    _, qa_run = await self._run_new_role(
+                        "qa",
+                        qa,
+                        prompt,
+                        environment,
+                        deadline=execution_deadline,
+                    )
+                    qa_started = True
+                qa_snapshot = await self._freeze_submission_paths(
+                    environment,
+                    role="qa",
+                    paths=[qa_path],
+                )
+                metadata["submission_snapshots"].append(qa_snapshot)
+            finally:
+                await self._seal_qa_directory(environment)
+            self._record_phase_outcome(metadata, qa_run, context)
+            assessment, last_decision = await self._read_graph_audit(
+                environment,
+                path=qa_path,
+                study_profile_digest=str(profile["profile_digest"]),
+                graph_digest=str(graph_revision["graph_digest"]),
+                snapshot_ref=snapshot_ref,
+            )
+            metadata["qa_audits"].append(
+                {
+                    "iteration": audit_iteration,
+                    "qa_path": qa_path,
+                    "worker_snapshot_ref": snapshot_ref,
+                    "graph_digest": graph_revision["graph_digest"],
+                    "decision": last_decision,
+                    "assessment": assessment,
+                }
+            )
+            if not last_decision.get("repair_required"):
+                metadata["phase_events"].append("qa_repair_not_requested")
+                break
+            if _remaining_seconds(execution_deadline) <= 0:
+                metadata["phase_events"].append("repair_skipped_task_deadline")
+                break
+            _, repair_run = await self._resume_role(
+                "worker",
+                worker,
+                graph_repair_prompt(
+                    instruction,
+                    arm=self.ARM,
+                    study_profile_digest=str(profile["profile_digest"]),
+                    graph_digest=str(graph_revision["graph_digest"]),
+                    audited_snapshot_ref=snapshot_ref,
+                    qa_path=qa_path,
+                    remaining_seconds=_remaining_seconds(execution_deadline),
+                    method_text=method_text,
+                ),
+                environment,
+                phase=f"repair-{audit_iteration:04d}",
+                deadline=execution_deadline,
+            )
+            self._record_phase_outcome(metadata, repair_run, context)
+            metadata["worker_revision_progress"] = await self._worker_revision_progress(
+                environment
+            )
+
+        metadata["qa_decision"] = last_decision
         freeze = await self._seal_graph_corridor(environment)
         metadata["corridor_digest"] = freeze["corridor_digest"]
         metadata["graph_bytes_digest"] = freeze.get("graph_bytes_digest")
         metadata["graph_validation"] = freeze.get("graph_validation")
         metadata["graph_structurally_valid"] = freeze.get("graph_structurally_valid")
-        metadata["phase_events"].append("worker_graph_sealed")
-        progress = metadata.get("worker_revision_progress", {})
-        snapshots = progress.get("snapshots", []) if isinstance(progress, dict) else []
-        snapshot_ref = (
-            str(snapshots[-1].get("snapshot_id"))
-            if isinstance(snapshots, list)
-            and snapshots
-            and isinstance(snapshots[-1], dict)
-            else None
-        )
-
-        metadata["qa_graph_audit"] = None
-        metadata["qa_decision"] = {
-            "outcome": "pending_post_score_audit",
-            "valid": False,
-            "repair_required": False,
-            "advisory_only": True,
-        }
-        metadata["phase_events"].append("qa_deferred_until_after_official_scoring")
+        metadata["phase_events"].append("final_graph_sealed")
         metadata["submission_fallback"] = await self._restore_latest_worker_submission(
             environment
         )

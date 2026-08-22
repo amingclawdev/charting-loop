@@ -165,12 +165,15 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Validate chain identity, authority receipts, and reference closure."""
 
     rule_records: dict[str, str] = {}
+    rule_source_digests: dict[str, str] = {}
     ratified_rules: dict[str, str] = {}
     dependencies: dict[str, set[str]] = {}
     fact_records: dict[str, str] = {}
     fact_receipts: dict[str, str] = {}
     positions: dict[str, dict[str, Any]] = {}
+    position_ids: set[str] = set()
     directions: dict[str, dict[str, Any]] = {}
+    direction_ids: set[str] = set()
     artifacts: dict[str, int] = {}
     artifact_record_ids: set[str] = set()
     content_ids: set[str] = set()
@@ -226,28 +229,36 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             rule_id = _text(body, "rule_id")
             _text(body, "statement")
             _text(body, "source_ref")
-            _digest(body, "source_digest")
+            source_digest = _digest(body, "source_digest")
             if rule_id in rule_records:
                 raise CorridorKitError(f"rule proposal already exists: {rule_id}")
             rule_records[rule_id] = expected_record
+            rule_source_digests[rule_id] = source_digest
         elif record_type == "rule_revision":
             rule_id = _text(body, "rule_id")
             supersedes = _text(body, "supersedes_record_id")
             _text(body, "statement")
             _text(body, "source_ref")
-            _digest(body, "source_digest")
+            source_digest = _digest(body, "source_digest")
             if rule_records.get(rule_id) != supersedes:
                 raise CorridorKitError(f"rule revision does not supersede the current rule: {rule_id}")
             rule_records[rule_id] = expected_record
+            rule_source_digests[rule_id] = source_digest
             ratified_rules.pop(rule_id, None)
         elif record_type == "rule_ratification":
             rule_id = _text(body, "rule_id")
             rule_record_id = _text(body, "rule_record_id")
             _text(body, "authority_ref")
-            _digest(body, "authority_digest")
+            authority_digest = _digest(body, "authority_digest")
             _text(body, "receipt_ref")
             if rule_records.get(rule_id) != rule_record_id:
                 raise CorridorKitError(f"ratification does not bind the current rule: {rule_id}")
+            if rule_source_digests.get(rule_id) != authority_digest:
+                raise CorridorKitError(
+                    f"ratification authority does not bind the current rule source: {rule_id}"
+                )
+            if rule_id in ratified_rules:
+                raise CorridorKitError(f"current rule is already ratified: {rule_id}")
             ratified_rules[rule_id] = expected_record
         elif record_type == "rule_dependency":
             source = _text(body, "from_rule_id")
@@ -265,7 +276,9 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             _text(body, "statement")
             _text(body, "evidence_ref")
             _digest(body, "evidence_digest")
-            _text(body, "position_ref")
+            position_ref = _text(body, "position_ref")
+            if position_ref not in positions:
+                raise CorridorKitError("fact proposal references an unknown Position")
             if fact_id in fact_records:
                 raise CorridorKitError(f"fact proposal already exists: {fact_id}")
             fact_records[fact_id] = expected_record
@@ -298,14 +311,20 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             rule_refs = _text_list(body, "rule_record_ids", nonempty=True)
             receipt_refs = _text_list(body, "fact_receipt_ids")
             artifact_refs = _text_list(body, "artifact_record_ids")
-            if set(rule_refs) != set(rule_records.values()):
-                raise CorridorKitError("Position checkpoint must bind the whole current Rule closure")
+            current_ratified_rule_records = {
+                rule_records[rule_id] for rule_id in ratified_rules
+            }
+            if set(rule_refs) != current_ratified_rule_records:
+                raise CorridorKitError(
+                    "Position checkpoint must bind the whole current ratified Rule closure"
+                )
             if not set(receipt_refs).issubset(set(fact_receipts.values())):
                 raise CorridorKitError("Position checkpoint references an unknown Fact receipt")
             if not set(artifact_refs).issubset(artifact_record_ids):
                 raise CorridorKitError("Position checkpoint references an unknown artifact revision")
-            if position_id in positions:
+            if position_id in position_ids:
                 raise CorridorKitError(f"Position checkpoint already exists: {position_id}")
+            position_ids.add(position_id)
             positions[expected_record] = {"position_id": position_id, **body}
         elif record_type == "direction_proposal":
             direction_id = _text(body, "direction_id")
@@ -321,8 +340,9 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 raise CorridorKitError("Direction proposal uses Rules outside its Position")
             if not set(receipt_refs).issubset(set(position["fact_receipt_ids"])):
                 raise CorridorKitError("Direction proposal uses Facts outside its Position")
-            if direction_id in directions:
+            if direction_id in direction_ids:
                 raise CorridorKitError(f"Direction proposal already exists: {direction_id}")
+            direction_ids.add(direction_id)
             directions[expected_record] = {"direction_id": direction_id, **body}
         elif record_type == "direction_snapshot":
             position_ref = _text(body, "position_ref")

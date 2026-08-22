@@ -9,6 +9,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from tools.terminal_bench_doctor import (
+    AGENT_VERSION,
     BUN_SOURCEMAP_TASK_CACHE_DIGEST,
     BUN_SOURCEMAP_TASK_NAME,
     CORRIDOR_SDK_VERSION,
@@ -404,6 +405,8 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         self.assertEqual(report["condition"]["upload_visibility"], "private")
         self.assertEqual(report["condition"]["study_arm"], "method")
         self.assertEqual(report["condition"]["agent"], METHOD_AGENT_IMPORT)
+        self.assertEqual(report["condition"]["agent_version"], "1.1.0")
+        self.assertEqual(AGENT_VERSION, "1.1.0")
         self.assertEqual(
             report["condition"]["corridor_sdk_version"], CORRIDOR_SDK_VERSION
         )
