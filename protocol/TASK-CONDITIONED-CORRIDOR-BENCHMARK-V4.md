@@ -73,6 +73,26 @@ task's score, verifier output, or transcript cannot be added to the frozen condi
 A same-task rerun after modifying the SDK is an engineering regression run. It is not
 a fresh task sample, transfer result, or clean leaderboard attempt.
 
+## Independent compile probe before a formal experiment
+
+Compiler development may run one fresh diagnostic session before a formal scored
+experiment. That session sees exactly the frozen Method, public task source, and
+task-neutral Typed Rule compiler interface. It must not receive a historical task
+Graph, official verifier output, prior result, or prior task transcript. It emits
+`charting-loop/typed-rule-ir/v1`; the deterministic compiler then freezes the public
+task-source digest, Method digest, compiler/config and implementation digests, IR
+digest, and the input policy in one compile-probe manifest.
+
+The probe checks whether public requirements were compiled into source-bound Rule
+kinds, explicit quantified subjects, condition branches/outcomes, typed dependencies,
+and compatible witness operators. It does not solve the task, choose Direction,
+establish task truth/PASS, block the run, or become a hidden evaluator. For the
+integrated no-Builder profile its output is reviewed but not injected into the scored
+Worker, which performs its own in-clock compilation. If task interpretation, compiler
+configuration, or compiler bytes change after same-task verifier feedback, every later
+same-task probe/run is labeled regression/validation rather than fresh efficacy or
+transfer evidence.
+
 ## Builder outputs and freeze
 
 The Builder must first establish the complete public task acceptance surface, then

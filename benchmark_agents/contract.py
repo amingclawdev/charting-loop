@@ -1079,6 +1079,46 @@ def _graph_condition_block(arm: str, method_text: str | None) -> str:
     raise ValueError("graph study arm must be method or neutral")
 
 
+def graph_compile_probe_prompt(
+    task_instruction: str,
+    *,
+    method_text: str,
+    compiler_config_digest: str,
+) -> str:
+    """Return the isolated, non-scoring pre-experiment Rule compile probe."""
+
+    return f"""You are an independent task-requirement compiler, not the task Worker.
+
+{_task_block(task_instruction)}
+
+Read only the public task above, the frozen Method below, and the documented
+`charting-loop/typed-rule-ir/v1` compiler interface. Do not read any historical task
+Graph, verifier output, prior result, or prior task transcript. Do not solve or mutate
+the task and do not choose a Direction.
+
+{_frozen_method_block(method_text)}
+
+Emit exactly one Typed Rule IR JSON object. Every public normative clause must retain
+its source binding, Rule kind, quantifier and explicit subject domain. Represent each
+conditional branch and expected outcome separately. Use `per_subject` projection when
+the source requires each named subject independently. Temporal, transition, or
+precedence Rules must require an operator such as `ordered_before`, `ordered_after`,
+`duration`, or `state_transition`; a timeless set/union witness is not equivalent.
+Declare Rule dependencies with their semantic relationship instead of relying on list
+order. Preserve ambiguity as an explicit compile failure rather than weakening a Rule.
+
+Bind `method_digest` to `{METHOD_CONTENT_SHA256}` and `compiler_config_digest` to
+`{compiler_config_digest}`. The caller will run:
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit rules compile <ir.json>`
+
+This is a diagnostic before the formal experiment. Its IR is reviewed for compilation
+quality but is not injected into the later Worker. If task-source interpretation or
+compiler bytes change after same-task verifier feedback, classify the later run as
+`same_task_regression`, not fresh efficacy or transfer evidence.
+"""
+
+
 def graph_worker_prompt(
     task_instruction: str,
     *,
@@ -1102,11 +1142,18 @@ The frozen Study profile is `{STUDY_PROFILE_PATH}` with digest
 `{study_profile_digest}`. The append-only execution graph is `{GRAPH_PATH}`.
 
 Use the graph while doing the task, not as a separate construction project. First
-record the official task requirements you rely on as `rule_proposal` records and
-bind each current Rule to its public source with `rule_ratification`. Add
-`rule_dependency` edges when one Rule requires, overlaps, conflicts with, or derives
-from another. Propose evidence as `fact_proposal`; admit it only through a current
-ratified admission Rule and an explicit `fact_admission` receipt.
+compile the official requirements you rely on into `charting-loop/typed-rule-ir/v1`
+and run `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit rules compile <ir.json>`. Record
+the returned `rule_bodies` as `rule_proposal` records and bind each current Rule to
+its public source with `rule_ratification`. Materialize every returned checklist
+template with that current `source_rule_record_id`; do not merge subject/condition
+coverage cells. Add `rule_dependency` edges using the returned semantic relationship,
+then materialize every returned `typed_dependency_template` with the current
+`source_rule_record_id` so dependency order is executable rather than implicit.
+Propose evidence as `fact_proposal`; for a typed checklist bind
+`witness_bindings` to its checklist ID, Rule-semantics digest, and exact operators.
+Admit evidence only through a current ratified admission Rule and an explicit
+`fact_admission` receipt.
 
 Compile each current Rule into source-bound `acceptance_checklist_item` records.
 Preserve its exact obligation, scope and quantifier, required behavioral partitions,
@@ -1219,9 +1266,10 @@ mutate the task, graph, Worker snapshot, or official outputs. Only a concrete
 replayable witness may recommend that the harness resume the same Worker for repair;
 QA itself never repairs or blocks final submission.
 Treat the Doctor as deterministic audit material: inspect checklist partition
-coverage, dependency order, ready/blocked frontier, invalidation closure, and exact
-Position-bound Direction freshness. Its classification is not a QA verdict, Gate,
-or substitute for inspecting the official output.
+coverage, typed Rule coverage cells, witness-operator/semantics alignment, dependency
+order, ready/blocked frontier, invalidation closure, and exact Position-bound
+Direction freshness. Its classification is not a QA verdict, Gate, or substitute for
+inspecting the official output.
 The latest verified Worker snapshot ref is {json.dumps(latest_worker_snapshot_ref)}.
 This is audit iteration {audit_iteration}. About {remaining_seconds} seconds remain
 on the same total task clock; there is no QA-owned time slice. Write a complete

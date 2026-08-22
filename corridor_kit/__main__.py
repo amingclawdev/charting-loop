@@ -20,6 +20,7 @@ from .core import (
     public_world_inventory,
     regular_tree_manifest,
 )
+from .compiler import RUN_CLASSIFICATIONS, compile_typed_rule_ir
 from .scaffold import create_scaffold, validate_method_capsule
 from .domain.binary import (
     binary_diff,
@@ -149,6 +150,21 @@ def _parser() -> argparse.ArgumentParser:
         "builtins", help="emit the task-neutral binary capability registry"
     )
     capability_builtins.add_argument("--output", type=Path)
+
+    rules = commands.add_parser(
+        "rules", help="validate and project task-authored Typed Rule IR"
+    )
+    rule_commands = rules.add_subparsers(dest="rule_command", required=True)
+    rule_compile = rule_commands.add_parser(
+        "compile", help="project Rule coverage cells and compile-probe identity"
+    )
+    rule_compile.add_argument("ir", type=Path)
+    rule_compile.add_argument(
+        "--run-classification",
+        choices=sorted(RUN_CLASSIFICATIONS),
+        default="fresh_task_pre_experiment",
+    )
+    rule_compile.add_argument("--output", type=Path)
 
     graph = commands.add_parser(
         "graph", help="append and replay task-neutral Method execution records"
@@ -320,6 +336,13 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if report["structurally_valid"] else 1
         if args.command == "capabilities" and args.capability_command == "builtins":
             _emit(builtin_binary_registry(), args.output)
+            return 0
+        if args.command == "rules" and args.rule_command == "compile":
+            report = compile_typed_rule_ir(
+                load_json(args.ir),
+                run_classification=args.run_classification,
+            )
+            _emit(report, args.output)
             return 0
         if args.command == "graph":
             if args.graph_command == "init":

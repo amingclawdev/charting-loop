@@ -50,8 +50,26 @@ and does not pretend to construct a mature Corridor inside a task clock. Worker 
 QA instead share an append-only graph while doing and auditing the task. A Rule remains
 immutable authority; `acceptance_checklist_item` records are source-bound operational
 views that retain the Rule's obligation, scope, quantifier, behavioral partitions,
-evidence requirement, and pass/fail/unknown decision rule. An incomplete or ambiguous
-compilation remains explicit rather than becoming a weaker Rule.
+evidence requirement, and pass/fail/unknown decision rule. An incomplete, ambiguous,
+or unsupported compilation remains explicit rather than becoming a weaker Rule.
+
+Before a formal experiment, a fresh diagnostic session may compile the public task
+into `charting-loop/typed-rule-ir/v1`. It sees only the frozen Method, public task
+source, and compiler interface. The resulting probe manifest binds the task-source,
+Method, compiler-config, compiler-implementation, and IR digests, and records that
+historical Graphs, verifier output, results, and transcripts were forbidden inputs.
+The probe is reviewed for compiler readiness but is not injected into the scored
+Worker. A same-task probe after verifier-informed compiler changes is regression
+evidence, not fresh efficacy or transfer.
+
+Typed Rule IR makes the semantic compilation boundary explicit. Each Rule declares a
+kind, quantifier, complete subject domain, condition branches and outcomes, semantic
+dependencies, and the witness operators required to distinguish those outcomes. The
+compiler deterministically projects the complete subject-by-condition product into
+checklist templates. `per_subject` projection therefore cannot be replaced by one
+aggregate check, and a temporal Rule cannot compile without a temporal operator.
+Natural-language interpretation remains the agent's responsibility; the SDK makes its
+result inspectable and replayable rather than pretending to infer task truth.
 
 `typed_dependency` records distinguish normative, work-row, and evidence relations.
 Only `requires`, `produces_fact_for`, and `precondition_for` impose a hard order.
@@ -125,6 +143,9 @@ For the no-Builder benchmark profile, initialize, append, replay, and independen
 inspect the graph with:
 
 ```sh
+python3 -m corridor_kit rules compile /tmp/charting-loop/TYPED-RULE-IR.json \
+  --run-classification fresh_task_pre_experiment \
+  --output /tmp/charting-loop/TYPED-RULE-COMPILATION.json
 python3 -m corridor_kit graph init /tmp/charting-loop/GRAPH.jsonl
 python3 -m corridor_kit graph append /tmp/charting-loop/GRAPH.jsonl \
   --type acceptance_checklist_item --actor worker --body-file /tmp/item.json
@@ -134,7 +155,8 @@ python3 -m corridor_kit graph doctor /tmp/charting-loop/GRAPH.jsonl
 
 The Doctor is deterministic and read-only. It recomputes chain integrity, hard-edge
 topological order, checklist/Position alignment, Direction freshness, invalidation
-closure, and declared behavioral-partition coverage. Its report binds the exact graph
+closure, declared behavioral-partition and typed coverage-cell completeness, and
+witness operator/Rule-semantics alignment. Its report binds the exact graph
 bytes, graph identity, Doctor code, Position, Direction, and acceptance root. Its only
 classifications are `structurally_invalid`, `structurally_valid_but_incomplete`, and
 `acceptance_assessed_complete`. None is task truth, official PASS, delivery or mutation

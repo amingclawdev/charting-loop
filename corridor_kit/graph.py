@@ -18,6 +18,11 @@ from .core import (
     sha256_bytes,
     sha256_json,
 )
+from .compiler import (
+    RULE_RELATIONSHIPS,
+    project_rule_checklist_templates,
+    validate_rule_semantics,
+)
 
 
 GRAPH_RECORD_SCHEMA = "charting-loop/graph-kernel-record/v1"
@@ -43,7 +48,9 @@ GRAPH_RECORD_TYPES = frozenset(
 GRAPH_ACTORS = frozenset({"worker", "qa", "runner", "operator"})
 CHECKPOINT_KINDS = frozenset({"row_progress", "acceptance_assessment"})
 CHECKLIST_STATUSES = frozenset({"pass", "fail", "unknown"})
-CHECKLIST_COMPILATION_STATUSES = frozenset({"complete", "incomplete", "ambiguous"})
+CHECKLIST_COMPILATION_STATUSES = frozenset(
+    {"complete", "incomplete", "ambiguous", "unsupported"}
+)
 DEPENDENCY_KINDS = frozenset({"normative", "work", "evidence"})
 HARD_DEPENDENCY_RELATIONSHIPS = frozenset(
     {"requires", "produces_fact_for", "precondition_for"}
@@ -54,6 +61,7 @@ NON_ORDERING_DEPENDENCY_RELATIONSHIPS = frozenset(
 DEPENDENCY_RELATIONSHIPS = frozenset(
     {*HARD_DEPENDENCY_RELATIONSHIPS, *NON_ORDERING_DEPENDENCY_RELATIONSHIPS, "conflicts", "invalidates"}
 )
+RULE_HARD_RELATIONSHIPS = frozenset({"requires", "precondition_for", "precedes"})
 
 
 def _strict_object(raw: str, *, line_number: int) -> dict[str, Any]:
@@ -301,6 +309,8 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
 
     rule_records: dict[str, str] = {}
     rule_source_digests: dict[str, str] = {}
+    rule_semantics: dict[str, dict[str, Any]] = {}
+    rule_semantics_digests: dict[str, str] = {}
     ratified_rules: dict[str, str] = {}
     dependencies: dict[str, set[str]] = {}
     checklist_items: dict[str, dict[str, Any]] = {}
@@ -308,6 +318,7 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     dependency_resolutions: dict[str, dict[str, Any]] = {}
     hard_dependencies: dict[str, set[str]] = {}
     fact_records: dict[str, str] = {}
+    fact_bodies: dict[str, dict[str, Any]] = {}
     fact_receipts: dict[str, str] = {}
     positions: dict[str, dict[str, Any]] = {}
     position_ids: set[str] = set()
@@ -369,20 +380,55 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             _text(body, "statement")
             _text(body, "source_ref")
             source_digest = _digest(body, "source_digest")
+            semantic_fields = {"semantics", "rule_semantics_digest"}.intersection(body)
+            if semantic_fields and semantic_fields != {
+                "semantics",
+                "rule_semantics_digest",
+            }:
+                raise CorridorKitError(
+                    "typed Rule proposal must bind semantics and rule_semantics_digest together"
+                )
+            if semantic_fields:
+                semantics = validate_rule_semantics(body["semantics"])
+                semantics_digest = _digest(body, "rule_semantics_digest")
+                if sha256_json(semantics) != semantics_digest:
+                    raise CorridorKitError("typed Rule semantics digest does not match")
             if rule_id in rule_records:
                 raise CorridorKitError(f"rule proposal already exists: {rule_id}")
             rule_records[rule_id] = expected_record
             rule_source_digests[rule_id] = source_digest
+            if semantic_fields:
+                rule_semantics[rule_id] = semantics
+                rule_semantics_digests[rule_id] = semantics_digest
         elif record_type == "rule_revision":
             rule_id = _text(body, "rule_id")
             supersedes = _text(body, "supersedes_record_id")
             _text(body, "statement")
             _text(body, "source_ref")
             source_digest = _digest(body, "source_digest")
+            semantic_fields = {"semantics", "rule_semantics_digest"}.intersection(body)
+            if semantic_fields and semantic_fields != {
+                "semantics",
+                "rule_semantics_digest",
+            }:
+                raise CorridorKitError(
+                    "typed Rule revision must bind semantics and rule_semantics_digest together"
+                )
+            if semantic_fields:
+                semantics = validate_rule_semantics(body["semantics"])
+                semantics_digest = _digest(body, "rule_semantics_digest")
+                if sha256_json(semantics) != semantics_digest:
+                    raise CorridorKitError("typed Rule semantics digest does not match")
             if rule_records.get(rule_id) != supersedes:
                 raise CorridorKitError(f"rule revision does not supersede the current rule: {rule_id}")
             rule_records[rule_id] = expected_record
             rule_source_digests[rule_id] = source_digest
+            if semantic_fields:
+                rule_semantics[rule_id] = semantics
+                rule_semantics_digests[rule_id] = semantics_digest
+            else:
+                rule_semantics.pop(rule_id, None)
+                rule_semantics_digests.pop(rule_id, None)
             ratified_rules.pop(rule_id, None)
         elif record_type == "rule_ratification":
             rule_id = _text(body, "rule_id")
@@ -403,12 +449,17 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             source = _text(body, "from_rule_id")
             target = _text(body, "to_rule_id")
             relationship = _text(body, "relationship")
-            if relationship not in {"requires", "overlaps", "conflicts", "derived_from"}:
+            if relationship not in RULE_RELATIONSHIPS:
                 raise CorridorKitError(f"unknown rule dependency relationship: {relationship}")
             if source not in rule_records or target not in rule_records or source == target:
                 raise CorridorKitError("rule dependency references an unknown or identical rule")
-            if relationship == "requires":
-                dependencies.setdefault(source, set()).add(target)
+            if relationship in RULE_HARD_RELATIONSHIPS:
+                dependant, prerequisite = (
+                    (source, target)
+                    if relationship == "requires"
+                    else (target, source)
+                )
+                dependencies.setdefault(dependant, set()).add(prerequisite)
                 _assert_acyclic(dependencies)
         elif record_type == "acceptance_checklist_item":
             checklist_item_id = _text(body, "checklist_item_id")
@@ -436,6 +487,59 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             ):
                 raise CorridorKitError(
                     "acceptance checklist item must bind the current ratified source Rule"
+                )
+            typed_fields = {
+                "source_rule_semantics_digest",
+                "coverage_cell",
+                "required_witness_operators",
+            }.intersection(body)
+            if source_rule_id in rule_semantics:
+                if typed_fields != {
+                    "source_rule_semantics_digest",
+                    "coverage_cell",
+                    "required_witness_operators",
+                }:
+                    raise CorridorKitError(
+                        "typed Rule checklist must bind semantics, coverage cell, and witness operators"
+                    )
+                if (
+                    _digest(body, "source_rule_semantics_digest")
+                    != rule_semantics_digests[source_rule_id]
+                ):
+                    raise CorridorKitError(
+                        "typed Rule checklist semantics digest does not match its source Rule"
+                    )
+                _text_list(
+                    body,
+                    "required_witness_operators",
+                    nonempty=compilation_status == "complete",
+                )
+                if not isinstance(body.get("coverage_cell"), dict):
+                    raise CorridorKitError("typed Rule coverage_cell must be an object")
+                templates = {
+                    item["checklist_item_id"]: item
+                    for item in project_rule_checklist_templates(
+                        rule_id=source_rule_id,
+                        statement=next(
+                            record["body"]["statement"]
+                            for record in reversed(records[:index + 1])
+                            if record["record_id"] == source_rule_record_id
+                        ),
+                        semantics=rule_semantics[source_rule_id],
+                    )
+                }
+                expected = templates.get(checklist_item_id)
+                if expected is None or any(
+                    body.get(field) != expected[field]
+                    for field in expected
+                    if field not in {"source_rule_id"}
+                ):
+                    raise CorridorKitError(
+                        "typed Rule checklist does not match its deterministic coverage projection"
+                    )
+            elif typed_fields:
+                raise CorridorKitError(
+                    "legacy Rule checklist cannot claim an unbound typed projection"
                 )
             if checklist_item_id in checklist_items:
                 raise CorridorKitError(
@@ -530,9 +634,34 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             position_ref = _text(body, "position_ref")
             if position_ref not in positions:
                 raise CorridorKitError("fact proposal references an unknown Position")
+            if "witness_bindings" in body:
+                bindings = body["witness_bindings"]
+                if not isinstance(bindings, list) or not bindings:
+                    raise CorridorKitError(
+                        "fact witness_bindings must be a non-empty list"
+                    )
+                seen_bindings: set[str] = set()
+                for binding in bindings:
+                    if not isinstance(binding, dict) or set(binding) != {
+                        "checklist_item_id",
+                        "source_rule_semantics_digest",
+                        "operators",
+                    }:
+                        raise CorridorKitError(
+                            "fact witness binding must name checklist, semantics digest, and operators"
+                        )
+                    item_id = _text(binding, "checklist_item_id")
+                    if item_id not in checklist_items or item_id in seen_bindings:
+                        raise CorridorKitError(
+                            "fact witness binding references an unknown or duplicated checklist item"
+                        )
+                    seen_bindings.add(item_id)
+                    _digest(binding, "source_rule_semantics_digest")
+                    _text_list(binding, "operators", nonempty=True)
             if fact_id in fact_records:
                 raise CorridorKitError(f"fact proposal already exists: {fact_id}")
             fact_records[fact_id] = expected_record
+            fact_bodies[fact_id] = dict(body)
         elif record_type == "fact_admission":
             fact_id = _text(body, "fact_id")
             fact_record_id = _text(body, "fact_record_id")
@@ -766,12 +895,17 @@ def _graph_projection(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Project current identities after structural validation, without task judgment."""
 
     rule_records: dict[str, str] = {}
+    rule_statements: dict[str, str] = {}
+    rule_semantics: dict[str, dict[str, Any]] = {}
+    rule_semantics_digests: dict[str, str] = {}
     ratified_rules: set[str] = set()
     checklist_items: dict[str, dict[str, Any]] = {}
     dependencies: dict[str, dict[str, Any]] = {}
     resolutions: dict[str, dict[str, Any]] = {}
     fact_ids: set[str] = set()
+    fact_bodies: dict[str, dict[str, Any]] = {}
     fact_receipts: dict[str, str] = {}
+    fact_receipt_ids: dict[str, str] = {}
     positions: dict[str, dict[str, Any]] = {}
     directions: dict[str, dict[str, Any]] = {}
     direction_snapshots: list[dict[str, Any]] = []
@@ -780,8 +914,23 @@ def _graph_projection(records: list[dict[str, Any]]) -> dict[str, Any]:
         body = record["body"]
         if record_type == "rule_proposal":
             rule_records[body["rule_id"]] = record["record_id"]
+            rule_statements[body["rule_id"]] = body["statement"]
+            if "semantics" in body:
+                rule_semantics[body["rule_id"]] = dict(body["semantics"])
+                rule_semantics_digests[body["rule_id"]] = body[
+                    "rule_semantics_digest"
+                ]
         elif record_type == "rule_revision":
             rule_records[body["rule_id"]] = record["record_id"]
+            rule_statements[body["rule_id"]] = body["statement"]
+            if "semantics" in body:
+                rule_semantics[body["rule_id"]] = dict(body["semantics"])
+                rule_semantics_digests[body["rule_id"]] = body[
+                    "rule_semantics_digest"
+                ]
+            else:
+                rule_semantics.pop(body["rule_id"], None)
+                rule_semantics_digests.pop(body["rule_id"], None)
             ratified_rules.discard(body["rule_id"])
         elif record_type == "rule_ratification":
             ratified_rules.add(body["rule_id"])
@@ -796,8 +945,10 @@ def _graph_projection(records: list[dict[str, Any]]) -> dict[str, Any]:
             resolutions[body["dependency_id"]] = dict(body)
         elif record_type == "fact_proposal":
             fact_ids.add(body["fact_id"])
+            fact_bodies[body["fact_id"]] = dict(body)
         elif record_type == "fact_admission":
             fact_receipts[body["fact_id"]] = record["record_id"]
+            fact_receipt_ids[record["record_id"]] = body["fact_id"]
         elif record_type == "position_checkpoint":
             positions[record["record_id"]] = dict(body)
         elif record_type == "direction_proposal":
@@ -812,12 +963,17 @@ def _graph_projection(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
     return {
         "rule_records": rule_records,
+        "rule_statements": rule_statements,
+        "rule_semantics": rule_semantics,
+        "rule_semantics_digests": rule_semantics_digests,
         "ratified_rules": ratified_rules,
         "checklist_items": current_checklists,
         "dependencies": dependencies,
         "resolutions": resolutions,
         "fact_ids": fact_ids,
+        "fact_bodies": fact_bodies,
         "fact_receipts": fact_receipts,
+        "fact_receipt_ids": fact_receipt_ids,
         "positions": positions,
         "directions": directions,
         "direction_snapshots": direction_snapshots,
@@ -863,6 +1019,7 @@ def graph_doctor(path: Path) -> dict[str, Any]:
             "doctor_code_digest": _doctor_code_digest(),
             "errors": [str(exc)],
             "incomplete_reasons": [],
+            "typed_rule_coverage": {},
             "hard_dependency_topological_order": [],
             "latest_position_ref": None,
             "direction_digest": None,
@@ -925,6 +1082,35 @@ def graph_doctor(path: Path) -> dict[str, Any]:
     checklist_rule_ids = {item["source_rule_id"] for item in checklist_items.values()}
     for rule_id in sorted(projection["ratified_rules"] - checklist_rule_ids):
         incomplete_reasons.append(f"rule_missing_checklist:{rule_id}")
+    typed_rule_coverage: dict[str, dict[str, Any]] = {}
+    for rule_id in sorted(projection["ratified_rules"]):
+        semantics = projection["rule_semantics"].get(rule_id)
+        if semantics is None:
+            continue
+        expected_templates = project_rule_checklist_templates(
+            rule_id=rule_id,
+            statement=projection["rule_statements"][rule_id],
+            semantics=semantics,
+        )
+        expected_ids = {
+            item["checklist_item_id"] for item in expected_templates
+        }
+        actual_ids = {
+            item_id
+            for item_id, item in checklist_items.items()
+            if item["source_rule_id"] == rule_id
+        }
+        missing_ids = sorted(expected_ids - actual_ids)
+        typed_rule_coverage[rule_id] = {
+            "rule_semantics_digest": projection["rule_semantics_digests"][rule_id],
+            "expected_checklist_item_ids": sorted(expected_ids),
+            "actual_checklist_item_ids": sorted(actual_ids),
+            "missing_checklist_item_ids": missing_ids,
+        }
+        incomplete_reasons.extend(
+            f"typed_rule_coverage_cell_missing:{rule_id}:{item_id}"
+            for item_id in missing_ids
+        )
     for item_id, item in sorted(checklist_items.items()):
         if item["compilation_status"] != "complete":
             incomplete_reasons.append(
@@ -975,6 +1161,45 @@ def graph_doctor(path: Path) -> dict[str, Any]:
                 incomplete_reasons.append(f"checklist_not_passed:{item_id}")
             elif not assessment.get("witness_fact_receipt_ids"):
                 incomplete_reasons.append(f"checklist_pass_missing_witness:{item_id}")
+            elif "source_rule_semantics_digest" in checklist_items[item_id]:
+                item = checklist_items[item_id]
+                bindings: list[dict[str, Any]] = []
+                for receipt_id in assessment["witness_fact_receipt_ids"]:
+                    fact_id = projection["fact_receipt_ids"].get(receipt_id)
+                    fact = projection["fact_bodies"].get(fact_id, {})
+                    for binding in fact.get("witness_bindings", []):
+                        if binding.get("checklist_item_id") == item_id:
+                            bindings.append(binding)
+                if not bindings:
+                    incomplete_reasons.append(
+                        f"checklist_witness_contract_missing:{item_id}"
+                    )
+                else:
+                    matching = [
+                        binding
+                        for binding in bindings
+                        if binding.get("source_rule_semantics_digest")
+                        == item["source_rule_semantics_digest"]
+                    ]
+                    if not matching:
+                        incomplete_reasons.append(
+                            f"checklist_witness_semantics_mismatch:{item_id}"
+                        )
+                    else:
+                        observed_operators = {
+                            operator
+                            for binding in matching
+                            for operator in binding.get("operators", [])
+                        }
+                        missing_operators = sorted(
+                            set(item["required_witness_operators"])
+                            - observed_operators
+                        )
+                        if missing_operators:
+                            incomplete_reasons.append(
+                                f"checklist_witness_operators_missing:{item_id}:"
+                                + ",".join(missing_operators)
+                            )
         if latest_position.get("unresolved_checklist_item_ids"):
             incomplete_reasons.append("latest_position_has_unresolved_checklist_items")
         if latest_position.get("blocked_item_ids"):
@@ -1025,6 +1250,7 @@ def graph_doctor(path: Path) -> dict[str, Any]:
         "head_record_id": validation["head_record_id"],
         "errors": [],
         "incomplete_reasons": sorted(set(incomplete_reasons)),
+        "typed_rule_coverage": typed_rule_coverage,
         "hard_dependency_topological_order": topological_order,
         "ready_item_ids": (
             list(latest_position.get("ready_item_ids", [])) if latest_position else []

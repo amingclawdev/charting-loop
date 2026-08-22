@@ -23,6 +23,7 @@ from corridor_kit import (
     append_position_event,
     counterfactual_transition,
     capture_command,
+    compile_typed_rule_ir,
     create_scaffold,
     freeze_submission,
     graph_doctor,
@@ -1466,6 +1467,166 @@ class SubmissionSnapshotTests(unittest.TestCase):
             self.assertEqual("frozen", output.read_text(encoding="utf-8"))
 
 
+class TypedRuleCompilerTests(unittest.TestCase):
+    @staticmethod
+    def _ir(*, rule_kind: str = "conditional", operators: list[str] | None = None):
+        return {
+            "schema_version": "charting-loop/typed-rule-ir/v1",
+            "task_source_ref": "public-task:requirements",
+            "task_source_digest": "sha256:" + "1" * 64,
+            "method_digest": "sha256:" + "2" * 64,
+            "compiler_config_digest": "sha256:" + "3" * 64,
+            "rules": [
+                {
+                    "rule_id": "R-COVERAGE",
+                    "statement": "Each declared item must satisfy both public branches.",
+                    "source_ref": "public-task:requirement-1",
+                    "source_digest": "sha256:" + "4" * 64,
+                    "semantics": {
+                        "rule_kind": rule_kind,
+                        "compilation_status": "complete",
+                        "compile_issues": [],
+                        "quantifier": {
+                            "mode": "all",
+                            "subject_axis": "item",
+                            "subjects": ["item-a", "item-b", "item-c"],
+                        },
+                        "conditions": [
+                            {
+                                "condition_id": "branch-open",
+                                "predicate": "the item is open",
+                                "expected_outcome": "the open form is preserved",
+                                "required_witness_operators": operators
+                                or ["equals"],
+                            },
+                            {
+                                "condition_id": "branch-closed",
+                                "predicate": "the item is closed",
+                                "expected_outcome": "the closed form is preserved",
+                                "required_witness_operators": operators
+                                or ["equals"],
+                            },
+                        ],
+                        "checklist_projection": {
+                            "projection_mode": "per_subject",
+                            "behavioral_partitions": ["positive", "boundary"],
+                            "evidence_requirement": "Replay both public branches.",
+                            "decision_rule": {
+                                "pass": "the required operator confirms the expected outcome",
+                                "fail": "the operator contradicts the expected outcome",
+                                "unknown": "the operator witness is absent or unresolved",
+                            },
+                        },
+                        "dependencies": [],
+                    },
+                }
+            ],
+        }
+
+    def test_compiler_projects_every_subject_condition_cell_and_freezes_probe(self) -> None:
+        report = compile_typed_rule_ir(self._ir())
+        self.assertEqual(6, report["coverage_cell_count"])
+        self.assertEqual(
+            6,
+            len(
+                {
+                    item["checklist_item_id"]
+                    for item in report["checklist_templates"]
+                }
+            ),
+        )
+        cells = {
+            (
+                item["coverage_cell"]["subject_id"],
+                item["coverage_cell"]["condition_id"],
+            )
+            for item in report["checklist_templates"]
+        }
+        self.assertEqual(
+            {
+                (subject, condition)
+                for subject in ("item-a", "item-b", "item-c")
+                for condition in ("branch-open", "branch-closed")
+            },
+            cells,
+        )
+        manifest = report["compile_probe_manifest"]
+        self.assertEqual("fresh_task_pre_experiment", manifest["run_classification"])
+        self.assertTrue(manifest["fresh_efficacy_or_transfer_claim_allowed"])
+        self.assertIn("official_verifier_output", manifest["input_policy"]["forbidden"])
+        regression = compile_typed_rule_ir(
+            self._ir(), run_classification="same_task_regression"
+        )
+        self.assertFalse(
+            regression["compile_probe_manifest"][
+                "fresh_efficacy_or_transfer_claim_allowed"
+            ]
+        )
+        self.assertFalse(report["task_truth_assessed"])
+        self.assertFalse(report["blocking_gate"])
+
+    def test_temporal_rule_rejects_a_timeless_surrogate_operator(self) -> None:
+        value = self._ir(rule_kind="temporal_conditional", operators=["set_equality"])
+        with self.assertRaisesRegex(
+            CorridorKitError, "requires a temporal witness operator"
+        ):
+            compile_typed_rule_ir(value)
+
+    def test_ambiguous_rule_remains_explicit_instead_of_becoming_complete(self) -> None:
+        value = self._ir()
+        semantics = value["rules"][0]["semantics"]
+        semantics["compilation_status"] = "ambiguous"
+        semantics["compile_issues"] = [
+            "The public source does not define which branch owns the boundary."
+        ]
+        report = compile_typed_rule_ir(value)
+        self.assertFalse(report["compilation_complete"])
+        self.assertEqual("ambiguous", report["compile_issues"][0]["status"])
+        self.assertTrue(
+            all(
+                item["compilation_status"] == "ambiguous"
+                for item in report["checklist_templates"]
+            )
+        )
+
+    def test_compiler_projects_rule_dependencies_into_ordering_edges(self) -> None:
+        value = self._ir()
+        base = json.loads(json.dumps(value["rules"][0]))
+        base["rule_id"] = "R-BASE"
+        base["statement"] = "Establish the shared prerequisite."
+        base["source_ref"] = "public-task:prerequisite"
+        base["semantics"]["quantifier"] = {
+            "mode": "all",
+            "subject_axis": "task",
+            "subjects": ["whole-task"],
+        }
+        base["semantics"]["conditions"] = [
+            {
+                "condition_id": "prerequisite",
+                "predicate": "the task begins",
+                "expected_outcome": "the prerequisite exists",
+                "required_witness_operators": ["exists"],
+            }
+        ]
+        base["semantics"]["checklist_projection"]["projection_mode"] = "aggregate"
+        value["rules"][0]["semantics"]["dependencies"] = [
+            {"relationship": "requires", "target_rule_id": "R-BASE"}
+        ]
+        value["rules"].append(base)
+
+        report = compile_typed_rule_ir(value)
+        self.assertEqual(1, report["rule_dependency_count"])
+        self.assertEqual(6, report["typed_dependency_count"])
+        self.assertTrue(
+            all(
+                item["relationship"] == "requires"
+                and item["dependency_kind"] == "work"
+                and item["source_rule_id"] == "R-COVERAGE"
+                for item in report["typed_dependency_templates"]
+            )
+        )
+
+
 class GraphKernelTests(unittest.TestCase):
     def _append(self, path: Path, record_type: str, body: dict, actor: str = "worker"):
         return append_graph_record(
@@ -1959,6 +2120,191 @@ class GraphKernelTests(unittest.TestCase):
             self.assertIn(
                 "checklist_partition_coverage_missing:C-UNIVERSAL:unobserved",
                 report["incomplete_reasons"],
+            )
+            self.assertFalse(report["task_truth_assessed"])
+            self.assertFalse(report["pass_assessed"])
+            self.assertFalse(report["blocking_gate"])
+
+    def test_graph_doctor_detects_a_missing_typed_rule_coverage_cell(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            compilation = compile_typed_rule_ir(TypedRuleCompilerTests._ir())
+            rule_body = compilation["rule_bodies"][0]
+            rule = self._append(path, "rule_proposal", rule_body)
+            self._append(
+                path,
+                "rule_ratification",
+                {
+                    "rule_id": rule_body["rule_id"],
+                    "rule_record_id": rule["record_id"],
+                    "authority_ref": rule_body["source_ref"],
+                    "authority_digest": rule_body["source_digest"],
+                    "receipt_ref": "receipt:typed-rule",
+                },
+                actor="runner",
+            )
+            first = dict(compilation["checklist_templates"][0])
+            first["source_rule_record_id"] = rule["record_id"]
+            self._append(path, "acceptance_checklist_item", first)
+
+            report = graph_doctor(path)
+            coverage = report["typed_rule_coverage"][rule_body["rule_id"]]
+            self.assertEqual(5, len(coverage["missing_checklist_item_ids"]))
+            for item_id in coverage["missing_checklist_item_ids"]:
+                self.assertIn(
+                    f"typed_rule_coverage_cell_missing:R-COVERAGE:{item_id}",
+                    report["incomplete_reasons"],
+                )
+            self.assertEqual(
+                "structurally_valid_but_incomplete", report["classification"]
+            )
+            self.assertFalse(report["blocking_gate"])
+
+    def test_graph_doctor_detects_temporal_witness_operator_collapse(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            ir = TypedRuleCompilerTests._ir(
+                rule_kind="temporal_conditional", operators=["ordered_before"]
+            )
+            semantics = ir["rules"][0]["semantics"]
+            semantics["quantifier"]["subjects"] = ["artifact"]
+            semantics["conditions"] = [semantics["conditions"][0]]
+            compilation = compile_typed_rule_ir(ir)
+            rule_body = compilation["rule_bodies"][0]
+            rule = self._append(path, "rule_proposal", rule_body)
+            self._append(
+                path,
+                "rule_ratification",
+                {
+                    "rule_id": rule_body["rule_id"],
+                    "rule_record_id": rule["record_id"],
+                    "authority_ref": rule_body["source_ref"],
+                    "authority_digest": rule_body["source_digest"],
+                    "receipt_ref": "receipt:temporal-rule",
+                },
+                actor="runner",
+            )
+            item = dict(compilation["checklist_templates"][0])
+            item["source_rule_record_id"] = rule["record_id"]
+            self._append(path, "acceptance_checklist_item", item)
+            item_id = item["checklist_item_id"]
+            initial = self._append(
+                path,
+                "position_checkpoint",
+                {
+                    "position_id": "P-TEMPORAL-0",
+                    "previous_position_ref": None,
+                    "task_identity": {"task_ref": "public/temporal-example"},
+                    "scope": {"working_set": ["/workspace"]},
+                    "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [],
+                    "artifact_record_ids": [],
+                    "checkpoint_kind": "acceptance_assessment",
+                    "checklist_item_ids": [item_id],
+                    "ready_item_ids": [item_id],
+                    "blocked_item_ids": [],
+                    "unresolved_checklist_item_ids": [item_id],
+                    "checklist_assessments": {
+                        item_id: {
+                            "status": "unknown",
+                            "witness_fact_receipt_ids": [],
+                        }
+                    },
+                },
+            )
+            fact = self._append(
+                path,
+                "fact_proposal",
+                {
+                    "fact_id": "F-TIMELESS-UNION",
+                    "statement": "The combined set contains the expected members.",
+                    "evidence_ref": "probe:set-union",
+                    "evidence_digest": "sha256:" + "7" * 64,
+                    "position_ref": initial["record_id"],
+                    "witness_bindings": [
+                        {
+                            "checklist_item_id": item_id,
+                            "source_rule_semantics_digest": item[
+                                "source_rule_semantics_digest"
+                            ],
+                            "operators": ["set_equality"],
+                        }
+                    ],
+                },
+            )
+            receipt = self._append(
+                path,
+                "fact_admission",
+                {
+                    "fact_id": "F-TIMELESS-UNION",
+                    "fact_record_id": fact["record_id"],
+                    "admission_rule_id": rule_body["rule_id"],
+                    "admission_rule_record_id": rule["record_id"],
+                    "admitter_ref": "worker:replay",
+                    "receipt_ref": "receipt:timeless-union",
+                },
+            )
+            position = self._append(
+                path,
+                "position_checkpoint",
+                {
+                    "position_id": "P-TEMPORAL-1",
+                    "previous_position_ref": initial["record_id"],
+                    "task_identity": {"task_ref": "public/temporal-example"},
+                    "scope": {"working_set": ["/workspace"]},
+                    "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [receipt["record_id"]],
+                    "artifact_record_ids": [],
+                    "checkpoint_kind": "acceptance_assessment",
+                    "checklist_item_ids": [item_id],
+                    "ready_item_ids": [],
+                    "blocked_item_ids": [],
+                    "unresolved_checklist_item_ids": [],
+                    "checklist_assessments": {
+                        item_id: {
+                            "status": "pass",
+                            "witness_fact_receipt_ids": [receipt["record_id"]],
+                        }
+                    },
+                },
+            )
+            direction = self._append(
+                path,
+                "direction_proposal",
+                {
+                    "direction_id": "D-TEMPORAL",
+                    "position_ref": position["record_id"],
+                    "statement": "Re-check the declared temporal relationship.",
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [receipt["record_id"]],
+                    "evidence_refs": ["probe:set-union"],
+                    "checklist_item_ids": [item_id],
+                    "ready_item_ids": [],
+                    "blocked_item_ids": [],
+                    "unresolved_checklist_item_ids": [],
+                },
+            )
+            self._append(
+                path,
+                "direction_snapshot",
+                {
+                    "position_ref": position["record_id"],
+                    "direction_record_ids": [direction["record_id"]],
+                    "selected_direction_record_id": direction["record_id"],
+                },
+            )
+
+            report = graph_doctor(path)
+            self.assertIn(
+                f"checklist_witness_operators_missing:{item_id}:ordered_before",
+                report["incomplete_reasons"],
+            )
+            self.assertEqual(
+                "structurally_valid_but_incomplete", report["classification"]
             )
             self.assertFalse(report["task_truth_assessed"])
             self.assertFalse(report["pass_assessed"])

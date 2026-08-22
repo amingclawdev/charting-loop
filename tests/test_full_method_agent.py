@@ -1630,6 +1630,9 @@ class FullMethodContractTests(unittest.TestCase):
         )
         for prompt in (treatment, control):
             self.assertIn("There is no Builder phase", prompt)
+            self.assertIn("corridor_kit rules compile", prompt)
+            self.assertIn("witness_bindings", prompt)
+            self.assertIn("typed_dependency_template", prompt)
             self.assertIn("corridor_kit graph append", prompt)
             self.assertIn(contract.GRAPH_PATH, prompt)
             self.assertIn("You choose Direction", prompt)
@@ -1671,6 +1674,7 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn(contract.GRAPH_AUDIT_SCHEMA, qa)
         self.assertIn("recompute", qa.lower())
         self.assertIn("invalidation closure", qa)
+        self.assertIn("witness-operator/semantics alignment", qa)
         self.assertIn("not a QA verdict", qa)
         repair = contract.graph_repair_prompt(
             "Repair the public task.",
@@ -1688,6 +1692,27 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("same total task clock", repair)
         self.assertIn("re-project invalidated checklist assessments", repair)
         self.assertIn("graph doctor", repair)
+
+    def test_compile_probe_is_isolated_digest_bound_and_non_scoring(self) -> None:
+        method_text = (REPOSITORY_ROOT / "method-paper" / "METHOD.md").read_text(
+            encoding="utf-8"
+        )
+        compiler_config_digest = "sha256:" + "6" * 64
+        prompt = contract.graph_compile_probe_prompt(
+            "Compile each public requirement without solving the task.",
+            method_text=method_text,
+            compiler_config_digest=compiler_config_digest,
+        )
+        self.assertIn(method_text, prompt)
+        self.assertIn("charting-loop/typed-rule-ir/v1", prompt)
+        self.assertIn("corridor_kit rules compile", prompt)
+        self.assertIn(compiler_config_digest, prompt)
+        self.assertIn(contract.METHOD_CONTENT_SHA256, prompt)
+        self.assertIn("Do not read any historical task\nGraph", prompt)
+        self.assertIn("verifier output", prompt)
+        self.assertIn("not injected into the later Worker", prompt)
+        self.assertIn("same_task_regression", prompt)
+        self.assertIn("do not choose a Direction", prompt)
 
     def test_graph_revision_binds_matching_prefreeze_and_qa_intake_doctor_reports(self) -> None:
         adapter = load_harbor_agent_with_stubs()
