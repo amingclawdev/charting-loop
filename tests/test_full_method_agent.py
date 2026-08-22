@@ -1739,6 +1739,58 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertEqual("sha256:" + "2" * 64, report["acceptance_root"])
         self.assertEqual(report["doctor_report_digest"], writes[0]["doctor_report_digest"])
 
+    def test_graph_corridor_finalization_uses_the_contract_corridor_root(self) -> None:
+        adapter = load_harbor_agent_with_stubs()
+        agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
+        commands: list[str] = []
+        writes: list[tuple[str, dict]] = []
+        expected_graph_path = adapter.GRAPH_PATH
+
+        async def doctor(self, environment, *, graph_path):
+            if graph_path != expected_graph_path:
+                raise AssertionError(f"unexpected graph path: {graph_path}")
+            return {"structurally_valid": True}
+
+        async def exec_root(self, environment, *, command):
+            commands.append(command)
+            if "graph validate" in command:
+                stdout = json.dumps({"ok": True, "structurally_valid": True})
+            elif "graph_bytes_digest" in command:
+                stdout = json.dumps(
+                    {"graph_bytes_digest": "sha256:" + "a" * 64, "graph_bytes": 42}
+                )
+            elif "corridor_kit manifest" in command:
+                stdout = json.dumps(
+                    {"tree_digest": "sha256:" + "b" * 64, "files": ["GRAPH.jsonl"]}
+                )
+            else:
+                stdout = ""
+            return types.SimpleNamespace(return_code=0, stdout=stdout, stderr="")
+
+        async def write(self, environment, *, path, value):
+            writes.append((path, value))
+
+        agent._graph_doctor_report = types.MethodType(doctor, agent)
+        agent.exec_as_root = types.MethodType(exec_root, agent)
+        agent._write_root_json = types.MethodType(write, agent)
+        report = asyncio.run(agent._seal_graph_corridor(object()))
+
+        self.assertEqual("sha256:" + "b" * 64, report["corridor_digest"])
+        self.assertEqual([(adapter.FREEZE_PATH, report)], writes)
+        self.assertTrue(
+            any(
+                f"chown -R 0:0 {adapter.CORRIDOR_PATH}" in command
+                and f"find {adapter.CORRIDOR_PATH}" in command
+                for command in commands
+            )
+        )
+        self.assertTrue(
+            any(
+                f"corridor_kit manifest {adapter.CORRIDOR_PATH}" in command
+                for command in commands
+            )
+        )
+
     def test_invalid_graph_revision_is_retained_read_only_without_blocking_fallback(self) -> None:
         adapter = load_harbor_agent_with_stubs()
         agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)

@@ -36,6 +36,7 @@ from benchmark_agents.contract import (
     CLOSURE_PATH,
     CAPABILITIES_PATH,
     FREEZE_PATH,
+    CORRIDOR_PATH,
     GRAPH_PATH,
     STUDY_PROFILE_PATH,
     METHOD_PATH,
