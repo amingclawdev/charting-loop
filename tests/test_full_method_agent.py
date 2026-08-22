@@ -1630,6 +1630,12 @@ class FullMethodContractTests(unittest.TestCase):
         )
         for prompt in (treatment, control):
             self.assertIn("There is no Builder phase", prompt)
+            self.assertIn("charting-loop/typed-rule-ir/v2", prompt)
+            self.assertIn("source_bundle", prompt)
+            self.assertIn("source_clause_inventory", prompt)
+            self.assertIn("every public authoritative source", prompt)
+            self.assertIn("including", prompt)
+            self.assertIn("applicability_status: not_applicable", prompt)
             self.assertIn("corridor_kit rules compile", prompt)
             self.assertIn("witness_bindings", prompt)
             self.assertIn("typed_dependency_template", prompt)
@@ -1675,6 +1681,11 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("recompute", qa.lower())
         self.assertIn("invalidation closure", qa)
         self.assertIn("witness-operator/semantics alignment", qa)
+        self.assertIn(contract.TYPED_RULE_IR_PATH, qa)
+        self.assertIn(contract.TYPED_RULE_REPORT_PATH, qa)
+        self.assertIn("Independently re-read", qa)
+        self.assertIn("required versus\noptional", qa)
+        self.assertIn("semantic_repair", qa)
         self.assertIn("not a QA verdict", qa)
         repair = contract.graph_repair_prompt(
             "Repair the public task.",
@@ -1692,6 +1703,9 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("same total task clock", repair)
         self.assertIn("re-project invalidated checklist assessments", repair)
         self.assertIn("graph doctor", repair)
+        self.assertIn("revision_kind", repair)
+        self.assertIn("parent_ir_digest", repair)
+        self.assertIn("qa_witness_refs", repair)
 
     def test_compile_probe_is_isolated_digest_bound_and_non_scoring(self) -> None:
         method_text = (REPOSITORY_ROOT / "method-paper" / "METHOD.md").read_text(
@@ -1704,7 +1718,12 @@ class FullMethodContractTests(unittest.TestCase):
             compiler_config_digest=compiler_config_digest,
         )
         self.assertIn(method_text, prompt)
-        self.assertIn("charting-loop/typed-rule-ir/v1", prompt)
+        self.assertIn("charting-loop/typed-rule-ir/v2", prompt)
+        self.assertIn("source_bundle", prompt)
+        self.assertIn("source_clause_inventory", prompt)
+        self.assertIn("first_attempt", prompt)
+        self.assertIn("open domain", prompt)
+        self.assertIn("collective ordering", prompt)
         self.assertIn("corridor_kit rules compile", prompt)
         self.assertIn(compiler_config_digest, prompt)
         self.assertIn(contract.METHOD_CONTENT_SHA256, prompt)

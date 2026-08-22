@@ -15,9 +15,14 @@ from typing import Any, Mapping
 from .core import CorridorKitError, sha256_bytes, sha256_json
 
 
-TYPED_RULE_IR_SCHEMA = "charting-loop/typed-rule-ir/v1"
-TYPED_RULE_COMPILATION_SCHEMA = "charting-loop/typed-rule-compilation/v1"
-COMPILE_PROBE_MANIFEST_SCHEMA = "charting-loop/compile-probe-manifest/v1"
+TYPED_RULE_IR_SCHEMA_V1 = "charting-loop/typed-rule-ir/v1"
+TYPED_RULE_IR_SCHEMA = "charting-loop/typed-rule-ir/v2"
+TYPED_RULE_COMPILATION_SCHEMA_V1 = "charting-loop/typed-rule-compilation/v1"
+TYPED_RULE_COMPILATION_SCHEMA = "charting-loop/typed-rule-compilation/v2"
+COMPILE_PROBE_MANIFEST_SCHEMA_V1 = "charting-loop/compile-probe-manifest/v1"
+COMPILE_PROBE_MANIFEST_SCHEMA = "charting-loop/compile-probe-manifest/v2"
+TASK_SOURCE_BUNDLE_SCHEMA = "charting-loop/task-source-bundle/v1"
+TYPED_RULE_SEMANTICS_SCHEMA = "charting-loop/typed-rule-semantics/v2"
 
 RULE_KINDS = frozenset(
     {
@@ -60,6 +65,19 @@ RUN_CLASSIFICATIONS = frozenset(
 COMPILATION_STATUSES = frozenset(
     {"complete", "incomplete", "ambiguous", "unsupported"}
 )
+REQUIREMENT_LEVELS = frozenset({"required", "optional"})
+SOURCE_ROLES = frozenset({"instruction", "authoritative_specification"})
+SOURCE_RETRIEVAL_STATUSES = frozenset(
+    {"available", "unavailable", "malformed", "not_digest_bound"}
+)
+SOURCE_BUNDLE_CLOSURE_STATUSES = frozenset({"complete", "unresolved"})
+SOURCE_CLAUSE_MAPPING_STATUSES = frozenset(
+    {"mapped", "unmapped", "ambiguous", "unsupported"}
+)
+IR_REVISION_KINDS = frozenset({"first_attempt", "semantic_repair"})
+DOMAIN_KINDS = frozenset({"closed_enumeration", "open_including", "source_defined"})
+DOMAIN_SOURCES = frozenset({"public_source", "task_world", "produced_output"})
+APPLICABILITY_MODES = frozenset({"always", "conditional"})
 
 _IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]*$")
 _OPERATOR = re.compile(r"^[a-z][a-z0-9_.:-]*$")
@@ -130,24 +148,248 @@ def _operators(
     return operators
 
 
+def validate_source_bundle(value: Any) -> dict[str, Any]:
+    """Validate a closed, digest-bound inventory of public task sources."""
+
+    if not isinstance(value, dict):
+        raise CorridorKitError("task source bundle must be an object")
+    _exact_keys(
+        value,
+        {"schema_version", "closure_status", "sources"},
+        label="task source bundle",
+    )
+    if value.get("schema_version") != TASK_SOURCE_BUNDLE_SCHEMA:
+        raise CorridorKitError("task source bundle has the wrong schema")
+    closure_status = _text(value, "closure_status")
+    if closure_status not in SOURCE_BUNDLE_CLOSURE_STATUSES:
+        raise CorridorKitError("task source bundle has an unknown closure_status")
+    raw_sources = value.get("sources")
+    if not isinstance(raw_sources, list) or not raw_sources:
+        raise CorridorKitError("task source bundle sources must be a non-empty list")
+    sources: list[dict[str, Any]] = []
+    source_ids: set[str] = set()
+    source_refs: set[str] = set()
+    for raw in raw_sources:
+        if not isinstance(raw, dict):
+            raise CorridorKitError("task source bundle source must be an object")
+        _exact_keys(
+            raw,
+            {
+                "source_id",
+                "source_ref",
+                "source_digest",
+                "role",
+                "retrieval_status",
+            },
+            label="task source bundle source",
+        )
+        source_id = _identifier(raw, "source_id")
+        source_ref = _text(raw, "source_ref")
+        if source_id in source_ids or source_ref in source_refs:
+            raise CorridorKitError("task source bundle contains a duplicate source identity")
+        source_ids.add(source_id)
+        source_refs.add(source_ref)
+        role = _text(raw, "role")
+        if role not in SOURCE_ROLES:
+            raise CorridorKitError(f"unknown task source role: {role}")
+        retrieval_status = _text(raw, "retrieval_status")
+        if retrieval_status not in SOURCE_RETRIEVAL_STATUSES:
+            raise CorridorKitError(
+                f"unknown task source retrieval_status: {retrieval_status}"
+            )
+        source_digest = raw.get("source_digest")
+        if retrieval_status == "available":
+            source_digest = _digest(raw, "source_digest")
+        elif source_digest is not None:
+            raise CorridorKitError(
+                "unavailable, malformed, or undigested task source must use null source_digest"
+            )
+        sources.append(
+            {
+                "source_id": source_id,
+                "source_ref": source_ref,
+                "source_digest": source_digest,
+                "role": role,
+                "retrieval_status": retrieval_status,
+            }
+        )
+    if not any(source["role"] == "instruction" for source in sources):
+        raise CorridorKitError("task source bundle must include the public instruction")
+    derived_closure = (
+        "complete"
+        if all(source["retrieval_status"] == "available" for source in sources)
+        else "unresolved"
+    )
+    if closure_status != derived_closure:
+        raise CorridorKitError(
+            "task source bundle closure_status does not match retrieval statuses"
+        )
+    return {
+        "schema_version": TASK_SOURCE_BUNDLE_SCHEMA,
+        "closure_status": closure_status,
+        "sources": sources,
+    }
+
+
+def validate_ir_revision(value: Any) -> dict[str, Any]:
+    """Validate immutable first-attempt or QA-repair lineage metadata."""
+
+    if not isinstance(value, dict):
+        raise CorridorKitError("typed Rule IR revision must be an object")
+    _exact_keys(
+        value,
+        {"revision_id", "revision_kind", "parent_ir_digest", "qa_witness_refs"},
+        label="typed Rule IR revision",
+    )
+    revision_id = _identifier(value, "revision_id")
+    revision_kind = _text(value, "revision_kind")
+    if revision_kind not in IR_REVISION_KINDS:
+        raise CorridorKitError(f"unknown typed Rule IR revision_kind: {revision_kind}")
+    parent_ir_digest = value.get("parent_ir_digest")
+    qa_witness_refs = _text_list(value, "qa_witness_refs")
+    if revision_kind == "first_attempt":
+        if parent_ir_digest is not None or qa_witness_refs:
+            raise CorridorKitError(
+                "first-attempt typed Rule IR cannot claim a parent or QA repair witness"
+            )
+    else:
+        parent_ir_digest = _digest(value, "parent_ir_digest")
+        if not qa_witness_refs:
+            raise CorridorKitError(
+                "semantic-repair typed Rule IR must bind at least one QA witness"
+            )
+    return {
+        "revision_id": revision_id,
+        "revision_kind": revision_kind,
+        "parent_ir_digest": parent_ir_digest,
+        "qa_witness_refs": qa_witness_refs,
+    }
+
+
+def validate_source_clause_inventory(value: Any) -> list[dict[str, Any]]:
+    """Validate the independently enumerable normative-clause inventory."""
+
+    if not isinstance(value, list) or not value:
+        raise CorridorKitError("source clause inventory must be a non-empty list")
+    clauses: list[dict[str, Any]] = []
+    clause_ids: set[str] = set()
+    for raw in value:
+        if not isinstance(raw, dict):
+            raise CorridorKitError("source clause inventory entry must be an object")
+        _exact_keys(
+            raw,
+            {
+                "clause_id",
+                "source_id",
+                "clause_text",
+                "clause_digest",
+                "requirement_level",
+                "mapping_status",
+                "rule_ids",
+                "issue",
+            },
+            label="source clause inventory entry",
+        )
+        clause_id = _identifier(raw, "clause_id")
+        if clause_id in clause_ids:
+            raise CorridorKitError(f"source clause ID is duplicated: {clause_id}")
+        clause_ids.add(clause_id)
+        clause_text = _text(raw, "clause_text")
+        clause_digest = _digest(raw, "clause_digest")
+        if sha256_bytes(clause_text.encode("utf-8")) != clause_digest:
+            raise CorridorKitError(
+                f"source clause digest does not match clause_text: {clause_id}"
+            )
+        requirement_level = _text(raw, "requirement_level")
+        if requirement_level not in REQUIREMENT_LEVELS:
+            raise CorridorKitError(
+                f"unknown source clause requirement_level: {requirement_level}"
+            )
+        mapping_status = _text(raw, "mapping_status")
+        if mapping_status not in SOURCE_CLAUSE_MAPPING_STATUSES:
+            raise CorridorKitError(
+                f"unknown source clause mapping_status: {mapping_status}"
+            )
+        rule_ids = _text_list(raw, "rule_ids")
+        issue = raw.get("issue")
+        if not isinstance(issue, str):
+            raise CorridorKitError("source clause issue must be text, including empty text")
+        if mapping_status == "mapped":
+            if not rule_ids or issue:
+                raise CorridorKitError(
+                    "mapped source clause requires Rule IDs and an empty issue"
+                )
+        elif rule_ids or not issue.strip():
+            raise CorridorKitError(
+                "non-mapped source clause requires no Rule IDs and a non-empty issue"
+            )
+        clauses.append(
+            {
+                "clause_id": clause_id,
+                "source_id": _identifier(raw, "source_id"),
+                "clause_text": clause_text,
+                "clause_digest": clause_digest,
+                "requirement_level": requirement_level,
+                "mapping_status": mapping_status,
+                "rule_ids": rule_ids,
+                "issue": issue,
+            }
+        )
+    return clauses
+
+
 def validate_rule_semantics(value: Any) -> dict[str, Any]:
     """Return one canonical Rule semantic object or raise without guessing."""
 
     if not isinstance(value, dict):
         raise CorridorKitError("typed Rule semantics must be an object")
+    semantics_schema = value.get("schema_version")
+    is_v2 = semantics_schema == TYPED_RULE_SEMANTICS_SCHEMA
+    expected_fields = {
+        "rule_kind",
+        "compilation_status",
+        "compile_issues",
+        "quantifier",
+        "conditions",
+        "checklist_projection",
+        "dependencies",
+    }
+    if is_v2:
+        expected_fields.update(
+            {"schema_version", "requirement_level", "applicability"}
+        )
+    elif semantics_schema is not None:
+        raise CorridorKitError("typed Rule semantics has an unknown schema")
     _exact_keys(
         value,
-        {
-            "rule_kind",
-            "compilation_status",
-            "compile_issues",
-            "quantifier",
-            "conditions",
-            "checklist_projection",
-            "dependencies",
-        },
+        expected_fields,
         label="typed Rule semantics",
     )
+    requirement_level = "required"
+    applicability: dict[str, str] | None = None
+    if is_v2:
+        requirement_level = _text(value, "requirement_level")
+        if requirement_level not in REQUIREMENT_LEVELS:
+            raise CorridorKitError(
+                f"unknown typed Rule requirement_level: {requirement_level}"
+            )
+        raw_applicability = value.get("applicability")
+        if not isinstance(raw_applicability, dict):
+            raise CorridorKitError("typed Rule applicability must be an object")
+        _exact_keys(
+            raw_applicability,
+            {"mode", "predicate"},
+            label="typed Rule applicability",
+        )
+        applicability_mode = _text(raw_applicability, "mode")
+        if applicability_mode not in APPLICABILITY_MODES:
+            raise CorridorKitError(
+                f"unknown typed Rule applicability mode: {applicability_mode}"
+            )
+        applicability = {
+            "mode": applicability_mode,
+            "predicate": _text(raw_applicability, "predicate"),
+        }
     rule_kind = _text(value, "rule_kind")
     if rule_kind not in RULE_KINDS:
         raise CorridorKitError(f"unknown typed Rule kind: {rule_kind}")
@@ -169,7 +411,18 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
         raise CorridorKitError("typed Rule quantifier must be an object")
     _exact_keys(
         quantifier,
-        {"mode", "subject_axis", "subjects"},
+        (
+            {
+                "mode",
+                "subject_axis",
+                "subjects",
+                "domain_kind",
+                "domain_source",
+                "domain_predicate",
+            }
+            if is_v2
+            else {"mode", "subject_axis", "subjects"}
+        ),
         label="typed Rule quantifier",
     )
     mode = _text(quantifier, "mode")
@@ -179,6 +432,31 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
     subjects = _text_list(quantifier, "subjects", nonempty=True)
     if len(subjects) != len(set(subjects)):
         raise CorridorKitError("typed Rule subjects contain duplicates")
+    domain_kind: str | None = None
+    domain_source: str | None = None
+    domain_predicate: str | None = None
+    if is_v2:
+        domain_kind = _text(quantifier, "domain_kind")
+        if domain_kind not in DOMAIN_KINDS:
+            raise CorridorKitError(f"unknown typed Rule domain_kind: {domain_kind}")
+        domain_source = _text(quantifier, "domain_source")
+        if domain_source not in DOMAIN_SOURCES:
+            raise CorridorKitError(
+                f"unknown typed Rule domain_source: {domain_source}"
+            )
+        domain_predicate = _text(quantifier, "domain_predicate")
+        if (
+            compilation_status == "complete"
+            and mode in {"all", "none"}
+            and domain_source == "produced_output"
+        ):
+            raise CorridorKitError(
+                "complete universal typed Rule cannot define its domain from produced output"
+            )
+        if domain_kind == "open_including" and not domain_predicate.strip():
+            raise CorridorKitError(
+                "open including-domain must retain a residual domain predicate"
+            )
 
     raw_conditions = value.get("conditions")
     if not isinstance(raw_conditions, list) or not raw_conditions:
@@ -296,7 +574,7 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
             {"relationship": relationship, "target_rule_id": target_rule_id}
         )
 
-    return {
+    normalized = {
         "rule_kind": rule_kind,
         "compilation_status": compilation_status,
         "compile_issues": compile_issues,
@@ -314,6 +592,20 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
         },
         "dependencies": dependencies,
     }
+    if is_v2:
+        normalized = {
+            "schema_version": TYPED_RULE_SEMANTICS_SCHEMA,
+            "requirement_level": requirement_level,
+            "applicability": applicability,
+            **normalized,
+        }
+        normalized["quantifier"] = {
+            **normalized["quantifier"],
+            "domain_kind": domain_kind,
+            "domain_source": domain_source,
+            "domain_predicate": domain_predicate,
+        }
+    return normalized
 
 
 def project_rule_checklist_templates(
@@ -367,6 +659,25 @@ def project_rule_checklist_templates(
                     "required_witness_operators": condition[
                         "required_witness_operators"
                     ],
+                    **(
+                        {
+                            "typed_rule_semantics_schema": normalized[
+                                "schema_version"
+                            ],
+                            "requirement_level": normalized[
+                                "requirement_level"
+                            ],
+                            "applicability": normalized["applicability"],
+                            "domain_kind": quantifier["domain_kind"],
+                            "domain_source": quantifier["domain_source"],
+                            "domain_predicate": quantifier[
+                                "domain_predicate"
+                            ],
+                        }
+                        if normalized.get("schema_version")
+                        == TYPED_RULE_SEMANTICS_SCHEMA
+                        else {}
+                    ),
                 }
             )
     return templates
@@ -398,22 +709,53 @@ def compile_typed_rule_ir(
         )
     if not isinstance(value, dict):
         raise CorridorKitError("typed Rule IR must be an object")
+    ir_schema = value.get("schema_version")
+    is_v2 = ir_schema == TYPED_RULE_IR_SCHEMA
+    if not is_v2 and ir_schema != TYPED_RULE_IR_SCHEMA_V1:
+        raise CorridorKitError("typed Rule IR has the wrong schema")
     _exact_keys(
         value,
-        {
-            "schema_version",
-            "task_source_ref",
-            "task_source_digest",
-            "method_digest",
-            "compiler_config_digest",
-            "rules",
-        },
+        (
+            {
+                "schema_version",
+                "source_bundle",
+                "source_clause_inventory",
+                "revision",
+                "method_digest",
+                "compiler_config_digest",
+                "rules",
+            }
+            if is_v2
+            else {
+                "schema_version",
+                "task_source_ref",
+                "task_source_digest",
+                "method_digest",
+                "compiler_config_digest",
+                "rules",
+            }
+        ),
         label="typed Rule IR",
     )
-    if value.get("schema_version") != TYPED_RULE_IR_SCHEMA:
-        raise CorridorKitError("typed Rule IR has the wrong schema")
-    task_source_ref = _text(value, "task_source_ref")
-    task_source_digest = _digest(value, "task_source_digest")
+    source_bundle: dict[str, Any] | None = None
+    source_clauses: list[dict[str, Any]] = []
+    revision: dict[str, Any] | None = None
+    if is_v2:
+        source_bundle = validate_source_bundle(value.get("source_bundle"))
+        source_clauses = validate_source_clause_inventory(
+            value.get("source_clause_inventory")
+        )
+        revision = validate_ir_revision(value.get("revision"))
+        instruction_source = next(
+            source
+            for source in source_bundle["sources"]
+            if source["role"] == "instruction"
+        )
+        task_source_ref = instruction_source["source_ref"]
+        task_source_digest = instruction_source["source_digest"]
+    else:
+        task_source_ref = _text(value, "task_source_ref")
+        task_source_digest = _digest(value, "task_source_digest")
     method_digest = _digest(value, "method_digest")
     compiler_config_digest = _digest(value, "compiler_config_digest")
     raw_rules = value.get("rules")
@@ -431,7 +773,24 @@ def compile_typed_rule_ir(
             raise CorridorKitError("typed Rule IR rule must be an object")
         _exact_keys(
             raw,
-            {"rule_id", "statement", "source_ref", "source_digest", "semantics"},
+            (
+                {
+                    "rule_id",
+                    "statement",
+                    "source_ref",
+                    "source_digest",
+                    "source_clause_ids",
+                    "semantics",
+                }
+                if is_v2
+                else {
+                    "rule_id",
+                    "statement",
+                    "source_ref",
+                    "source_digest",
+                    "semantics",
+                }
+            ),
             label="typed Rule IR rule",
         )
         rule_id = _identifier(raw, "rule_id")
@@ -446,6 +805,11 @@ def compile_typed_rule_ir(
             "statement": statement,
             "source_ref": _text(raw, "source_ref"),
             "source_digest": _digest(raw, "source_digest"),
+            **(
+                {"source_clause_ids": _text_list(raw, "source_clause_ids", nonempty=True)}
+                if is_v2
+                else {}
+            ),
             "semantics": semantics,
         }
         normalized_rules.append(normalized)
@@ -468,6 +832,73 @@ def compile_typed_rule_ir(
                     "relationship": dependency["relationship"],
                 }
             )
+
+    if is_v2:
+        assert source_bundle is not None
+        source_by_id = {
+            source["source_id"]: source for source in source_bundle["sources"]
+        }
+        clause_by_id = {clause["clause_id"]: clause for clause in source_clauses}
+        for clause in source_clauses:
+            if clause["source_id"] not in source_by_id:
+                raise CorridorKitError(
+                    f"source clause references unknown source: {clause['clause_id']}"
+                )
+            unknown_rule_ids = sorted(set(clause["rule_ids"]) - rule_ids)
+            if unknown_rule_ids:
+                raise CorridorKitError(
+                    f"source clause references unknown Rules: {unknown_rule_ids}"
+                )
+        inventoried_source_ids = {clause["source_id"] for clause in source_clauses}
+        missing_source_inventories = sorted(
+            source["source_id"]
+            for source in source_bundle["sources"]
+            if source["retrieval_status"] == "available"
+            and source["source_id"] not in inventoried_source_ids
+        )
+        if missing_source_inventories:
+            raise CorridorKitError(
+                "available task sources lack clause inventory entries: "
+                + ", ".join(missing_source_inventories)
+            )
+        for rule in normalized_rules:
+            clause_ids = rule["source_clause_ids"]
+            unknown_clause_ids = sorted(set(clause_ids) - set(clause_by_id))
+            if unknown_clause_ids:
+                raise CorridorKitError(
+                    f"typed Rule references unknown source clauses: {unknown_clause_ids}"
+                )
+            mapped_clause_ids = sorted(
+                clause["clause_id"]
+                for clause in source_clauses
+                if rule["rule_id"] in clause["rule_ids"]
+            )
+            if sorted(clause_ids) != mapped_clause_ids:
+                raise CorridorKitError(
+                    f"typed Rule source_clause_ids do not match clause inventory: {rule['rule_id']}"
+                )
+            clause_sources = {
+                source_by_id[clause_by_id[clause_id]["source_id"]]["source_ref"]
+                for clause_id in clause_ids
+            }
+            clause_digests = {
+                source_by_id[clause_by_id[clause_id]["source_id"]]["source_digest"]
+                for clause_id in clause_ids
+            }
+            if clause_sources != {rule["source_ref"]} or clause_digests != {
+                rule["source_digest"]
+            }:
+                raise CorridorKitError(
+                    f"typed Rule source identity does not match its source clauses: {rule['rule_id']}"
+                )
+            clause_levels = {
+                clause_by_id[clause_id]["requirement_level"]
+                for clause_id in clause_ids
+            }
+            if clause_levels != {rule["semantics"]["requirement_level"]}:
+                raise CorridorKitError(
+                    f"typed Rule requirement level does not match its source clauses: {rule['rule_id']}"
+                )
 
     dangling = sorted(
         {
@@ -537,32 +968,84 @@ def compile_typed_rule_ir(
                     }
                 )
 
-    normalized_ir = {
-        "schema_version": TYPED_RULE_IR_SCHEMA,
-        "task_source_ref": task_source_ref,
-        "task_source_digest": task_source_digest,
-        "method_digest": method_digest,
-        "compiler_config_digest": compiler_config_digest,
-        "rules": normalized_rules,
-    }
+    normalized_ir = (
+        {
+            "schema_version": TYPED_RULE_IR_SCHEMA,
+            "source_bundle": source_bundle,
+            "source_clause_inventory": source_clauses,
+            "revision": revision,
+            "method_digest": method_digest,
+            "compiler_config_digest": compiler_config_digest,
+            "rules": normalized_rules,
+        }
+        if is_v2
+        else {
+            "schema_version": TYPED_RULE_IR_SCHEMA_V1,
+            "task_source_ref": task_source_ref,
+            "task_source_digest": task_source_digest,
+            "method_digest": method_digest,
+            "compiler_config_digest": compiler_config_digest,
+            "rules": normalized_rules,
+        }
+    )
     ir_digest = sha256_json(normalized_ir)
+    if revision is not None and revision["parent_ir_digest"] == ir_digest:
+        raise CorridorKitError("typed Rule IR revision cannot name itself as parent")
     implementation_digest = _compiler_implementation_digest()
     manifest = {
-        "schema_version": COMPILE_PROBE_MANIFEST_SCHEMA,
+        "schema_version": (
+            COMPILE_PROBE_MANIFEST_SCHEMA
+            if is_v2
+            else COMPILE_PROBE_MANIFEST_SCHEMA_V1
+        ),
         "run_classification": run_classification,
         "task_source_ref": task_source_ref,
         "task_source_digest": task_source_digest,
+        **(
+            {
+                "task_source_bundle_digest": sha256_json(source_bundle),
+                "source_clause_inventory_digest": sha256_json(source_clauses),
+                "source_bundle_closure_status": source_bundle["closure_status"],
+                "revision": revision,
+            }
+            if is_v2
+            else {"source_closure_assessed": False}
+        ),
         "method_digest": method_digest,
         "compiler_config_digest": compiler_config_digest,
         "compiler_implementation_digest": implementation_digest,
         "typed_rule_ir_digest": ir_digest,
         "input_policy": {
-            "allowed": ["frozen_method", "public_task_source", "compiler_interface"],
+            "allowed": [
+                "frozen_method",
+                (
+                    "closed_public_task_source_bundle"
+                    if is_v2
+                    else "public_task_source"
+                ),
+                "compiler_interface",
+                *(
+                    ["independent_source_qa"]
+                    if revision is not None
+                    and revision["revision_kind"] == "semantic_repair"
+                    else []
+                ),
+            ],
             "forbidden": [
+                "task_solution",
+                "task_tests",
                 "historical_task_graph",
                 "official_verifier_output",
                 "prior_task_result",
                 "prior_task_transcript",
+                "hidden_evaluator_material",
+                "task_specific_hint",
+                *(
+                    ["independent_source_qa"]
+                    if revision is not None
+                    and revision["revision_kind"] == "first_attempt"
+                    else []
+                ),
             ],
         },
         "fresh_efficacy_or_transfer_claim_allowed": (
@@ -570,23 +1053,76 @@ def compile_typed_rule_ir(
         ),
     }
     manifest["manifest_digest"] = sha256_json(manifest)
-    compilation_complete = all(
+    rules_complete = all(
         rule["semantics"]["compilation_status"] == "complete"
         for rule in normalized_rules
     )
+    source_clauses_complete = (
+        all(clause["mapping_status"] == "mapped" for clause in source_clauses)
+        if is_v2
+        else None
+    )
+    compilation_complete = (
+        rules_complete
+        and source_bundle is not None
+        and source_bundle["closure_status"] == "complete"
+        and source_clauses_complete is True
+        if is_v2
+        else rules_complete
+    )
+    rule_compile_issues = [
+        {
+            "rule_id": rule["rule_id"],
+            "status": rule["semantics"]["compilation_status"],
+            "issues": rule["semantics"]["compile_issues"],
+        }
+        for rule in normalized_rules
+        if rule["semantics"]["compilation_status"] != "complete"
+    ]
+    source_clause_issues = (
+        [
+            {
+                "clause_id": clause["clause_id"],
+                "status": clause["mapping_status"],
+                "issues": [clause["issue"]],
+            }
+            for clause in source_clauses
+            if clause["mapping_status"] != "mapped"
+        ]
+        if is_v2
+        else []
+    )
     report = {
-        "schema_version": TYPED_RULE_COMPILATION_SCHEMA,
+        "schema_version": (
+            TYPED_RULE_COMPILATION_SCHEMA
+            if is_v2
+            else TYPED_RULE_COMPILATION_SCHEMA_V1
+        ),
         "ok": True,
         "compilation_complete": compilation_complete,
-        "compile_issues": [
+        "compile_issues": [*rule_compile_issues, *source_clause_issues],
+        "source_closure_assessed": is_v2,
+        "source_closure": (
             {
-                "rule_id": rule["rule_id"],
-                "status": rule["semantics"]["compilation_status"],
-                "issues": rule["semantics"]["compile_issues"],
+                "bundle_status": source_bundle["closure_status"],
+                "clause_inventory_complete": source_clauses_complete,
+                "source_count": len(source_bundle["sources"]),
+                "clause_count": len(source_clauses),
+                "mapped_clause_count": sum(
+                    clause["mapping_status"] == "mapped"
+                    for clause in source_clauses
+                ),
             }
-            for rule in normalized_rules
-            if rule["semantics"]["compilation_status"] != "complete"
-        ],
+            if is_v2
+            else {
+                "bundle_status": "legacy_unassessed",
+                "clause_inventory_complete": None,
+                "source_count": None,
+                "clause_count": None,
+                "mapped_clause_count": None,
+            }
+        ),
+        "revision": revision,
         "typed_rule_ir_digest": ir_digest,
         "compiler_implementation_digest": implementation_digest,
         "rule_count": len(rule_bodies),

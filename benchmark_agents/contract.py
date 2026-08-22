@@ -34,6 +34,8 @@ METHOD_PATH = f"{RUNTIME_ROOT}/method/METHOD.md"
 CORRIDOR_PATH = f"{RUNTIME_ROOT}/corridor"
 GRAPH_PATH = f"{CORRIDOR_PATH}/GRAPH.jsonl"
 STUDY_PROFILE_PATH = f"{CORRIDOR_PATH}/STUDY.json"
+TYPED_RULE_IR_PATH = f"{CORRIDOR_PATH}/TYPED-RULE-IR-FIRST.json"
+TYPED_RULE_REPORT_PATH = f"{CORRIDOR_PATH}/TYPED-RULE-COMPILE-FIRST.json"
 ACCEPTANCE_PATH = f"{CORRIDOR_PATH}/ACCEPTANCE.json"
 WORK_PATH = f"{CORRIDOR_PATH}/WORK_ITEMS.json"
 CAPABILITIES_PATH = f"{CORRIDOR_PATH}/CAPABILITIES.json"
@@ -1091,31 +1093,49 @@ def graph_compile_probe_prompt(
 
 {_task_block(task_instruction)}
 
-Read only the public task above, the frozen Method below, and the documented
-`charting-loop/typed-rule-ir/v1` compiler interface. Do not read any historical task
+Read only the public task above, every public authoritative source that it names, the
+frozen Method below, and the documented `charting-loop/typed-rule-ir/v2` compiler
+interface. Do not read any historical task
 Graph, verifier output, prior result, or prior task transcript. Do not solve or mutate
 the task and do not choose a Direction.
 
 {_frozen_method_block(method_text)}
 
-Emit exactly one Typed Rule IR JSON object. Every public normative clause must retain
-its source binding, Rule kind, quantifier and explicit subject domain. Represent each
-conditional branch and expected outcome separately. Use `per_subject` projection when
-the source requires each named subject independently. Temporal, transition, or
-precedence Rules must require an operator such as `ordered_before`, `ordered_after`,
-`duration`, or `state_transition`; a timeless set/union witness is not equivalent.
-Declare Rule dependencies with their semantic relationship instead of relying on list
-order. Preserve ambiguity as an explicit compile failure rather than weakening a Rule.
+Emit exactly one first-attempt Typed Rule IR JSON object. Before authoring any Rule,
+build `source_bundle`: enumerate the public instruction plus every named public
+authoritative specification, bind each available source by digest, retain an explicit
+retrieval failure for each unavailable/malformed/undigested source, and declare source
+closure `complete` only when all enumerated sources are available and digest-bound.
+Independently enumerate every normative source clause in `source_clause_inventory`,
+including nested, trailing, exception, and optional clauses. Mark each clause
+`required` or `optional`; bind mapped clauses to exact Rule IDs, and retain every
+unmapped, ambiguous, or unsupported clause as an explicit issue. Set `revision_kind`
+to `first_attempt`, with no parent and no QA witness.
+
+Every Rule must retain its source-clause binding, Rule kind, applicability predicate,
+quantifier, and source-defined subject domain. Treat an open domain introduced by
+words such as "including" as open; do not close a universal domain by enumerating only
+the output you plan to produce. A collective ordering requirement such as "X first"
+is not automatically a separate per-subject first requirement. Represent each true
+conditional branch and expected outcome separately. Use `per_subject` projection only
+when the source requires each subject independently. Temporal, transition, or coupled
+Rules must retain their causal/ordering predicate and require an operator such as
+`ordered_before`, `ordered_after`, `duration`, or `state_transition`; a timeless
+set/union witness is not equivalent. Declare Rule dependencies with their semantic
+relationship instead of relying on list order. Preserve ambiguity as an explicit
+compile failure rather than weakening a Rule.
 
 Bind `method_digest` to `{METHOD_CONTENT_SHA256}` and `compiler_config_digest` to
 `{compiler_config_digest}`. The caller will run:
 
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit rules compile <ir.json>`
 
-This is a diagnostic before the formal experiment. Its IR is reviewed for compilation
-quality but is not injected into the later Worker. If task-source interpretation or
-compiler bytes change after same-task verifier feedback, classify the later run as
-`same_task_regression`, not fresh efficacy or transfer evidence.
+This is a diagnostic before the formal experiment. Preserve this immutable first
+attempt separately from the independent source audit and any later semantic-repair IR.
+Its IR is reviewed for compilation quality but is not injected into the later Worker.
+If task-source interpretation or compiler bytes change after same-task verifier
+feedback, classify the later run as `same_task_regression`, not fresh efficacy or
+transfer evidence.
 """
 
 
@@ -1142,8 +1162,14 @@ The frozen Study profile is `{STUDY_PROFILE_PATH}` with digest
 `{study_profile_digest}`. The append-only execution graph is `{GRAPH_PATH}`.
 
 Use the graph while doing the task, not as a separate construction project. First
-compile the official requirements you rely on into `charting-loop/typed-rule-ir/v1`
-and run `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit rules compile <ir.json>`. Record
+compile the complete public task authority into `charting-loop/typed-rule-ir/v2`.
+Write the immutable first attempt to `{TYPED_RULE_IR_PATH}` and run
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit rules compile {TYPED_RULE_IR_PATH} > {TYPED_RULE_REPORT_PATH}`.
+In `source_bundle`, enumerate the instruction and every public authoritative source it
+names, with retrieval status and digest. Re-read all available sources. Independently
+write `source_clause_inventory` with every normative clause—including trailing,
+nested, exception, and optional clauses—before mapping clauses to Rules. Do not report closed source coverage while a
+named source is unavailable, malformed, or not digest-bound. Record
 the returned `rule_bodies` as `rule_proposal` records and bind each current Rule to
 its public source with `rule_ratification`. Materialize every returned checklist
 template with that current `source_rule_record_id`; do not merge subject/condition
@@ -1154,6 +1180,14 @@ Propose evidence as `fact_proposal`; for a typed checklist bind
 `witness_bindings` to its checklist ID, Rule-semantics digest, and exact operators.
 Admit evidence only through a current ratified admission Rule and an explicit
 `fact_admission` receipt.
+
+Keep universal domains source-defined: "including" is not a closed enumeration, and
+the output you happen to produce cannot define the domain that the Rule is supposed
+to check. Distinguish collective ordering from per-subject ordering, preserve temporal
+and coupled predicates, and classify each clause and Rule as required or optional.
+For a conditional optional checklist cell that truly does not apply, record
+`applicability_status: not_applicable`, `status: unknown`, and an admitted Fact receipt
+that proves the applicability predicate is false. Never treat omission as N/A.
 
 Compile each current Rule into source-bound `acceptance_checklist_item` records.
 Preserve its exact obligation, scope and quantifier, required behavioral partitions,
@@ -1265,6 +1299,17 @@ is not task truth or PASS. You may identify a better Direction, but you must not
 mutate the task, graph, Worker snapshot, or official outputs. Only a concrete
 replayable witness may recommend that the harness resume the same Worker for repair;
 QA itself never repairs or blocks final submission.
+Independently re-read the public instruction and every named public authoritative
+source declared in `{TYPED_RULE_IR_PATH}`. Verify their retrieval statuses and digests,
+then enumerate their normative clauses without trusting the Worker's Rule list.
+Compare that independent inventory to `source_clause_inventory` and
+`{TYPED_RULE_REPORT_PATH}`: check omissions, trailing qualifications, required versus
+optional classification, clause-to-Rule bindings, applicability predicates, open
+versus closed quantifier domains, collective versus per-subject ordering, and temporal
+or coupled witness semantics. Audit the immutable first-attempt revision as written;
+do not overwrite it. If compilation drift is concrete, emit a replayable source-clause
+witness so the same Worker can author a separate `semantic_repair` IR bound to the
+first IR digest and this QA witness.
 Treat the Doctor as deterministic audit material: inspect checklist partition
 coverage, typed Rule coverage cells, witness-operator/semantics alignment, dependency
 order, ready/blocked frontier, invalidation closure, and exact Position-bound
@@ -1319,6 +1364,11 @@ If a repair is justified, update the official task, append new evidence/Position
 Direction records to the live graph, re-project invalidated checklist assessments,
 run `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph doctor {GRAPH_PATH}`, verify the complete task, and freeze a new
 complete scorable Worker revision. Never overwrite or invalidate the prior freeze.
+For a semantic compilation repair, never overwrite `{TYPED_RULE_IR_PATH}` or
+`{TYPED_RULE_REPORT_PATH}`. Write a separately named repair IR/report, set
+`revision_kind` to `semantic_repair`, bind `parent_ir_digest` to the exact first or
+current parent IR, and name each reproduced QA witness in `qa_witness_refs`; then
+append source-bound Rule revisions and their newly projected checklist cells.
 If no witness reproduces or the repair remains incomplete, preserve the prior freeze
 and return without advancing it.
 

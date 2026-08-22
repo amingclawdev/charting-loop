@@ -48,6 +48,9 @@ GRAPH_RECORD_TYPES = frozenset(
 GRAPH_ACTORS = frozenset({"worker", "qa", "runner", "operator"})
 CHECKPOINT_KINDS = frozenset({"row_progress", "acceptance_assessment"})
 CHECKLIST_STATUSES = frozenset({"pass", "fail", "unknown"})
+CHECKLIST_APPLICABILITY_STATUSES = frozenset(
+    {"applicable", "not_applicable", "unresolved"}
+)
 CHECKLIST_COMPILATION_STATUSES = frozenset(
     {"complete", "incomplete", "ambiguous", "unsupported"}
 )
@@ -258,12 +261,13 @@ def _direction_bindings_present(body: Mapping[str, Any]) -> bool:
 
 def _checklist_frontier(
     *,
-    checklist_ids: set[str],
+    checklist_items: Mapping[str, Mapping[str, Any]],
     assessments: Mapping[str, Mapping[str, Any]],
     typed_dependencies: Mapping[str, Mapping[str, Any]],
     resolved_dependency_ids: set[str],
     admitted_fact_ids: set[str],
 ) -> tuple[list[str], list[str], list[str]]:
+    checklist_ids = set(checklist_items)
     hard: dict[str, set[str]] = {item: set() for item in checklist_ids}
     conflicts: dict[str, set[str]] = {item: set() for item in checklist_ids}
     for dependency_id, dependency in typed_dependencies.items():
@@ -283,14 +287,24 @@ def _checklist_frontier(
 
     def dependency_satisfied(target: str) -> bool:
         if target in checklist_ids:
-            return assessments.get(target, {}).get("status") == "pass"
+            assessment = assessments.get(target, {})
+            return assessment.get("status") == "pass" or (
+                assessment.get("applicability_status") == "not_applicable"
+                and bool(assessment.get("witness_fact_receipt_ids"))
+            )
         return target in admitted_fact_ids
 
     ready: list[str] = []
     blocked: list[str] = []
     unresolved: list[str] = []
     for item_id in sorted(checklist_ids):
-        status = assessments.get(item_id, {}).get("status", "unknown")
+        assessment = assessments.get(item_id, {})
+        status = assessment.get("status", "unknown")
+        if (
+            assessment.get("applicability_status") == "not_applicable"
+            and assessment.get("witness_fact_receipt_ids")
+        ):
+            continue
         if status != "pass":
             unresolved.append(item_id)
         if status == "pass":
@@ -393,6 +407,12 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 semantics_digest = _digest(body, "rule_semantics_digest")
                 if sha256_json(semantics) != semantics_digest:
                     raise CorridorKitError("typed Rule semantics digest does not match")
+                if semantics.get("schema_version") == "charting-loop/typed-rule-semantics/v2":
+                    _text_list(body, "source_clause_ids", nonempty=True)
+                elif "source_clause_ids" in body:
+                    raise CorridorKitError(
+                        "legacy typed Rule cannot claim v2 source-clause bindings"
+                    )
             if rule_id in rule_records:
                 raise CorridorKitError(f"rule proposal already exists: {rule_id}")
             rule_records[rule_id] = expected_record
@@ -419,6 +439,12 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 semantics_digest = _digest(body, "rule_semantics_digest")
                 if sha256_json(semantics) != semantics_digest:
                     raise CorridorKitError("typed Rule semantics digest does not match")
+                if semantics.get("schema_version") == "charting-loop/typed-rule-semantics/v2":
+                    _text_list(body, "source_clause_ids", nonempty=True)
+                elif "source_clause_ids" in body:
+                    raise CorridorKitError(
+                        "legacy typed Rule cannot claim v2 source-clause bindings"
+                    )
             if rule_records.get(rule_id) != supersedes:
                 raise CorridorKitError(f"rule revision does not supersede the current rule: {rule_id}")
             rule_records[rule_id] = expected_record
@@ -730,12 +756,23 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                         "Position checklist assessments must cover every current checklist item"
                     )
                 for item_id, assessment in assessments.items():
-                    if not isinstance(assessment, dict) or set(assessment) != {
+                    checklist_item = checklist_items[item_id]
+                    typed_v2 = (
+                        checklist_item.get("typed_rule_semantics_schema")
+                        == "charting-loop/typed-rule-semantics/v2"
+                    )
+                    expected_assessment_fields = {
                         "status",
                         "witness_fact_receipt_ids",
-                    }:
+                    }
+                    if typed_v2:
+                        expected_assessment_fields.add("applicability_status")
+                    if (
+                        not isinstance(assessment, dict)
+                        or set(assessment) != expected_assessment_fields
+                    ):
                         raise CorridorKitError(
-                            f"checklist assessment {item_id} must bind status and witnesses"
+                            f"checklist assessment {item_id} has unknown or missing fields"
                         )
                     if assessment.get("status") not in CHECKLIST_STATUSES:
                         raise CorridorKitError(f"checklist assessment {item_id} has unknown status")
@@ -744,6 +781,32 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                         raise CorridorKitError(
                             f"checklist assessment {item_id} uses Facts outside its Position"
                         )
+                    if typed_v2:
+                        applicability_status = assessment.get("applicability_status")
+                        if applicability_status not in CHECKLIST_APPLICABILITY_STATUSES:
+                            raise CorridorKitError(
+                                f"checklist assessment {item_id} has unknown applicability status"
+                            )
+                        applicability = checklist_item.get("applicability")
+                        if not isinstance(applicability, dict):
+                            raise CorridorKitError(
+                                f"typed checklist item {item_id} lacks applicability semantics"
+                            )
+                        if applicability_status == "not_applicable":
+                            if applicability.get("mode") != "conditional":
+                                raise CorridorKitError(
+                                    f"always-applicable checklist item {item_id} cannot be not_applicable"
+                                )
+                            if assessment.get("status") != "unknown" or not witness_refs:
+                                raise CorridorKitError(
+                                    f"not-applicable checklist item {item_id} requires unknown status and a Fact witness"
+                                )
+                        elif applicability_status == "unresolved" and assessment.get(
+                            "status"
+                        ) != "unknown":
+                            raise CorridorKitError(
+                                f"unresolved applicability for {item_id} requires unknown status"
+                            )
                 active_typed_dependencies = {
                     dependency_id: dependency
                     for dependency_id, dependency in typed_dependencies.items()
@@ -759,7 +822,10 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                     == resolution["authority_rule_record_id"]
                 }
                 ready, blocked, unresolved = _checklist_frontier(
-                    checklist_ids=current_checklist_ids,
+                    checklist_items={
+                        item_id: checklist_items[item_id]
+                        for item_id in current_checklist_ids
+                    },
                     assessments=assessments,
                     typed_dependencies=active_typed_dependencies,
                     resolved_dependency_ids=active_dependency_resolutions,
@@ -1103,6 +1169,8 @@ def graph_doctor(path: Path) -> dict[str, Any]:
         missing_ids = sorted(expected_ids - actual_ids)
         typed_rule_coverage[rule_id] = {
             "rule_semantics_digest": projection["rule_semantics_digests"][rule_id],
+            "requirement_level": semantics.get("requirement_level", "legacy_unstated"),
+            "applicability": semantics.get("applicability"),
             "expected_checklist_item_ids": sorted(expected_ids),
             "actual_checklist_item_ids": sorted(actual_ids),
             "missing_checklist_item_ids": missing_ids,
@@ -1157,6 +1225,12 @@ def graph_doctor(path: Path) -> dict[str, Any]:
         )
         for item_id in sorted(checklist_items):
             assessment = assessments.get(item_id, {})
+            not_applicable = (
+                assessment.get("applicability_status") == "not_applicable"
+                and bool(assessment.get("witness_fact_receipt_ids"))
+            )
+            if not_applicable:
+                continue
             if assessment.get("status") != "pass":
                 incomplete_reasons.append(f"checklist_not_passed:{item_id}")
             elif not assessment.get("witness_fact_receipt_ids"):

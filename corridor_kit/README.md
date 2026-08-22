@@ -54,22 +54,45 @@ evidence requirement, and pass/fail/unknown decision rule. An incomplete, ambigu
 or unsupported compilation remains explicit rather than becoming a weaker Rule.
 
 Before a formal experiment, a fresh diagnostic session may compile the public task
-into `charting-loop/typed-rule-ir/v1`. It sees only the frozen Method, public task
-source, and compiler interface. The resulting probe manifest binds the task-source,
-Method, compiler-config, compiler-implementation, and IR digests, and records that
-historical Graphs, verifier output, results, and transcripts were forbidden inputs.
-The probe is reviewed for compiler readiness but is not injected into the scored
-Worker. A same-task probe after verifier-informed compiler changes is regression
-evidence, not fresh efficacy or transfer.
+into `charting-loop/typed-rule-ir/v2`. It sees only the frozen Method, a closed public
+task-source bundle, and the compiler interface. The source bundle enumerates the
+instruction and every named public authoritative specification with retrieval status
+and digest. A separate source-clause inventory enumerates every normative clause,
+including nested, trailing, exception, and optional clauses, before mapping clauses to
+Rules. Source closure remains unresolved while any named authority is unavailable,
+malformed, or not digest-bound; an unmapped or ambiguous clause remains visible.
+
+The resulting probe manifest binds the source-bundle, clause-inventory, Method,
+compiler-config, compiler-implementation, and IR digests, and records that solutions,
+tests, historical Graphs, verifier output, results, transcripts, hidden evaluator
+material, and task-specific hints were forbidden inputs. The immutable first-attempt
+IR is retained. If independent source QA finds semantic drift, a separate
+`semantic_repair` IR must bind its exact parent digest and the reproduced QA witness;
+it never overwrites the first attempt. The probe is reviewed for compiler readiness
+but is not injected into the scored Worker. A same-task probe after verifier-informed
+compiler changes is regression evidence, not fresh efficacy or transfer.
+
+The v1 compiler remains readable for historical custody, but it reports source
+closure as unassessed. New integrated runs use v2; this is an explicit migration, not
+a reinterpretation of old v1 evidence.
 
 Typed Rule IR makes the semantic compilation boundary explicit. Each Rule declares a
-kind, quantifier, complete subject domain, condition branches and outcomes, semantic
-dependencies, and the witness operators required to distinguish those outcomes. The
+required/optional level, applicability predicate, kind, quantifier, source-defined
+subject domain, condition branches and outcomes, semantic dependencies, and the
+witness operators required to distinguish those outcomes. An open domain introduced
+by language such as "including" cannot be closed by enumerating only produced output;
+a collective ordering Rule cannot silently become a per-subject ordering Rule. The
 compiler deterministically projects the complete subject-by-condition product into
 checklist templates. `per_subject` projection therefore cannot be replaced by one
 aggregate check, and a temporal Rule cannot compile without a temporal operator.
 Natural-language interpretation remains the agent's responsibility; the SDK makes its
 result inspectable and replayable rather than pretending to infer task truth.
+
+At Position assessment time, applicable checklist cells use pass/fail/unknown. A
+conditional optional cell may be `not_applicable` only with unknown status and an
+admitted Fact proving that its applicability predicate is false. Doctor treats that
+cell as resolved without converting it into PASS. Omission, an empty domain, or a
+missing witness is never equivalent to N/A. Doctor remains read-only and non-Gating.
 
 `typed_dependency` records distinguish normative, work-row, and evidence relations.
 Only `requires`, `produces_fact_for`, and `precondition_for` impose a hard order.

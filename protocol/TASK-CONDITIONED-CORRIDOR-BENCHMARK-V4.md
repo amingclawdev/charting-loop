@@ -76,22 +76,41 @@ a fresh task sample, transfer result, or clean leaderboard attempt.
 ## Independent compile probe before a formal experiment
 
 Compiler development may run one fresh diagnostic session before a formal scored
-experiment. That session sees exactly the frozen Method, public task source, and
-task-neutral Typed Rule compiler interface. It must not receive a historical task
-Graph, official verifier output, prior result, or prior task transcript. It emits
-`charting-loop/typed-rule-ir/v1`; the deterministic compiler then freezes the public
-task-source digest, Method digest, compiler/config and implementation digests, IR
-digest, and the input policy in one compile-probe manifest.
+experiment. That session sees exactly the frozen Method, a closed public task-source
+bundle, and the task-neutral Typed Rule compiler interface. It must not receive a
+solution, task tests, historical task Graph, official verifier output, prior result,
+prior task transcript, hidden evaluator material, or task-specific hint. It emits
+`charting-loop/typed-rule-ir/v2`; the deterministic compiler then freezes the source
+bundle, source-clause inventory, Method, compiler/config and implementation, and IR
+digests plus the input policy in one compile-probe manifest.
+
+The source bundle must enumerate the instruction and every named public authoritative
+specification with exact retrieval status and digest. The independent clause inventory
+must enumerate every normative clause—including nested, trailing, exception, and
+optional clauses—before mapping clauses to Rules. Source closure is unresolved while
+any named source is unavailable, malformed, or not digest-bound. Required/optional
+classification, applicability predicates, and unmapped/ambiguous clauses are explicit.
+The immutable first attempt has no parent or QA witness. A later semantic-repair IR is
+a separate artifact that binds the exact parent IR digest and at least one reproduced
+independent-QA witness; it never overwrites the first attempt.
 
 The probe checks whether public requirements were compiled into source-bound Rule
-kinds, explicit quantified subjects, condition branches/outcomes, typed dependencies,
-and compatible witness operators. It does not solve the task, choose Direction,
+kinds, explicit applicability and source-defined quantified domains, condition
+branches/outcomes, typed dependencies, and compatible witness operators. Open domains
+such as "including" cannot be closed from produced output, collective ordering cannot
+be rewritten as per-subject ordering, and temporal/coupled predicates cannot be
+replaced by timeless membership. It does not solve the task, choose Direction,
 establish task truth/PASS, block the run, or become a hidden evaluator. For the
 integrated no-Builder profile its output is reviewed but not injected into the scored
 Worker, which performs its own in-clock compilation. If task interpretation, compiler
 configuration, or compiler bytes change after same-task verifier feedback, every later
 same-task probe/run is labeled regression/validation rather than fresh efficacy or
 transfer evidence.
+
+Historical `typed-rule-ir/v1` remains readable for custody, but its source closure is
+reported as unassessed. New integrated runs use v2. Six known tasks used to develop or
+repair this interface are same-task regression fixtures only; passing them cannot be
+reported as fresh efficacy, transfer, or benchmark evidence.
 
 ## Builder outputs and freeze
 

@@ -34,6 +34,7 @@ from corridor_kit import (
     replay_graph,
     restore_submission,
     runtime_guide,
+    sha256_bytes,
     sha256_json,
     starter_witnesses,
     validate_acceptance_file,
@@ -1523,6 +1524,94 @@ class TypedRuleCompilerTests(unittest.TestCase):
             ],
         }
 
+    @staticmethod
+    def _v2_ir(*, requirement_level: str = "required") -> dict:
+        clause_text = "Each public item must retain both declared branches."
+        source_digest = "sha256:" + "4" * 64
+        return {
+            "schema_version": "charting-loop/typed-rule-ir/v2",
+            "source_bundle": {
+                "schema_version": "charting-loop/task-source-bundle/v1",
+                "closure_status": "complete",
+                "sources": [
+                    {
+                        "source_id": "SRC-INSTRUCTION",
+                        "source_ref": "public-task:requirements",
+                        "source_digest": source_digest,
+                        "role": "instruction",
+                        "retrieval_status": "available",
+                    }
+                ],
+            },
+            "source_clause_inventory": [
+                {
+                    "clause_id": "CLAUSE-001",
+                    "source_id": "SRC-INSTRUCTION",
+                    "clause_text": clause_text,
+                    "clause_digest": sha256_bytes(clause_text.encode("utf-8")),
+                    "requirement_level": requirement_level,
+                    "mapping_status": "mapped",
+                    "rule_ids": ["R-COVERAGE"],
+                    "issue": "",
+                }
+            ],
+            "revision": {
+                "revision_id": "IR-REV-001",
+                "revision_kind": "first_attempt",
+                "parent_ir_digest": None,
+                "qa_witness_refs": [],
+            },
+            "method_digest": "sha256:" + "2" * 64,
+            "compiler_config_digest": "sha256:" + "3" * 64,
+            "rules": [
+                {
+                    "rule_id": "R-COVERAGE",
+                    "statement": clause_text,
+                    "source_ref": "public-task:requirements",
+                    "source_digest": source_digest,
+                    "source_clause_ids": ["CLAUSE-001"],
+                    "semantics": {
+                        "schema_version": "charting-loop/typed-rule-semantics/v2",
+                        "requirement_level": requirement_level,
+                        "applicability": {
+                            "mode": "conditional",
+                            "predicate": "the public item is present",
+                        },
+                        "rule_kind": "conditional",
+                        "compilation_status": "complete",
+                        "compile_issues": [],
+                        "quantifier": {
+                            "mode": "all",
+                            "subject_axis": "item",
+                            "subjects": ["item-a", "item-b"],
+                            "domain_kind": "closed_enumeration",
+                            "domain_source": "public_source",
+                            "domain_predicate": "the two public items named by the source",
+                        },
+                        "conditions": [
+                            {
+                                "condition_id": "branch-preservation",
+                                "predicate": "the public item is present",
+                                "expected_outcome": "both declared branches are retained",
+                                "required_witness_operators": ["equals"],
+                            }
+                        ],
+                        "checklist_projection": {
+                            "projection_mode": "per_subject",
+                            "behavioral_partitions": ["positive", "boundary"],
+                            "evidence_requirement": "Replay each public item.",
+                            "decision_rule": {
+                                "pass": "the witness confirms both branches",
+                                "fail": "the witness contradicts either branch",
+                                "unknown": "the witness is absent or unresolved",
+                            },
+                        },
+                        "dependencies": [],
+                    },
+                }
+            ],
+        }
+
     def test_compiler_projects_every_subject_condition_cell_and_freezes_probe(self) -> None:
         report = compile_typed_rule_ir(self._ir())
         self.assertEqual(6, report["coverage_cell_count"])
@@ -1625,6 +1714,106 @@ class TypedRuleCompilerTests(unittest.TestCase):
                 for item in report["typed_dependency_templates"]
             )
         )
+
+    def test_v2_compiler_binds_closed_sources_clauses_and_first_revision(self) -> None:
+        report = compile_typed_rule_ir(self._v2_ir())
+        self.assertEqual("charting-loop/typed-rule-compilation/v2", report["schema_version"])
+        self.assertTrue(report["compilation_complete"])
+        self.assertTrue(report["source_closure_assessed"])
+        self.assertEqual("complete", report["source_closure"]["bundle_status"])
+        self.assertEqual(1, report["source_closure"]["mapped_clause_count"])
+        self.assertEqual("first_attempt", report["revision"]["revision_kind"])
+        self.assertEqual(
+            "charting-loop/compile-probe-manifest/v2",
+            report["compile_probe_manifest"]["schema_version"],
+        )
+        self.assertIn(
+            "task_solution", report["compile_probe_manifest"]["input_policy"]["forbidden"]
+        )
+        self.assertIn(
+            "independent_source_qa",
+            report["compile_probe_manifest"]["input_policy"]["forbidden"],
+        )
+        self.assertNotIn(
+            "independent_source_qa",
+            report["compile_probe_manifest"]["input_policy"]["allowed"],
+        )
+        self.assertTrue(
+            all(item["requirement_level"] == "required" for item in report["checklist_templates"])
+        )
+
+    def test_v2_source_closure_and_optional_clauses_cannot_silently_disappear(self) -> None:
+        value = self._v2_ir(requirement_level="optional")
+        value["source_bundle"]["sources"].append(
+            {
+                "source_id": "SRC-NAMED-PACKET",
+                "source_ref": "public-task:named-packet",
+                "source_digest": None,
+                "role": "authoritative_specification",
+                "retrieval_status": "unavailable",
+            }
+        )
+        value["source_bundle"]["closure_status"] = "unresolved"
+        report = compile_typed_rule_ir(value)
+        self.assertFalse(report["compilation_complete"])
+        self.assertEqual("unresolved", report["source_closure"]["bundle_status"])
+        self.assertTrue(
+            all(item["requirement_level"] == "optional" for item in report["checklist_templates"])
+        )
+
+        value = self._v2_ir()
+        value["source_bundle"]["sources"].append(
+            {
+                "source_id": "SRC-SECOND-SPEC",
+                "source_ref": "public-task:second-spec",
+                "source_digest": "sha256:" + "9" * 64,
+                "role": "authoritative_specification",
+                "retrieval_status": "available",
+            }
+        )
+        with self.assertRaisesRegex(
+            CorridorKitError, "available task sources lack clause inventory entries"
+        ):
+            compile_typed_rule_ir(value)
+
+    def test_v2_rejects_unmapped_known_clause_and_vacuous_output_domain(self) -> None:
+        value = self._v2_ir()
+        value["source_clause_inventory"][0].update(
+            {"mapping_status": "unmapped", "rule_ids": [], "issue": "not compiled"}
+        )
+        with self.assertRaisesRegex(CorridorKitError, "source_clause_ids do not match"):
+            compile_typed_rule_ir(value)
+
+        value = self._v2_ir()
+        value["rules"][0]["semantics"]["quantifier"]["domain_source"] = "produced_output"
+        with self.assertRaisesRegex(CorridorKitError, "cannot define its domain"):
+            compile_typed_rule_ir(value)
+
+    def test_v2_semantic_repair_requires_parent_digest_and_qa_witness(self) -> None:
+        value = self._v2_ir()
+        value["revision"] = {
+            "revision_id": "IR-REV-002",
+            "revision_kind": "semantic_repair",
+            "parent_ir_digest": "sha256:" + "8" * 64,
+            "qa_witness_refs": ["qa:source-audit:missing-clause"],
+        }
+        report = compile_typed_rule_ir(value, run_classification="same_task_regression")
+        self.assertEqual("semantic_repair", report["revision"]["revision_kind"])
+        self.assertIn(
+            "independent_source_qa",
+            report["compile_probe_manifest"]["input_policy"]["allowed"],
+        )
+        self.assertNotIn(
+            "independent_source_qa",
+            report["compile_probe_manifest"]["input_policy"]["forbidden"],
+        )
+        self.assertFalse(
+            report["compile_probe_manifest"]["fresh_efficacy_or_transfer_claim_allowed"]
+        )
+
+        value["revision"]["qa_witness_refs"] = []
+        with self.assertRaisesRegex(CorridorKitError, "must bind at least one QA witness"):
+            compile_typed_rule_ir(value)
 
 
 class GraphKernelTests(unittest.TestCase):
@@ -2307,6 +2496,172 @@ class GraphKernelTests(unittest.TestCase):
                 "structurally_valid_but_incomplete", report["classification"]
             )
             self.assertFalse(report["task_truth_assessed"])
+            self.assertFalse(report["pass_assessed"])
+            self.assertFalse(report["blocking_gate"])
+
+    def test_v2_optional_not_applicable_requires_fact_and_resolves_without_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            ir = TypedRuleCompilerTests._v2_ir(requirement_level="optional")
+            semantics = ir["rules"][0]["semantics"]
+            semantics["quantifier"]["subjects"] = ["optional-item"]
+            compilation = compile_typed_rule_ir(ir)
+            rule_body = compilation["rule_bodies"][0]
+            rule = self._append(path, "rule_proposal", rule_body)
+            self._append(
+                path,
+                "rule_ratification",
+                {
+                    "rule_id": rule_body["rule_id"],
+                    "rule_record_id": rule["record_id"],
+                    "authority_ref": rule_body["source_ref"],
+                    "authority_digest": rule_body["source_digest"],
+                    "receipt_ref": "receipt:optional-rule",
+                },
+                actor="runner",
+            )
+            item = dict(compilation["checklist_templates"][0])
+            item["source_rule_record_id"] = rule["record_id"]
+            self._append(path, "acceptance_checklist_item", item)
+            item_id = item["checklist_item_id"]
+            initial = self._append(
+                path,
+                "position_checkpoint",
+                {
+                    "position_id": "P-OPTIONAL-0",
+                    "previous_position_ref": None,
+                    "task_identity": {"task_ref": "public/optional-example"},
+                    "scope": {"working_set": ["/workspace"]},
+                    "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [],
+                    "artifact_record_ids": [],
+                    "checkpoint_kind": "acceptance_assessment",
+                    "checklist_item_ids": [item_id],
+                    "ready_item_ids": [item_id],
+                    "blocked_item_ids": [],
+                    "unresolved_checklist_item_ids": [item_id],
+                    "checklist_assessments": {
+                        item_id: {
+                            "status": "unknown",
+                            "applicability_status": "unresolved",
+                            "witness_fact_receipt_ids": [],
+                        }
+                    },
+                },
+            )
+            before_invalid = path.read_bytes()
+            with self.assertRaisesRegex(
+                CorridorKitError, "requires unknown status and a Fact witness"
+            ):
+                append_graph_record(
+                    path,
+                    record_type="position_checkpoint",
+                    actor="worker",
+                    body={
+                        "position_id": "P-OPTIONAL-INVALID",
+                        "previous_position_ref": initial["record_id"],
+                        "task_identity": {"task_ref": "public/optional-example"},
+                        "scope": {"working_set": ["/workspace"]},
+                        "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                        "rule_record_ids": [rule["record_id"]],
+                        "fact_receipt_ids": [],
+                        "artifact_record_ids": [],
+                        "checkpoint_kind": "acceptance_assessment",
+                        "checklist_item_ids": [item_id],
+                        "ready_item_ids": [],
+                        "blocked_item_ids": [],
+                        "unresolved_checklist_item_ids": [],
+                        "checklist_assessments": {
+                            item_id: {
+                                "status": "unknown",
+                                "applicability_status": "not_applicable",
+                                "witness_fact_receipt_ids": [],
+                            }
+                        },
+                    },
+                )
+            self.assertEqual(before_invalid, path.read_bytes())
+            fact = self._append(
+                path,
+                "fact_proposal",
+                {
+                    "fact_id": "F-OPTIONAL-ABSENT",
+                    "statement": "The conditional optional item is absent.",
+                    "evidence_ref": "probe:optional-absence",
+                    "evidence_digest": "sha256:" + "7" * 64,
+                    "position_ref": initial["record_id"],
+                },
+            )
+            receipt = self._append(
+                path,
+                "fact_admission",
+                {
+                    "fact_id": "F-OPTIONAL-ABSENT",
+                    "fact_record_id": fact["record_id"],
+                    "admission_rule_id": rule_body["rule_id"],
+                    "admission_rule_record_id": rule["record_id"],
+                    "admitter_ref": "worker:applicability-probe",
+                    "receipt_ref": "receipt:optional-absence",
+                },
+            )
+            position = self._append(
+                path,
+                "position_checkpoint",
+                {
+                    "position_id": "P-OPTIONAL-1",
+                    "previous_position_ref": initial["record_id"],
+                    "task_identity": {"task_ref": "public/optional-example"},
+                    "scope": {"working_set": ["/workspace"]},
+                    "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [receipt["record_id"]],
+                    "artifact_record_ids": [],
+                    "checkpoint_kind": "acceptance_assessment",
+                    "checklist_item_ids": [item_id],
+                    "ready_item_ids": [],
+                    "blocked_item_ids": [],
+                    "unresolved_checklist_item_ids": [],
+                    "checklist_assessments": {
+                        item_id: {
+                            "status": "unknown",
+                            "applicability_status": "not_applicable",
+                            "witness_fact_receipt_ids": [receipt["record_id"]],
+                        }
+                    },
+                },
+            )
+            direction = self._append(
+                path,
+                "direction_proposal",
+                {
+                    "direction_id": "D-OPTIONAL-CLOSED",
+                    "position_ref": position["record_id"],
+                    "statement": "Continue with the remaining applicable Rules.",
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [receipt["record_id"]],
+                    "evidence_refs": ["probe:optional-absence"],
+                    "checklist_item_ids": [item_id],
+                    "ready_item_ids": [],
+                    "blocked_item_ids": [],
+                    "unresolved_checklist_item_ids": [],
+                },
+            )
+            self._append(
+                path,
+                "direction_snapshot",
+                {
+                    "position_ref": position["record_id"],
+                    "direction_record_ids": [direction["record_id"]],
+                    "selected_direction_record_id": direction["record_id"],
+                },
+            )
+            report = graph_doctor(path)
+            self.assertEqual("acceptance_assessed_complete", report["classification"])
+            self.assertNotIn(
+                f"checklist_not_passed:{item_id}", report["incomplete_reasons"]
+            )
             self.assertFalse(report["pass_assessed"])
             self.assertFalse(report["blocking_gate"])
 
