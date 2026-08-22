@@ -54,13 +54,19 @@ evidence requirement, and pass/fail/unknown decision rule. An incomplete, ambigu
 or unsupported compilation remains explicit rather than becoming a weaker Rule.
 
 Before a formal experiment, a fresh diagnostic session may compile the public task
-into `charting-loop/typed-rule-ir/v2`. It sees only the frozen Method, a closed public
-task-source bundle, and the compiler interface. The source bundle enumerates the
-instruction and every named public authoritative specification with retrieval status
-and digest. A separate source-clause inventory enumerates every normative clause,
-including nested, trailing, exception, and optional clauses, before mapping clauses to
-Rules. Source closure remains unresolved while any named authority is unavailable,
-malformed, or not digest-bound; an unmapped or ambiguous clause remains visible.
+into `charting-loop/typed-rule-ir/v3`. It sees only the frozen Method, a closed public
+task-source bundle, and the compiler interface. The successor source bundle freezes
+the exact UTF-8 bytes and digest of every available named authority. A separate
+source-clause inventory enumerates every normative clause, including nested,
+trailing, exception, and optional clauses, with a unique stable clause-order key and
+ordered half-open byte slices before mapping clauses to Rules. Array position is
+display-only, never clause authority. Rule bindings may use multiple disjoint or
+cross-source slices and label their semantic role. Their provenance digest resolves
+the clause/order identity, source digest, byte bounds, and slice digest so changed
+source bytes cannot retain the old Rule provenance. Dependency edges are either directly bound to
+relationship slices or derived from the current endpoint Rule provenance digests.
+Source closure remains unresolved while any named authority is unavailable,
+malformed, not digest-bound, unmapped, or semantically ambiguous.
 
 The resulting probe manifest binds the source-bundle, clause-inventory, Method,
 compiler-config, compiler-implementation, and IR digests, and records that solutions,
@@ -72,9 +78,9 @@ it never overwrites the first attempt. The probe is reviewed for compiler readin
 but is not injected into the scored Worker. A same-task probe after verifier-informed
 compiler changes is regression evidence, not fresh efficacy or transfer.
 
-The v1 compiler remains readable for historical custody, but it reports source
-closure as unassessed. New integrated runs use v2; this is an explicit migration, not
-a reinterpretation of old v1 evidence.
+The v1 and v2 compilers remain readable for historical custody. Their absent
+successor byte-slice and edge provenance remains explicitly legacy/unassessed; it is
+not backfilled or reinterpreted. New integrated runs use v3.
 
 Typed Rule IR makes the semantic compilation boundary explicit. Each Rule declares a
 required/optional level, applicability predicate, kind, quantifier, source-defined
@@ -179,7 +185,11 @@ python3 -m corridor_kit graph doctor /tmp/charting-loop/GRAPH.jsonl
 The Doctor is deterministic and read-only. It recomputes chain integrity, hard-edge
 topological order, checklist/Position alignment, Direction freshness, invalidation
 closure, declared behavioral-partition and typed coverage-cell completeness, and
-witness operator/Rule-semantics alignment. Its report binds the exact graph
+witness operator/Rule-semantics alignment. For v3 it also recomputes UTF-8 slice
+bounds and digests from frozen source artifacts, clause/role closure, direct/derived
+edge provenance, endpoint direction, and stale Rule-revision bindings. These are
+mechanical checks only: Doctor does not decide whether selected prose expresses the
+right semantics or whether a derivation is logically true. Its report binds the exact graph
 bytes, graph identity, Doctor code, Position, Direction, and acceptance root. Its only
 classifications are `structurally_invalid`, `structurally_valid_but_incomplete`, and
 `acceptance_assessed_complete`. None is task truth, official PASS, delivery or mutation

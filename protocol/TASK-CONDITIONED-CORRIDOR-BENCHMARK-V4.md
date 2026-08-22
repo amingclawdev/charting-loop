@@ -80,16 +80,22 @@ experiment. That session sees exactly the frozen Method, a closed public task-so
 bundle, and the task-neutral Typed Rule compiler interface. It must not receive a
 solution, task tests, historical task Graph, official verifier output, prior result,
 prior task transcript, hidden evaluator material, or task-specific hint. It emits
-`charting-loop/typed-rule-ir/v2`; the deterministic compiler then freezes the source
+`charting-loop/typed-rule-ir/v3`; the deterministic compiler then freezes the source
 bundle, source-clause inventory, Method, compiler/config and implementation, and IR
 digests plus the input policy in one compile-probe manifest.
 
 The source bundle must enumerate the instruction and every named public authoritative
-specification with exact retrieval status and digest. The independent clause inventory
-must enumerate every normative clause—including nested, trailing, exception, and
-optional clauses—before mapping clauses to Rules. Source closure is unresolved while
-any named source is unavailable, malformed, or not digest-bound. Required/optional
-classification, applicability predicates, and unmapped/ambiguous clauses are explicit.
+specification with exact retrieval status, UTF-8 bytes, and digest. The independent
+clause inventory must enumerate every normative clause—including nested, trailing,
+exception, and optional clauses—with a unique stable clause-order key and stable,
+ordered, half-open UTF-8 byte slices before mapping clauses to Rules. Array position
+is display-only, not clause authority. Rules may bind multiple disjoint or cross-source
+slices, must label their semantic roles, and must digest the resolved clause/order,
+source digest, byte bounds, and slice digest. A dependency must bind either direct relationship
+slices or a declared derivation over the current endpoint Rule provenance digests.
+Source closure is unresolved while any named source is unavailable, malformed, or
+not digest-bound. Required/optional classification, applicability predicates, and
+unmapped/ambiguous clauses are explicit.
 The immutable first attempt has no parent or QA witness. A later semantic-repair IR is
 a separate artifact that binds the exact parent IR digest and at least one reproduced
 independent-QA witness; it never overwrites the first attempt.
@@ -107,8 +113,9 @@ configuration, or compiler bytes change after same-task verifier feedback, every
 same-task probe/run is labeled regression/validation rather than fresh efficacy or
 transfer evidence.
 
-Historical `typed-rule-ir/v1` remains readable for custody, but its source closure is
-reported as unassessed. New integrated runs use v2. Six known tasks used to develop or
+Historical `typed-rule-ir/v1` and `v2` remain readable for custody, but absent v3
+byte-slice and edge provenance is reported as legacy/unassessed rather than backfilled.
+New integrated runs use v3. Six known tasks used to develop or
 repair this interface are same-task regression fixtures only; passing them cannot be
 reported as fresh efficacy, transfer, or benchmark evidence.
 

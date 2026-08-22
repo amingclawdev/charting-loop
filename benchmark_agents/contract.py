@@ -1094,7 +1094,7 @@ def graph_compile_probe_prompt(
 {_task_block(task_instruction)}
 
 Read only the public task above, every public authoritative source that it names, the
-frozen Method below, and the documented `charting-loop/typed-rule-ir/v2` compiler
+frozen Method below, and the documented `charting-loop/typed-rule-ir/v3` compiler
 interface. Do not read any historical task
 Graph, verifier output, prior result, or prior task transcript. Do not solve or mutate
 the task and do not choose a Direction.
@@ -1103,16 +1103,26 @@ the task and do not choose a Direction.
 
 Emit exactly one first-attempt Typed Rule IR JSON object. Before authoring any Rule,
 build `source_bundle`: enumerate the public instruction plus every named public
-authoritative specification, bind each available source by digest, retain an explicit
+authoritative specification, freeze each available source's exact UTF-8 bytes and
+digest, retain an explicit
 retrieval failure for each unavailable/malformed/undigested source, and declare source
 closure `complete` only when all enumerated sources are available and digest-bound.
 Independently enumerate every normative source clause in `source_clause_inventory`,
-including nested, trailing, exception, and optional clauses. Mark each clause
+including nested, trailing, exception, and optional clauses. Give every clause a
+unique stable `clause_order_key`; array position is display-only and never authority.
+Reconstruct each clause from stable ordered half-open UTF-8 byte slices; disjoint and
+cross-source slices are allowed. Mark each clause
 `required` or `optional`; bind mapped clauses to exact Rule IDs, and retain every
 unmapped, ambiguous, or unsupported clause as an explicit issue. Set `revision_kind`
 to `first_attempt`, with no parent and no QA witness.
 
-Every Rule must retain its source-clause binding, Rule kind, applicability predicate,
+Every Rule must retain its source-clause and slice bindings, labeling each slice's
+semantic role. Its source-provenance digest must resolve through the clause identity,
+order key, exact source digest, byte bounds, and slice digest. Every dependency must
+declare either direct relationship slices or a
+declared derivation over both current endpoint Rule provenance digests. Bounds and
+digests establish source identity, not semantic correctness. Every Rule must retain
+its Rule kind, applicability predicate,
 quantifier, and source-defined subject domain. Treat an open domain introduced by
 words such as "including" as open; do not close a universal domain by enumerating only
 the output you plan to produce. A collective ordering requirement such as "X first"
@@ -1162,20 +1172,35 @@ The frozen Study profile is `{STUDY_PROFILE_PATH}` with digest
 `{study_profile_digest}`. The append-only execution graph is `{GRAPH_PATH}`.
 
 Use the graph while doing the task, not as a separate construction project. First
-compile the complete public task authority into `charting-loop/typed-rule-ir/v2`.
+compile the complete public task authority into `charting-loop/typed-rule-ir/v3`.
 Write the immutable first attempt to `{TYPED_RULE_IR_PATH}` and run
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit rules compile {TYPED_RULE_IR_PATH} > {TYPED_RULE_REPORT_PATH}`.
-In `source_bundle`, enumerate the instruction and every public authoritative source it
-names, with retrieval status and digest. Re-read all available sources. Independently
+In `source_bundle` v2, enumerate the instruction and every public authoritative source
+it names. Freeze each available source's exact UTF-8 bytes and content digest; an
+unavailable source remains explicit and cannot carry invented bytes. Independently
 write `source_clause_inventory` with every normative clause—including trailing,
-nested, exception, and optional clauses—before mapping clauses to Rules. Do not report closed source coverage while a
-named source is unavailable, malformed, or not digest-bound. Record
-the returned `rule_bodies` as `rule_proposal` records and bind each current Rule to
+nested, exception, and optional clauses—before mapping clauses to Rules. Give every
+clause a unique stable `clause_order_key`; array position is display-only and never
+authority. Every clause uses stable, ordered, half-open UTF-8 byte slices; every Rule binds one or more of
+those slices to explicit semantic roles (obligation, applicability, domain, condition,
+outcome, quantifier, witness/evidence requirement, or relationship). Multiple
+disjoint and cross-source slices are allowed. A Rule provenance digest resolves these
+bindings through the clause/order identity and exact source bytes. Do not report closed source coverage
+while a named source is unavailable, malformed, or not digest-bound.
+
+For each semantic Rule dependency, declare either direct provenance from relationship
+slices or derived provenance from the exact current endpoint Rule provenance digests.
+Never infer an edge merely from list order. Record the returned
+`source_artifact_templates` first as `task_source_artifact`, then
+`source_clause_templates` as `source_clause`, then `rule_bodies` as `rule_proposal`
+records and bind each current Rule to
 its public source with `rule_ratification`. Materialize every returned checklist
 template with that current `source_rule_record_id`; do not merge subject/condition
 coverage cells. Add `rule_dependency` edges using the returned semantic relationship,
-then materialize every returned `typed_dependency_template` with the current
-`source_rule_record_id` so dependency order is executable rather than implicit.
+edge provenance, and endpoint provenance digests. Then materialize every returned
+`typed_dependency_template` with both current endpoint Rule record IDs so dependency
+order is executable rather than implicit. A Rule revision makes dependent projections
+stale until they are recomputed; changed source bytes require a new source identity.
 Propose evidence as `fact_proposal`; for a typed checklist bind
 `witness_bindings` to its checklist ID, Rule-semantics digest, and exact operators.
 Admit evidence only through a current ratified admission Rule and an explicit
@@ -1306,7 +1331,13 @@ Compare that independent inventory to `source_clause_inventory` and
 `{TYPED_RULE_REPORT_PATH}`: check omissions, trailing qualifications, required versus
 optional classification, clause-to-Rule bindings, applicability predicates, open
 versus closed quantifier domains, collective versus per-subject ordering, and temporal
-or coupled witness semantics. Audit the immutable first-attempt revision as written;
+or coupled witness semantics. For successor IR, also verify each stable clause-order
+key independently of array position, reconstruct each clause from its ordered frozen
+byte slices, check slice-to-semantic-role coverage and resolved Rule provenance, and verify that
+every dependency is directly source-backed or derived from the current endpoint Rule
+provenance identities. Bounds and digests prove source identity, not semantic
+correctness; independently judge whether each selected slice and role actually
+expresses the claimed Rule or relationship. Audit the immutable first-attempt revision as written;
 do not overwrite it. If compilation drift is concrete, emit a replayable source-clause
 witness so the same Worker can author a separate `semantic_repair` IR bound to the
 first IR digest and this QA witness.

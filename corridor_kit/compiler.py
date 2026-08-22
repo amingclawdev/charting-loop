@@ -17,12 +17,17 @@ from .core import CorridorKitError, sha256_bytes, sha256_json
 
 TYPED_RULE_IR_SCHEMA_V1 = "charting-loop/typed-rule-ir/v1"
 TYPED_RULE_IR_SCHEMA = "charting-loop/typed-rule-ir/v2"
+TYPED_RULE_IR_SCHEMA_V3 = "charting-loop/typed-rule-ir/v3"
 TYPED_RULE_COMPILATION_SCHEMA_V1 = "charting-loop/typed-rule-compilation/v1"
 TYPED_RULE_COMPILATION_SCHEMA = "charting-loop/typed-rule-compilation/v2"
+TYPED_RULE_COMPILATION_SCHEMA_V3 = "charting-loop/typed-rule-compilation/v3"
 COMPILE_PROBE_MANIFEST_SCHEMA_V1 = "charting-loop/compile-probe-manifest/v1"
 COMPILE_PROBE_MANIFEST_SCHEMA = "charting-loop/compile-probe-manifest/v2"
+COMPILE_PROBE_MANIFEST_SCHEMA_V3 = "charting-loop/compile-probe-manifest/v3"
 TASK_SOURCE_BUNDLE_SCHEMA = "charting-loop/task-source-bundle/v1"
+TASK_SOURCE_BUNDLE_SCHEMA_V2 = "charting-loop/task-source-bundle/v2"
 TYPED_RULE_SEMANTICS_SCHEMA = "charting-loop/typed-rule-semantics/v2"
+TYPED_RULE_SEMANTICS_SCHEMA_V3 = "charting-loop/typed-rule-semantics/v3"
 
 RULE_KINDS = frozenset(
     {
@@ -78,6 +83,30 @@ IR_REVISION_KINDS = frozenset({"first_attempt", "semantic_repair"})
 DOMAIN_KINDS = frozenset({"closed_enumeration", "open_including", "source_defined"})
 DOMAIN_SOURCES = frozenset({"public_source", "task_world", "produced_output"})
 APPLICABILITY_MODES = frozenset({"always", "conditional"})
+SOURCE_SLICE_SEMANTIC_ROLES = frozenset(
+    {
+        "obligation",
+        "applicability",
+        "domain",
+        "condition",
+        "outcome",
+        "quantifier",
+        "witness_requirement",
+        "evidence_requirement",
+        "relationship",
+    }
+)
+DEPENDENCY_PROVENANCE_KINDS = frozenset({"direct", "derived"})
+DEPENDENCY_DERIVATION_KINDS = frozenset(
+    {
+        "applicability",
+        "conjunction",
+        "invalidating_change",
+        "ordering",
+        "other_declared",
+        "transitive",
+    }
+)
 
 _IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]*$")
 _OPERATOR = re.compile(r"^[a-z][a-z0-9_.:-]*$")
@@ -136,6 +165,93 @@ def _exact_keys(value: Mapping[str, Any], expected: set[str], *, label: str) -> 
         )
 
 
+def _utf8_boundaries(content: str) -> set[int]:
+    """Return byte offsets that begin or end a UTF-8 code point."""
+
+    boundaries = {0}
+    offset = 0
+    for character in content:
+        offset += len(character.encode("utf-8"))
+        boundaries.add(offset)
+    return boundaries
+
+
+def _validate_source_artifact(raw: Any, *, successor: bool) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise CorridorKitError("task source bundle source must be an object")
+    expected = {
+        "source_id",
+        "source_ref",
+        "source_digest",
+        "role",
+        "retrieval_status",
+    }
+    if successor:
+        expected.update({"content_encoding", "content_utf8"})
+    _exact_keys(raw, expected, label="task source bundle source")
+    source_id = _identifier(raw, "source_id")
+    source_ref = _text(raw, "source_ref")
+    role = _text(raw, "role")
+    if role not in SOURCE_ROLES:
+        raise CorridorKitError(f"unknown task source role: {role}")
+    retrieval_status = _text(raw, "retrieval_status")
+    if retrieval_status not in SOURCE_RETRIEVAL_STATUSES:
+        raise CorridorKitError(
+            f"unknown task source retrieval_status: {retrieval_status}"
+        )
+    source_digest = raw.get("source_digest")
+    content_encoding: str | None = None
+    content_utf8: str | None = None
+    if retrieval_status == "available":
+        source_digest = _digest(raw, "source_digest")
+        if successor:
+            content_encoding = _text(raw, "content_encoding")
+            if content_encoding != "utf-8":
+                raise CorridorKitError("successor task source encoding must be utf-8")
+            content_utf8 = raw.get("content_utf8")
+            if not isinstance(content_utf8, str):
+                raise CorridorKitError(
+                    "available successor task source must freeze content_utf8"
+                )
+            if sha256_bytes(content_utf8.encode("utf-8")) != source_digest:
+                raise CorridorKitError(
+                    f"task source digest does not match frozen bytes: {source_id}"
+                )
+    else:
+        if source_digest is not None:
+            raise CorridorKitError(
+                "unavailable, malformed, or undigested task source must use null source_digest"
+            )
+        if successor and (
+            raw.get("content_encoding") is not None
+            or raw.get("content_utf8") is not None
+        ):
+            raise CorridorKitError(
+                "unavailable successor task source must not claim frozen bytes"
+            )
+    normalized = {
+        "source_id": source_id,
+        "source_ref": source_ref,
+        "source_digest": source_digest,
+        "role": role,
+        "retrieval_status": retrieval_status,
+    }
+    if successor:
+        normalized.update(
+            {
+                "content_encoding": content_encoding,
+                "content_utf8": content_utf8,
+            }
+        )
+    return normalized
+
+
+def validate_source_artifact(value: Any) -> dict[str, Any]:
+    """Validate one successor frozen-source Graph record body."""
+
+    return _validate_source_artifact(value, successor=True)
+
+
 def _operators(
     value: Mapping[str, Any], field: str, *, nonempty: bool = True
 ) -> list[str]:
@@ -158,7 +274,9 @@ def validate_source_bundle(value: Any) -> dict[str, Any]:
         {"schema_version", "closure_status", "sources"},
         label="task source bundle",
     )
-    if value.get("schema_version") != TASK_SOURCE_BUNDLE_SCHEMA:
+    bundle_schema = value.get("schema_version")
+    successor = bundle_schema == TASK_SOURCE_BUNDLE_SCHEMA_V2
+    if not successor and bundle_schema != TASK_SOURCE_BUNDLE_SCHEMA:
         raise CorridorKitError("task source bundle has the wrong schema")
     closure_status = _text(value, "closure_status")
     if closure_status not in SOURCE_BUNDLE_CLOSURE_STATUSES:
@@ -170,49 +288,14 @@ def validate_source_bundle(value: Any) -> dict[str, Any]:
     source_ids: set[str] = set()
     source_refs: set[str] = set()
     for raw in raw_sources:
-        if not isinstance(raw, dict):
-            raise CorridorKitError("task source bundle source must be an object")
-        _exact_keys(
-            raw,
-            {
-                "source_id",
-                "source_ref",
-                "source_digest",
-                "role",
-                "retrieval_status",
-            },
-            label="task source bundle source",
-        )
-        source_id = _identifier(raw, "source_id")
-        source_ref = _text(raw, "source_ref")
+        source = _validate_source_artifact(raw, successor=successor)
+        source_id = source["source_id"]
+        source_ref = source["source_ref"]
         if source_id in source_ids or source_ref in source_refs:
             raise CorridorKitError("task source bundle contains a duplicate source identity")
         source_ids.add(source_id)
         source_refs.add(source_ref)
-        role = _text(raw, "role")
-        if role not in SOURCE_ROLES:
-            raise CorridorKitError(f"unknown task source role: {role}")
-        retrieval_status = _text(raw, "retrieval_status")
-        if retrieval_status not in SOURCE_RETRIEVAL_STATUSES:
-            raise CorridorKitError(
-                f"unknown task source retrieval_status: {retrieval_status}"
-            )
-        source_digest = raw.get("source_digest")
-        if retrieval_status == "available":
-            source_digest = _digest(raw, "source_digest")
-        elif source_digest is not None:
-            raise CorridorKitError(
-                "unavailable, malformed, or undigested task source must use null source_digest"
-            )
-        sources.append(
-            {
-                "source_id": source_id,
-                "source_ref": source_ref,
-                "source_digest": source_digest,
-                "role": role,
-                "retrieval_status": retrieval_status,
-            }
-        )
+        sources.append(source)
     if not any(source["role"] == "instruction" for source in sources):
         raise CorridorKitError("task source bundle must include the public instruction")
     derived_closure = (
@@ -225,7 +308,7 @@ def validate_source_bundle(value: Any) -> dict[str, Any]:
             "task source bundle closure_status does not match retrieval statuses"
         )
     return {
-        "schema_version": TASK_SOURCE_BUNDLE_SCHEMA,
+        "schema_version": bundle_schema,
         "closure_status": closure_status,
         "sources": sources,
     }
@@ -338,13 +421,269 @@ def validate_source_clause_inventory(value: Any) -> list[dict[str, Any]]:
     return clauses
 
 
+def validate_source_clause_inventory_v3(
+    value: Any, *, source_bundle: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """Validate byte-addressed clauses against exact frozen source bytes."""
+
+    if not isinstance(value, list) or not value:
+        raise CorridorKitError("source clause inventory must be a non-empty list")
+    source_by_id = {
+        source["source_id"]: source for source in source_bundle["sources"]
+    }
+    clauses: list[dict[str, Any]] = []
+    clause_ids: set[str] = set()
+    clause_order_keys: set[str] = set()
+    slice_ids: set[str] = set()
+    for raw in value:
+        if not isinstance(raw, dict):
+            raise CorridorKitError("source clause inventory entry must be an object")
+        _exact_keys(
+            raw,
+            {
+                "clause_id",
+                "clause_order_key",
+                "source_slices",
+                "clause_text",
+                "clause_digest",
+                "requirement_level",
+                "mapping_status",
+                "rule_ids",
+                "required_semantic_roles",
+                "issue",
+            },
+            label="successor source clause inventory entry",
+        )
+        clause_id = _identifier(raw, "clause_id")
+        if clause_id in clause_ids:
+            raise CorridorKitError(f"source clause ID is duplicated: {clause_id}")
+        clause_ids.add(clause_id)
+        clause_order_key = _identifier(raw, "clause_order_key")
+        if clause_order_key in clause_order_keys:
+            raise CorridorKitError(
+                f"source clause order key is duplicated: {clause_order_key}"
+            )
+        clause_order_keys.add(clause_order_key)
+        raw_slices = raw.get("source_slices")
+        if not isinstance(raw_slices, list) or not raw_slices:
+            raise CorridorKitError(
+                "successor source clause must contain ordered source_slices"
+            )
+        slices: list[dict[str, Any]] = []
+        reconstructed: list[str] = []
+        for raw_slice in raw_slices:
+            if not isinstance(raw_slice, dict):
+                raise CorridorKitError("source slice must be an object")
+            _exact_keys(
+                raw_slice,
+                {"slice_id", "source_id", "byte_start", "byte_end", "slice_digest"},
+                label="source slice",
+            )
+            slice_id = _identifier(raw_slice, "slice_id")
+            if slice_id in slice_ids:
+                raise CorridorKitError(f"source slice ID is duplicated: {slice_id}")
+            slice_ids.add(slice_id)
+            source_id = _identifier(raw_slice, "source_id")
+            source = source_by_id.get(source_id)
+            if source is None:
+                raise CorridorKitError(
+                    f"source slice references unknown source: {slice_id}"
+                )
+            if source["retrieval_status"] != "available":
+                raise CorridorKitError(
+                    f"source slice references unresolved source: {slice_id}"
+                )
+            byte_start = raw_slice.get("byte_start")
+            byte_end = raw_slice.get("byte_end")
+            if (
+                not isinstance(byte_start, int)
+                or isinstance(byte_start, bool)
+                or not isinstance(byte_end, int)
+                or isinstance(byte_end, bool)
+                or byte_start < 0
+                or byte_end <= byte_start
+            ):
+                raise CorridorKitError(
+                    f"source slice requires a non-empty half-open byte range: {slice_id}"
+                )
+            content = source["content_utf8"]
+            content_bytes = content.encode("utf-8")
+            if byte_end > len(content_bytes):
+                raise CorridorKitError(f"source slice is out of bounds: {slice_id}")
+            boundaries = _utf8_boundaries(content)
+            if byte_start not in boundaries or byte_end not in boundaries:
+                raise CorridorKitError(
+                    f"source slice is not aligned to UTF-8 code points: {slice_id}"
+                )
+            sliced_bytes = content_bytes[byte_start:byte_end]
+            slice_digest = _digest(raw_slice, "slice_digest")
+            if sha256_bytes(sliced_bytes) != slice_digest:
+                raise CorridorKitError(
+                    f"source slice digest does not match frozen bytes: {slice_id}"
+                )
+            reconstructed.append(sliced_bytes.decode("utf-8"))
+            slices.append(
+                {
+                    "slice_id": slice_id,
+                    "source_id": source_id,
+                    "byte_start": byte_start,
+                    "byte_end": byte_end,
+                    "slice_digest": slice_digest,
+                }
+            )
+        clause_text = raw.get("clause_text")
+        if not isinstance(clause_text, str) or not clause_text:
+            raise CorridorKitError("successor source clause text must be non-empty")
+        if clause_text != "".join(reconstructed):
+            raise CorridorKitError(
+                f"source clause text does not reconstruct from ordered slices: {clause_id}"
+            )
+        clause_digest = _digest(raw, "clause_digest")
+        if sha256_bytes(clause_text.encode("utf-8")) != clause_digest:
+            raise CorridorKitError(
+                f"source clause digest does not match reconstructed bytes: {clause_id}"
+            )
+        requirement_level = _text(raw, "requirement_level")
+        if requirement_level not in REQUIREMENT_LEVELS:
+            raise CorridorKitError(
+                f"unknown source clause requirement_level: {requirement_level}"
+            )
+        mapping_status = _text(raw, "mapping_status")
+        if mapping_status not in SOURCE_CLAUSE_MAPPING_STATUSES:
+            raise CorridorKitError(
+                f"unknown source clause mapping_status: {mapping_status}"
+            )
+        rule_ids = _text_list(raw, "rule_ids")
+        required_roles = _text_list(
+            raw, "required_semantic_roles", nonempty=mapping_status == "mapped"
+        )
+        invalid_roles = sorted(set(required_roles) - SOURCE_SLICE_SEMANTIC_ROLES)
+        if invalid_roles:
+            raise CorridorKitError(
+                f"unknown source slice semantic roles: {invalid_roles}"
+            )
+        issue = raw.get("issue")
+        if not isinstance(issue, str):
+            raise CorridorKitError("source clause issue must be text, including empty text")
+        if mapping_status == "mapped":
+            if not rule_ids or issue:
+                raise CorridorKitError(
+                    "mapped source clause requires Rule IDs and an empty issue"
+                )
+        elif rule_ids or required_roles or not issue.strip():
+            raise CorridorKitError(
+                "non-mapped source clause requires no Rule IDs or semantic roles and a non-empty issue"
+            )
+        clauses.append(
+            {
+                "clause_id": clause_id,
+                "clause_order_key": clause_order_key,
+                "source_slices": slices,
+                "clause_text": clause_text,
+                "clause_digest": clause_digest,
+                "requirement_level": requirement_level,
+                "mapping_status": mapping_status,
+                "rule_ids": rule_ids,
+                "required_semantic_roles": required_roles,
+                "issue": issue,
+            }
+        )
+    return sorted(clauses, key=lambda clause: clause["clause_order_key"])
+
+
+def validate_rule_source_slices(value: Any) -> list[dict[str, str]]:
+    """Validate ordered Rule-to-slice semantic bindings."""
+
+    if not isinstance(value, list) or not value:
+        raise CorridorKitError("successor typed Rule source_slices must be non-empty")
+    bindings: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for raw in value:
+        if not isinstance(raw, dict):
+            raise CorridorKitError("typed Rule source slice binding must be an object")
+        _exact_keys(
+            raw,
+            {"slice_id", "semantic_role"},
+            label="typed Rule source slice binding",
+        )
+        slice_id = _identifier(raw, "slice_id")
+        semantic_role = _text(raw, "semantic_role")
+        if semantic_role not in SOURCE_SLICE_SEMANTIC_ROLES:
+            raise CorridorKitError(
+                f"unknown source slice semantic role: {semantic_role}"
+            )
+        identity = (slice_id, semantic_role)
+        if identity in seen:
+            raise CorridorKitError(
+                f"typed Rule source slice binding is duplicated: {slice_id}:{semantic_role}"
+            )
+        seen.add(identity)
+        bindings.append({"slice_id": slice_id, "semantic_role": semantic_role})
+    if "obligation" not in {item["semantic_role"] for item in bindings}:
+        raise CorridorKitError(
+            "successor typed Rule must bind at least one obligation source slice"
+        )
+    return bindings
+
+
+def rule_source_provenance_identity(
+    *,
+    rule_id: str,
+    statement: str,
+    source_clause_ids: list[str],
+    source_slices: list[dict[str, str]],
+    source_bundle: Mapping[str, Any],
+    source_clauses: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Resolve Rule bindings to the exact frozen source-byte identities they name."""
+
+    source_by_id = {
+        source["source_id"]: source for source in source_bundle["sources"]
+    }
+    slice_resolution: dict[str, tuple[Mapping[str, Any], Mapping[str, Any]]] = {}
+    for clause in source_clauses:
+        for source_slice in clause["source_slices"]:
+            slice_resolution[source_slice["slice_id"]] = (clause, source_slice)
+    resolved_bindings: list[dict[str, Any]] = []
+    for binding in source_slices:
+        resolution = slice_resolution.get(binding["slice_id"])
+        if resolution is None:
+            raise CorridorKitError(
+                f"typed Rule references unknown source slice: {binding['slice_id']}"
+            )
+        clause, source_slice = resolution
+        source = source_by_id[source_slice["source_id"]]
+        resolved_bindings.append(
+            {
+                "slice_id": source_slice["slice_id"],
+                "semantic_role": binding["semantic_role"],
+                "clause_id": clause["clause_id"],
+                "clause_order_key": clause["clause_order_key"],
+                "clause_digest": clause["clause_digest"],
+                "source_id": source_slice["source_id"],
+                "source_digest": source["source_digest"],
+                "byte_start": source_slice["byte_start"],
+                "byte_end": source_slice["byte_end"],
+                "slice_digest": source_slice["slice_digest"],
+            }
+        )
+    return {
+        "rule_id": rule_id,
+        "statement": statement,
+        "source_clause_ids": source_clause_ids,
+        "source_slices": resolved_bindings,
+    }
+
+
 def validate_rule_semantics(value: Any) -> dict[str, Any]:
     """Return one canonical Rule semantic object or raise without guessing."""
 
     if not isinstance(value, dict):
         raise CorridorKitError("typed Rule semantics must be an object")
     semantics_schema = value.get("schema_version")
+    is_v3 = semantics_schema == TYPED_RULE_SEMANTICS_SCHEMA_V3
     is_v2 = semantics_schema == TYPED_RULE_SEMANTICS_SCHEMA
+    is_current = is_v2 or is_v3
     expected_fields = {
         "rule_kind",
         "compilation_status",
@@ -354,7 +693,7 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
         "checklist_projection",
         "dependencies",
     }
-    if is_v2:
+    if is_current:
         expected_fields.update(
             {"schema_version", "requirement_level", "applicability"}
         )
@@ -367,7 +706,7 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
     )
     requirement_level = "required"
     applicability: dict[str, str] | None = None
-    if is_v2:
+    if is_current:
         requirement_level = _text(value, "requirement_level")
         if requirement_level not in REQUIREMENT_LEVELS:
             raise CorridorKitError(
@@ -420,7 +759,7 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
                 "domain_source",
                 "domain_predicate",
             }
-            if is_v2
+            if is_current
             else {"mode", "subject_axis", "subjects"}
         ),
         label="typed Rule quantifier",
@@ -435,7 +774,7 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
     domain_kind: str | None = None
     domain_source: str | None = None
     domain_predicate: str | None = None
-    if is_v2:
+    if is_current:
         domain_kind = _text(quantifier, "domain_kind")
         if domain_kind not in DOMAIN_KINDS:
             raise CorridorKitError(f"unknown typed Rule domain_kind: {domain_kind}")
@@ -548,14 +887,18 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
     raw_dependencies = value.get("dependencies")
     if not isinstance(raw_dependencies, list):
         raise CorridorKitError("typed Rule dependencies must be a list")
-    dependencies: list[dict[str, str]] = []
+    dependencies: list[dict[str, Any]] = []
     seen_dependencies: set[tuple[str, str]] = set()
     for raw in raw_dependencies:
         if not isinstance(raw, dict):
             raise CorridorKitError("typed Rule dependency must be an object")
         _exact_keys(
             raw,
-            {"relationship", "target_rule_id"},
+            (
+                {"relationship", "target_rule_id", "provenance"}
+                if is_v3
+                else {"relationship", "target_rule_id"}
+            ),
             label="typed Rule dependency",
         )
         relationship = _text(raw, "relationship")
@@ -570,9 +913,74 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
                 f"typed Rule dependency is duplicated: {relationship}:{target_rule_id}"
             )
         seen_dependencies.add(identity)
-        dependencies.append(
-            {"relationship": relationship, "target_rule_id": target_rule_id}
-        )
+        normalized_dependency: dict[str, Any] = {
+            "relationship": relationship,
+            "target_rule_id": target_rule_id,
+        }
+        if is_v3:
+            raw_provenance = raw.get("provenance")
+            if not isinstance(raw_provenance, dict):
+                raise CorridorKitError("successor dependency provenance must be an object")
+            _exact_keys(
+                raw_provenance,
+                {
+                    "kind",
+                    "source_slice_ids",
+                    "derivation_kind",
+                    "input_rule_provenance_digests",
+                },
+                label="successor dependency provenance",
+            )
+            provenance_kind = _text(raw_provenance, "kind")
+            if provenance_kind not in DEPENDENCY_PROVENANCE_KINDS:
+                raise CorridorKitError(
+                    f"unknown dependency provenance kind: {provenance_kind}"
+                )
+            source_slice_ids = _text_list(raw_provenance, "source_slice_ids")
+            derivation_kind = raw_provenance.get("derivation_kind")
+            raw_inputs = raw_provenance.get("input_rule_provenance_digests")
+            if not isinstance(raw_inputs, dict):
+                raise CorridorKitError(
+                    "dependency input_rule_provenance_digests must be an object"
+                )
+            input_digests: dict[str, str] = {}
+            for input_rule_id, digest in raw_inputs.items():
+                if not isinstance(input_rule_id, str) or not _IDENTIFIER.fullmatch(
+                    input_rule_id
+                ):
+                    raise CorridorKitError(
+                        "dependency provenance input key must be a stable Rule ID"
+                    )
+                input_digests[input_rule_id] = _digest(
+                    {"digest": digest}, "digest"
+                )
+            if provenance_kind == "direct":
+                if not source_slice_ids or derivation_kind is not None or input_digests:
+                    raise CorridorKitError(
+                        "direct dependency provenance requires source slices only"
+                    )
+            else:
+                if source_slice_ids:
+                    raise CorridorKitError(
+                        "derived dependency provenance cannot claim direct source slices"
+                    )
+                if not isinstance(derivation_kind, str) or (
+                    derivation_kind not in DEPENDENCY_DERIVATION_KINDS
+                ):
+                    raise CorridorKitError(
+                        "derived dependency provenance requires a declared derivation kind"
+                    )
+                if not input_digests:
+                    raise CorridorKitError(
+                        "derived dependency provenance requires current Rule provenance digests"
+                    )
+            normalized_dependency["provenance"] = {
+                "kind": provenance_kind,
+                "source_slice_ids": source_slice_ids,
+                "derivation_kind": derivation_kind,
+                "input_rule_provenance_digests": input_digests,
+            }
+        dependencies.append(normalized_dependency)
 
     normalized = {
         "rule_kind": rule_kind,
@@ -592,9 +1000,13 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
         },
         "dependencies": dependencies,
     }
-    if is_v2:
+    if is_current:
         normalized = {
-            "schema_version": TYPED_RULE_SEMANTICS_SCHEMA,
+            "schema_version": (
+                TYPED_RULE_SEMANTICS_SCHEMA_V3
+                if is_v3
+                else TYPED_RULE_SEMANTICS_SCHEMA
+            ),
             "requirement_level": requirement_level,
             "applicability": applicability,
             **normalized,
@@ -675,7 +1087,10 @@ def project_rule_checklist_templates(
                             ],
                         }
                         if normalized.get("schema_version")
-                        == TYPED_RULE_SEMANTICS_SCHEMA
+                        in {
+                            TYPED_RULE_SEMANTICS_SCHEMA,
+                            TYPED_RULE_SEMANTICS_SCHEMA_V3,
+                        }
                         else {}
                     ),
                 }
@@ -710,8 +1125,10 @@ def compile_typed_rule_ir(
     if not isinstance(value, dict):
         raise CorridorKitError("typed Rule IR must be an object")
     ir_schema = value.get("schema_version")
+    is_v3 = ir_schema == TYPED_RULE_IR_SCHEMA_V3
     is_v2 = ir_schema == TYPED_RULE_IR_SCHEMA
-    if not is_v2 and ir_schema != TYPED_RULE_IR_SCHEMA_V1:
+    is_source_bound = is_v2 or is_v3
+    if not is_source_bound and ir_schema != TYPED_RULE_IR_SCHEMA_V1:
         raise CorridorKitError("typed Rule IR has the wrong schema")
     _exact_keys(
         value,
@@ -725,7 +1142,7 @@ def compile_typed_rule_ir(
                 "compiler_config_digest",
                 "rules",
             }
-            if is_v2
+            if is_source_bound
             else {
                 "schema_version",
                 "task_source_ref",
@@ -740,11 +1157,22 @@ def compile_typed_rule_ir(
     source_bundle: dict[str, Any] | None = None
     source_clauses: list[dict[str, Any]] = []
     revision: dict[str, Any] | None = None
-    if is_v2:
+    if is_source_bound:
         source_bundle = validate_source_bundle(value.get("source_bundle"))
-        source_clauses = validate_source_clause_inventory(
-            value.get("source_clause_inventory")
-        )
+        if is_v3:
+            if source_bundle["schema_version"] != TASK_SOURCE_BUNDLE_SCHEMA_V2:
+                raise CorridorKitError(
+                    "successor typed Rule IR requires frozen task source bundle v2"
+                )
+            source_clauses = validate_source_clause_inventory_v3(
+                value.get("source_clause_inventory"), source_bundle=source_bundle
+            )
+        else:
+            if source_bundle["schema_version"] != TASK_SOURCE_BUNDLE_SCHEMA:
+                raise CorridorKitError("typed Rule IR v2 requires task source bundle v1")
+            source_clauses = validate_source_clause_inventory(
+                value.get("source_clause_inventory")
+            )
         revision = validate_ir_revision(value.get("revision"))
         instruction_source = next(
             source
@@ -768,6 +1196,15 @@ def compile_typed_rule_ir(
     checklist_templates: list[dict[str, Any]] = []
     rule_dependency_templates: list[dict[str, Any]] = []
     checklist_templates_by_rule: dict[str, list[dict[str, Any]]] = {}
+    rule_provenance_digest_by_id: dict[str, str] = {}
+    clause_order_by_id = (
+        {
+            clause["clause_id"]: clause["clause_order_key"]
+            for clause in source_clauses
+        }
+        if is_v3
+        else {}
+    )
     for raw in raw_rules:
         if not isinstance(raw, dict):
             raise CorridorKitError("typed Rule IR rule must be an object")
@@ -783,13 +1220,23 @@ def compile_typed_rule_ir(
                     "semantics",
                 }
                 if is_v2
-                else {
-                    "rule_id",
-                    "statement",
-                    "source_ref",
-                    "source_digest",
-                    "semantics",
-                }
+                else (
+                    {
+                        "rule_id",
+                        "statement",
+                        "source_clause_ids",
+                        "source_slices",
+                        "semantics",
+                    }
+                    if is_v3
+                    else {
+                        "rule_id",
+                        "statement",
+                        "source_ref",
+                        "source_digest",
+                        "semantics",
+                    }
+                )
             ),
             label="typed Rule IR rule",
         )
@@ -800,18 +1247,58 @@ def compile_typed_rule_ir(
         statement = _text(raw, "statement")
         semantics = validate_rule_semantics(raw.get("semantics"))
         semantics_digest = sha256_json(semantics)
-        normalized = {
-            "rule_id": rule_id,
-            "statement": statement,
-            "source_ref": _text(raw, "source_ref"),
-            "source_digest": _digest(raw, "source_digest"),
-            **(
-                {"source_clause_ids": _text_list(raw, "source_clause_ids", nonempty=True)}
-                if is_v2
-                else {}
-            ),
-            "semantics": semantics,
-        }
+        if is_v3:
+            assert source_bundle is not None
+            source_clause_ids = _text_list(raw, "source_clause_ids", nonempty=True)
+            unknown_clause_ids = sorted(
+                set(source_clause_ids) - set(clause_order_by_id)
+            )
+            if unknown_clause_ids:
+                raise CorridorKitError(
+                    f"typed Rule references unknown source clauses: {unknown_clause_ids}"
+                )
+            source_clause_ids = sorted(
+                source_clause_ids, key=lambda clause_id: clause_order_by_id[clause_id]
+            )
+            source_slices = validate_rule_source_slices(raw.get("source_slices"))
+            source_identity = rule_source_provenance_identity(
+                rule_id=rule_id,
+                statement=statement,
+                source_clause_ids=source_clause_ids,
+                source_slices=source_slices,
+                source_bundle=source_bundle,
+                source_clauses=source_clauses,
+            )
+            rule_source_provenance_digest = sha256_json(source_identity)
+            rule_provenance_digest_by_id[rule_id] = rule_source_provenance_digest
+            bundle_digest = sha256_json(source_bundle)
+            normalized = {
+                "rule_id": rule_id,
+                "statement": statement,
+                "source_ref": f"source-bundle:{bundle_digest}",
+                "source_digest": bundle_digest,
+                "source_clause_ids": source_clause_ids,
+                "source_slices": source_slices,
+                "rule_source_provenance_digest": rule_source_provenance_digest,
+                "semantics": semantics,
+            }
+        else:
+            normalized = {
+                "rule_id": rule_id,
+                "statement": statement,
+                "source_ref": _text(raw, "source_ref"),
+                "source_digest": _digest(raw, "source_digest"),
+                **(
+                    {
+                        "source_clause_ids": _text_list(
+                            raw, "source_clause_ids", nonempty=True
+                        )
+                    }
+                    if is_v2
+                    else {}
+                ),
+                "semantics": semantics,
+            }
         normalized_rules.append(normalized)
         rule_bodies.append(
             {
@@ -830,8 +1317,139 @@ def compile_typed_rule_ir(
                     "from_rule_id": rule_id,
                     "to_rule_id": dependency["target_rule_id"],
                     "relationship": dependency["relationship"],
+                    **(
+                        {"edge_provenance": dependency["provenance"]}
+                        if is_v3
+                        else {}
+                    ),
                 }
             )
+
+    if is_v3:
+        assert source_bundle is not None
+        source_by_id = {
+            source["source_id"]: source for source in source_bundle["sources"]
+        }
+        clause_by_id = {clause["clause_id"]: clause for clause in source_clauses}
+        slice_by_id = {
+            source_slice["slice_id"]: source_slice
+            for clause in source_clauses
+            for source_slice in clause["source_slices"]
+        }
+        clause_ids_by_slice = {
+            source_slice["slice_id"]: clause["clause_id"]
+            for clause in source_clauses
+            for source_slice in clause["source_slices"]
+        }
+        for clause in source_clauses:
+            unknown_rule_ids = sorted(set(clause["rule_ids"]) - rule_ids)
+            if unknown_rule_ids:
+                raise CorridorKitError(
+                    f"source clause references unknown Rules: {unknown_rule_ids}"
+                )
+        inventoried_source_ids = {
+            source_slice["source_id"]
+            for clause in source_clauses
+            for source_slice in clause["source_slices"]
+        }
+        missing_source_inventories = sorted(
+            source["source_id"]
+            for source in source_bundle["sources"]
+            if source["retrieval_status"] == "available"
+            and source["source_id"] not in inventoried_source_ids
+        )
+        if missing_source_inventories:
+            raise CorridorKitError(
+                "available task sources lack byte-addressed clause inventory entries: "
+                + ", ".join(missing_source_inventories)
+            )
+        bindings_by_rule = {
+            rule["rule_id"]: rule["source_slices"] for rule in normalized_rules
+        }
+        for rule in normalized_rules:
+            clause_ids = rule["source_clause_ids"]
+            unknown_clause_ids = sorted(set(clause_ids) - set(clause_by_id))
+            if unknown_clause_ids:
+                raise CorridorKitError(
+                    f"typed Rule references unknown source clauses: {unknown_clause_ids}"
+                )
+            mapped_clause_ids = sorted(
+                clause["clause_id"]
+                for clause in source_clauses
+                if rule["rule_id"] in clause["rule_ids"]
+            )
+            if sorted(clause_ids) != mapped_clause_ids:
+                raise CorridorKitError(
+                    f"typed Rule source_clause_ids do not match clause inventory: {rule['rule_id']}"
+                )
+            bound_slice_ids = {item["slice_id"] for item in rule["source_slices"]}
+            unknown_slice_ids = sorted(bound_slice_ids - set(slice_by_id))
+            if unknown_slice_ids:
+                raise CorridorKitError(
+                    f"typed Rule references unknown source slices: {unknown_slice_ids}"
+                )
+            outside_clause_slices = sorted(
+                slice_id
+                for slice_id in bound_slice_ids
+                if clause_ids_by_slice[slice_id] not in set(clause_ids)
+            )
+            if outside_clause_slices:
+                raise CorridorKitError(
+                    f"typed Rule source slices fall outside its mapped clauses: {outside_clause_slices}"
+                )
+            clause_levels = {
+                clause_by_id[clause_id]["requirement_level"]
+                for clause_id in clause_ids
+            }
+            if clause_levels != {rule["semantics"]["requirement_level"]}:
+                raise CorridorKitError(
+                    f"typed Rule requirement level does not match its source clauses: {rule['rule_id']}"
+                )
+        for clause in source_clauses:
+            if clause["mapping_status"] != "mapped":
+                continue
+            declared_roles = {
+                binding["semantic_role"]
+                for rule_id in clause["rule_ids"]
+                for binding in bindings_by_rule[rule_id]
+                if clause_ids_by_slice.get(binding["slice_id"]) == clause["clause_id"]
+            }
+            missing_roles = sorted(
+                set(clause["required_semantic_roles"]) - declared_roles
+            )
+            if missing_roles:
+                raise CorridorKitError(
+                    f"source clause semantic roles are not mapped: {clause['clause_id']}:{missing_roles}"
+                )
+        for dependency in rule_dependency_templates:
+            provenance = dependency["edge_provenance"]
+            source_rule_id = dependency["from_rule_id"]
+            target_rule_id = dependency["to_rule_id"]
+            if provenance["kind"] == "direct":
+                endpoint_bindings = {
+                    binding["slice_id"]
+                    for endpoint in (source_rule_id, target_rule_id)
+                    for binding in bindings_by_rule.get(endpoint, [])
+                    if binding["semantic_role"] == "relationship"
+                }
+                invalid_slices = sorted(
+                    set(provenance["source_slice_ids"]) - endpoint_bindings
+                )
+                if invalid_slices:
+                    raise CorridorKitError(
+                        "direct dependency provenance must bind relationship slices "
+                        f"from an endpoint Rule: {invalid_slices}"
+                    )
+            else:
+                expected_endpoint_digests = {
+                    endpoint: rule_provenance_digest_by_id[endpoint]
+                    for endpoint in (source_rule_id, target_rule_id)
+                    if endpoint in rule_provenance_digest_by_id
+                }
+                if provenance["input_rule_provenance_digests"] != expected_endpoint_digests:
+                    raise CorridorKitError(
+                        "derived dependency provenance must bind both current endpoint Rule revisions"
+                    )
 
     if is_v2:
         assert source_bundle is not None
@@ -914,6 +1532,17 @@ def compile_typed_rule_ir(
     for item in rule_dependency_templates:
         if item["from_rule_id"] == item["to_rule_id"]:
             raise CorridorKitError("typed Rule dependency cannot be self-referential")
+        if is_v3:
+            item.update(
+                {
+                    "source_rule_provenance_digest": rule_provenance_digest_by_id[
+                        item["from_rule_id"]
+                    ],
+                    "target_rule_provenance_digest": rule_provenance_digest_by_id[
+                        item["to_rule_id"]
+                    ],
+                }
+            )
     hard_edges: dict[str, set[str]] = {rule_id: set() for rule_id in rule_ids}
     for item in rule_dependency_templates:
         relationship = item["relationship"]
@@ -959,6 +1588,20 @@ def compile_typed_rule_ir(
                     "to_ref": target_cell["checklist_item_id"],
                     "relationship": graph_relationship,
                     "source_rule_id": dependency["from_rule_id"],
+                    **(
+                        {
+                            "target_rule_id": dependency["to_rule_id"],
+                            "source_rule_provenance_digest": dependency[
+                                "source_rule_provenance_digest"
+                            ],
+                            "target_rule_provenance_digest": dependency[
+                                "target_rule_provenance_digest"
+                            ],
+                            "edge_provenance": dependency["edge_provenance"],
+                        }
+                        if is_v3
+                        else {}
+                    ),
                 }
                 typed_dependency_templates.append(
                     {
@@ -970,7 +1613,9 @@ def compile_typed_rule_ir(
 
     normalized_ir = (
         {
-            "schema_version": TYPED_RULE_IR_SCHEMA,
+            "schema_version": (
+                TYPED_RULE_IR_SCHEMA_V3 if is_v3 else TYPED_RULE_IR_SCHEMA
+            ),
             "source_bundle": source_bundle,
             "source_clause_inventory": source_clauses,
             "revision": revision,
@@ -978,7 +1623,7 @@ def compile_typed_rule_ir(
             "compiler_config_digest": compiler_config_digest,
             "rules": normalized_rules,
         }
-        if is_v2
+        if is_source_bound
         else {
             "schema_version": TYPED_RULE_IR_SCHEMA_V1,
             "task_source_ref": task_source_ref,
@@ -994,7 +1639,9 @@ def compile_typed_rule_ir(
     implementation_digest = _compiler_implementation_digest()
     manifest = {
         "schema_version": (
-            COMPILE_PROBE_MANIFEST_SCHEMA
+            COMPILE_PROBE_MANIFEST_SCHEMA_V3
+            if is_v3
+            else COMPILE_PROBE_MANIFEST_SCHEMA
             if is_v2
             else COMPILE_PROBE_MANIFEST_SCHEMA_V1
         ),
@@ -1008,7 +1655,7 @@ def compile_typed_rule_ir(
                 "source_bundle_closure_status": source_bundle["closure_status"],
                 "revision": revision,
             }
-            if is_v2
+            if is_source_bound
             else {"source_closure_assessed": False}
         ),
         "method_digest": method_digest,
@@ -1020,7 +1667,7 @@ def compile_typed_rule_ir(
                 "frozen_method",
                 (
                     "closed_public_task_source_bundle"
-                    if is_v2
+                    if is_source_bound
                     else "public_task_source"
                 ),
                 "compiler_interface",
@@ -1059,7 +1706,7 @@ def compile_typed_rule_ir(
     )
     source_clauses_complete = (
         all(clause["mapping_status"] == "mapped" for clause in source_clauses)
-        if is_v2
+        if is_source_bound
         else None
     )
     compilation_complete = (
@@ -1067,7 +1714,7 @@ def compile_typed_rule_ir(
         and source_bundle is not None
         and source_bundle["closure_status"] == "complete"
         and source_clauses_complete is True
-        if is_v2
+        if is_source_bound
         else rules_complete
     )
     rule_compile_issues = [
@@ -1089,19 +1736,21 @@ def compile_typed_rule_ir(
             for clause in source_clauses
             if clause["mapping_status"] != "mapped"
         ]
-        if is_v2
+        if is_source_bound
         else []
     )
     report = {
         "schema_version": (
-            TYPED_RULE_COMPILATION_SCHEMA
+            TYPED_RULE_COMPILATION_SCHEMA_V3
+            if is_v3
+            else TYPED_RULE_COMPILATION_SCHEMA
             if is_v2
             else TYPED_RULE_COMPILATION_SCHEMA_V1
         ),
         "ok": True,
         "compilation_complete": compilation_complete,
         "compile_issues": [*rule_compile_issues, *source_clause_issues],
-        "source_closure_assessed": is_v2,
+        "source_closure_assessed": is_source_bound,
         "source_closure": (
             {
                 "bundle_status": source_bundle["closure_status"],
@@ -1112,14 +1761,24 @@ def compile_typed_rule_ir(
                     clause["mapping_status"] == "mapped"
                     for clause in source_clauses
                 ),
+                "source_slice_count": (
+                    sum(len(clause["source_slices"]) for clause in source_clauses)
+                    if is_v3
+                    else None
+                ),
+                "source_provenance_status": (
+                    "exact_byte_slices" if is_v3 else "legacy_clause_text"
+                ),
             }
-            if is_v2
+            if is_source_bound
             else {
                 "bundle_status": "legacy_unassessed",
                 "clause_inventory_complete": None,
                 "source_count": None,
                 "clause_count": None,
                 "mapped_clause_count": None,
+                "source_slice_count": None,
+                "source_provenance_status": "legacy_unassessed",
             }
         ),
         "revision": revision,
@@ -1130,6 +1789,10 @@ def compile_typed_rule_ir(
         "rule_dependency_count": len(rule_dependency_templates),
         "typed_dependency_count": len(typed_dependency_templates),
         "rule_bodies": rule_bodies,
+        "source_artifact_templates": (
+            source_bundle["sources"] if is_v3 and source_bundle is not None else []
+        ),
+        "source_clause_templates": source_clauses if is_v3 else [],
         "checklist_templates": checklist_templates,
         "rule_dependency_templates": rule_dependency_templates,
         "typed_dependency_templates": typed_dependency_templates,

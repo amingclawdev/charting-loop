@@ -1612,6 +1612,480 @@ class TypedRuleCompilerTests(unittest.TestCase):
             ],
         }
 
+    @staticmethod
+    def _v3_ir() -> dict:
+        source_one = "✓ Every item must exist. Before release, verify every item."
+        source_two = "Evidence must be recorded."
+        clause_one = "✓ Every item must exist."
+        clause_two_a = "Before release, verify every item."
+        clause_two_b = source_two
+
+        def source_slice(
+            slice_id: str, source_id: str, content: str, text: str
+        ) -> dict:
+            content_bytes = content.encode("utf-8")
+            text_bytes = text.encode("utf-8")
+            start = content_bytes.index(text_bytes)
+            end = start + len(text_bytes)
+            return {
+                "slice_id": slice_id,
+                "source_id": source_id,
+                "byte_start": start,
+                "byte_end": end,
+                "slice_digest": sha256_bytes(text_bytes),
+            }
+
+        slices = {
+            "SL-EXIST": source_slice(
+                "SL-EXIST", "SRC-INSTRUCTION", source_one, clause_one
+            ),
+            "SL-VERIFY": source_slice(
+                "SL-VERIFY", "SRC-INSTRUCTION", source_one, clause_two_a
+            ),
+            "SL-EVIDENCE": source_slice(
+                "SL-EVIDENCE", "SRC-SPEC", source_two, clause_two_b
+            ),
+        }
+
+        def semantics(*, dependency: dict | None = None) -> dict:
+            return {
+                "schema_version": "charting-loop/typed-rule-semantics/v3",
+                "requirement_level": "required",
+                "applicability": {"mode": "always", "predicate": "the task runs"},
+                "rule_kind": "conditional",
+                "compilation_status": "complete",
+                "compile_issues": [],
+                "quantifier": {
+                    "mode": "all",
+                    "subject_axis": "item",
+                    "subjects": ["declared-items"],
+                    "domain_kind": "source_defined",
+                    "domain_source": "public_source",
+                    "domain_predicate": "every item declared by the public sources",
+                },
+                "conditions": [
+                    {
+                        "condition_id": "public-obligation",
+                        "predicate": "the item is in the source-defined domain",
+                        "expected_outcome": "the declared obligation is witnessed",
+                        "required_witness_operators": ["exists"],
+                    }
+                ],
+                "checklist_projection": {
+                    "projection_mode": "aggregate",
+                    "behavioral_partitions": ["positive", "boundary"],
+                    "evidence_requirement": "Record a replayable source-bound witness.",
+                    "decision_rule": {
+                        "pass": "the witness satisfies the declared outcome",
+                        "fail": "the witness contradicts the declared outcome",
+                        "unknown": "the witness is absent or unresolved",
+                    },
+                },
+                "dependencies": [dependency] if dependency is not None else [],
+            }
+
+        direct_dependency = {
+            "relationship": "requires",
+            "target_rule_id": "R-EXIST",
+            "provenance": {
+                "kind": "direct",
+                "source_slice_ids": ["SL-VERIFY"],
+                "derivation_kind": None,
+                "input_rule_provenance_digests": {},
+            },
+        }
+        return {
+            "schema_version": "charting-loop/typed-rule-ir/v3",
+            "source_bundle": {
+                "schema_version": "charting-loop/task-source-bundle/v2",
+                "closure_status": "complete",
+                "sources": [
+                    {
+                        "source_id": "SRC-INSTRUCTION",
+                        "source_ref": "public-task:requirements",
+                        "source_digest": sha256_bytes(source_one.encode("utf-8")),
+                        "role": "instruction",
+                        "retrieval_status": "available",
+                        "content_encoding": "utf-8",
+                        "content_utf8": source_one,
+                    },
+                    {
+                        "source_id": "SRC-SPEC",
+                        "source_ref": "public-task:named-spec",
+                        "source_digest": sha256_bytes(source_two.encode("utf-8")),
+                        "role": "authoritative_specification",
+                        "retrieval_status": "available",
+                        "content_encoding": "utf-8",
+                        "content_utf8": source_two,
+                    },
+                ],
+            },
+            "source_clause_inventory": [
+                {
+                    "clause_id": "CLAUSE-EXIST",
+                    "clause_order_key": "CLAUSE-ORDER-0001",
+                    "source_slices": [slices["SL-EXIST"]],
+                    "clause_text": clause_one,
+                    "clause_digest": sha256_bytes(clause_one.encode("utf-8")),
+                    "requirement_level": "required",
+                    "mapping_status": "mapped",
+                    "rule_ids": ["R-EXIST"],
+                    "required_semantic_roles": [
+                        "obligation",
+                        "domain",
+                        "quantifier",
+                    ],
+                    "issue": "",
+                },
+                {
+                    "clause_id": "CLAUSE-VERIFY",
+                    "clause_order_key": "CLAUSE-ORDER-0002",
+                    "source_slices": [slices["SL-VERIFY"], slices["SL-EVIDENCE"]],
+                    "clause_text": clause_two_a + clause_two_b,
+                    "clause_digest": sha256_bytes(
+                        (clause_two_a + clause_two_b).encode("utf-8")
+                    ),
+                    "requirement_level": "required",
+                    "mapping_status": "mapped",
+                    "rule_ids": ["R-VERIFY"],
+                    "required_semantic_roles": [
+                        "obligation",
+                        "condition",
+                        "outcome",
+                        "witness_requirement",
+                        "relationship",
+                    ],
+                    "issue": "",
+                },
+            ],
+            "revision": {
+                "revision_id": "IR-REV-V3",
+                "revision_kind": "first_attempt",
+                "parent_ir_digest": None,
+                "qa_witness_refs": [],
+            },
+            "method_digest": "sha256:" + "2" * 64,
+            "compiler_config_digest": "sha256:" + "3" * 64,
+            "rules": [
+                {
+                    "rule_id": "R-EXIST",
+                    "statement": clause_one,
+                    "source_clause_ids": ["CLAUSE-EXIST"],
+                    "source_slices": [
+                        {"slice_id": "SL-EXIST", "semantic_role": "obligation"},
+                        {"slice_id": "SL-EXIST", "semantic_role": "domain"},
+                        {"slice_id": "SL-EXIST", "semantic_role": "quantifier"},
+                    ],
+                    "semantics": semantics(),
+                },
+                {
+                    "rule_id": "R-VERIFY",
+                    "statement": clause_two_a + " " + clause_two_b,
+                    "source_clause_ids": ["CLAUSE-VERIFY"],
+                    "source_slices": [
+                        {"slice_id": "SL-VERIFY", "semantic_role": "obligation"},
+                        {"slice_id": "SL-VERIFY", "semantic_role": "condition"},
+                        {"slice_id": "SL-VERIFY", "semantic_role": "outcome"},
+                        {"slice_id": "SL-VERIFY", "semantic_role": "relationship"},
+                        {
+                            "slice_id": "SL-EVIDENCE",
+                            "semantic_role": "witness_requirement",
+                        },
+                    ],
+                    "semantics": semantics(dependency=direct_dependency),
+                },
+            ],
+        }
+
+    def test_v3_binds_exact_disjoint_cross_source_slices_and_edge_provenance(self) -> None:
+        report = compile_typed_rule_ir(self._v3_ir())
+        self.assertEqual("charting-loop/typed-rule-compilation/v3", report["schema_version"])
+        self.assertTrue(report["compilation_complete"])
+        self.assertEqual("exact_byte_slices", report["source_closure"]["source_provenance_status"])
+        self.assertEqual(3, report["source_closure"]["source_slice_count"])
+        self.assertEqual(2, len(report["source_artifact_templates"]))
+        self.assertEqual(2, len(report["source_clause_templates"]))
+        dependency = report["rule_dependency_templates"][0]
+        self.assertEqual("direct", dependency["edge_provenance"]["kind"])
+        self.assertIn("source_rule_provenance_digest", dependency)
+        self.assertTrue(
+            all(
+                item["target_rule_id"] == "R-EXIST"
+                and item["edge_provenance"] == dependency["edge_provenance"]
+                for item in report["typed_dependency_templates"]
+            )
+        )
+
+    def test_v3_clause_order_is_explicit_and_not_list_position_authority(self) -> None:
+        value = self._v3_ir()
+        expected = compile_typed_rule_ir(value)
+        value["source_clause_inventory"].reverse()
+        self.assertEqual(expected, compile_typed_rule_ir(value))
+
+        duplicate_order = self._v3_ir()
+        duplicate_order["source_clause_inventory"][1]["clause_order_key"] = (
+            duplicate_order["source_clause_inventory"][0]["clause_order_key"]
+        )
+        with self.assertRaisesRegex(CorridorKitError, "order key is duplicated"):
+            compile_typed_rule_ir(duplicate_order)
+
+    def test_v3_rule_provenance_digest_binds_exact_source_bytes(self) -> None:
+        original = compile_typed_rule_ir(self._v3_ir())
+        changed = self._v3_ir()
+        source = changed["source_bundle"]["sources"][0]
+        source["content_utf8"] = source["content_utf8"].replace("✓", "★", 1)
+        source["source_digest"] = sha256_bytes(source["content_utf8"].encode("utf-8"))
+        clause = changed["source_clause_inventory"][0]
+        clause["clause_text"] = clause["clause_text"].replace("✓", "★", 1)
+        clause["clause_digest"] = sha256_bytes(clause["clause_text"].encode("utf-8"))
+        source_slice = clause["source_slices"][0]
+        source_slice["slice_digest"] = sha256_bytes(
+            clause["clause_text"].encode("utf-8")
+        )
+        revised = compile_typed_rule_ir(changed)
+        original_rule = next(
+            body for body in original["rule_bodies"] if body["rule_id"] == "R-EXIST"
+        )
+        revised_rule = next(
+            body for body in revised["rule_bodies"] if body["rule_id"] == "R-EXIST"
+        )
+        self.assertNotEqual(
+            original_rule["rule_source_provenance_digest"],
+            revised_rule["rule_source_provenance_digest"],
+        )
+
+    def test_v3_graph_rejects_duplicate_clause_order_identity_without_writing(self) -> None:
+        report = compile_typed_rule_ir(self._v3_ir())
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            for body in report["source_artifact_templates"]:
+                append_graph_record(
+                    path,
+                    record_type="task_source_artifact",
+                    actor="worker",
+                    body=body,
+                )
+            first, second = report["source_clause_templates"]
+            append_graph_record(
+                path, record_type="source_clause", actor="worker", body=first
+            )
+            before = path.read_bytes()
+            duplicate = {**second, "clause_order_key": first["clause_order_key"]}
+            with self.assertRaisesRegex(CorridorKitError, "order key is duplicated"):
+                append_graph_record(
+                    path,
+                    record_type="source_clause",
+                    actor="worker",
+                    body=duplicate,
+                )
+            self.assertEqual(before, path.read_bytes())
+
+    def test_v3_rejects_misaligned_digest_mismatch_and_missing_roles(self) -> None:
+        misaligned = self._v3_ir()
+        misaligned["source_clause_inventory"][0]["source_slices"][0]["byte_start"] = 1
+        with self.assertRaisesRegex(CorridorKitError, "UTF-8 code points"):
+            compile_typed_rule_ir(misaligned)
+
+        bad_digest = self._v3_ir()
+        bad_digest["source_clause_inventory"][1]["source_slices"][0][
+            "slice_digest"
+        ] = "sha256:" + "0" * 64
+        with self.assertRaisesRegex(CorridorKitError, "digest does not match frozen bytes"):
+            compile_typed_rule_ir(bad_digest)
+
+        missing_role = self._v3_ir()
+        missing_role["rules"][1]["source_slices"] = [
+            item
+            for item in missing_role["rules"][1]["source_slices"]
+            if item["semantic_role"] != "relationship"
+        ]
+        with self.assertRaisesRegex(CorridorKitError, "semantic roles are not mapped"):
+            compile_typed_rule_ir(missing_role)
+
+    def test_v3_derived_edge_requires_both_current_endpoint_provenance_digests(self) -> None:
+        value = self._v3_ir()
+        provenance_digests = {
+            rule["rule_id"]: rule["rule_source_provenance_digest"]
+            for rule in compile_typed_rule_ir(value)["rule_bodies"]
+        }
+        provenance = value["rules"][1]["semantics"]["dependencies"][0]["provenance"]
+        provenance.update(
+            {
+                "kind": "derived",
+                "source_slice_ids": [],
+                "derivation_kind": "ordering",
+                "input_rule_provenance_digests": provenance_digests,
+            }
+        )
+        self.assertTrue(compile_typed_rule_ir(value)["compilation_complete"])
+        provenance["input_rule_provenance_digests"].pop("R-EXIST")
+        with self.assertRaisesRegex(CorridorKitError, "both current endpoint"):
+            compile_typed_rule_ir(value)
+
+    def test_v3_supports_one_clause_to_many_rules_and_many_clauses_to_one_rule(self) -> None:
+        value = self._v3_ir()
+        value["source_clause_inventory"][0]["rule_ids"].append("R-VERIFY")
+        value["rules"][1]["source_clause_ids"].insert(0, "CLAUSE-EXIST")
+        value["rules"][1]["source_slices"].insert(
+            0, {"slice_id": "SL-EXIST", "semantic_role": "obligation"}
+        )
+        report = compile_typed_rule_ir(value)
+        self.assertTrue(report["compilation_complete"])
+        verify_rule = next(
+            body for body in report["rule_bodies"] if body["rule_id"] == "R-VERIFY"
+        )
+        self.assertEqual(
+            ["CLAUSE-EXIST", "CLAUSE-VERIFY"], verify_rule["source_clause_ids"]
+        )
+
+    def test_v3_unavailable_named_source_remains_unresolved_without_fabricated_bytes(self) -> None:
+        value = self._v3_ir()
+        source = value["source_bundle"]["sources"][1]
+        source.update(
+            {
+                "source_digest": None,
+                "retrieval_status": "unavailable",
+                "content_encoding": None,
+                "content_utf8": None,
+            }
+        )
+        value["source_bundle"]["closure_status"] = "unresolved"
+        clause = value["source_clause_inventory"][1]
+        clause["source_slices"] = clause["source_slices"][:1]
+        clause["clause_text"] = "Before release, verify every item."
+        clause["clause_digest"] = sha256_bytes(clause["clause_text"].encode("utf-8"))
+        clause["required_semantic_roles"].remove("witness_requirement")
+        value["rules"][1]["source_slices"] = [
+            binding
+            for binding in value["rules"][1]["source_slices"]
+            if binding["slice_id"] != "SL-EVIDENCE"
+        ]
+        report = compile_typed_rule_ir(value)
+        self.assertFalse(report["compilation_complete"])
+        self.assertEqual("unresolved", report["source_closure"]["bundle_status"])
+        self.assertIsNone(report["source_artifact_templates"][1]["content_utf8"])
+
+    def test_v3_graph_doctor_reports_exact_source_closure_and_stale_edge_revision(self) -> None:
+        report = compile_typed_rule_ir(self._v3_ir())
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            for body in report["source_artifact_templates"]:
+                append_graph_record(
+                    path,
+                    record_type="task_source_artifact",
+                    actor="worker",
+                    body=body,
+                )
+            for body in report["source_clause_templates"]:
+                append_graph_record(
+                    path,
+                    record_type="source_clause",
+                    actor="worker",
+                    body=body,
+                )
+            rule_records = {}
+            rule_bodies = {body["rule_id"]: body for body in report["rule_bodies"]}
+            for body in report["rule_bodies"]:
+                proposal = append_graph_record(
+                    path,
+                    record_type="rule_proposal",
+                    actor="worker",
+                    body=body,
+                )
+                rule_records[body["rule_id"]] = proposal["record"]["record_id"]
+                append_graph_record(
+                    path,
+                    record_type="rule_ratification",
+                    actor="worker",
+                    body={
+                        "rule_id": body["rule_id"],
+                        "rule_record_id": proposal["record"]["record_id"],
+                        "authority_ref": body["source_ref"],
+                        "authority_digest": body["source_digest"],
+                        "receipt_ref": f"source-compile:{body['rule_id']}",
+                    },
+                )
+            for body in report["checklist_templates"]:
+                append_graph_record(
+                    path,
+                    record_type="acceptance_checklist_item",
+                    actor="worker",
+                    body={
+                        **body,
+                        "source_rule_record_id": rule_records[body["source_rule_id"]],
+                    },
+                )
+            for body in report["rule_dependency_templates"]:
+                append_graph_record(
+                    path,
+                    record_type="rule_dependency",
+                    actor="worker",
+                    body=body,
+                )
+            for body in report["typed_dependency_templates"]:
+                append_graph_record(
+                    path,
+                    record_type="typed_dependency",
+                    actor="worker",
+                    body={
+                        **body,
+                        "source_rule_record_id": rule_records[body["source_rule_id"]],
+                        "target_rule_record_id": rule_records[body["target_rule_id"]],
+                    },
+                )
+            before_contradiction = path.read_bytes()
+            contradictory = json.loads(
+                json.dumps(report["typed_dependency_templates"][0])
+            )
+            contradictory.update(
+                {
+                    "dependency_id": "DEP-CONTRADICTORY-DIRECTION",
+                    "target_rule_id": "R-VERIFY",
+                    "source_rule_record_id": rule_records["R-VERIFY"],
+                    "target_rule_record_id": rule_records["R-VERIFY"],
+                    "target_rule_provenance_digest": rule_bodies["R-VERIFY"][
+                        "rule_source_provenance_digest"
+                    ],
+                }
+            )
+            with self.assertRaisesRegex(
+                CorridorKitError, "contradicts its source Rule semantics"
+            ):
+                append_graph_record(
+                    path,
+                    record_type="typed_dependency",
+                    actor="worker",
+                    body=contradictory,
+                )
+            self.assertEqual(before_contradiction, path.read_bytes())
+            doctor = graph_doctor(path)
+            self.assertEqual("exact_byte_slices", doctor["source_provenance"]["status"])
+            self.assertEqual([], doctor["source_provenance"]["semantic_role_issues"])
+            self.assertEqual(
+                [], doctor["source_provenance"]["provenance_less_dependency_ids"]
+            )
+
+            revised_ir = self._v3_ir()
+            revised_ir["rules"][0]["statement"] += " Revised projection."
+            revised_report = compile_typed_rule_ir(revised_ir)
+            revised = next(
+                json.loads(json.dumps(body))
+                for body in revised_report["rule_bodies"]
+                if body["rule_id"] == "R-EXIST"
+            )
+            revised["supersedes_record_id"] = rule_records["R-EXIST"]
+            append_graph_record(
+                path,
+                record_type="rule_revision",
+                actor="worker",
+                body=revised,
+            )
+            stale = graph_doctor(path)
+            self.assertTrue(stale["source_provenance"]["stale_dependency_provenance_ids"])
+            self.assertEqual("unresolved", stale["source_provenance"]["status"])
+
     def test_compiler_projects_every_subject_condition_cell_and_freezes_probe(self) -> None:
         report = compile_typed_rule_ir(self._ir())
         self.assertEqual(6, report["coverage_cell_count"])
