@@ -42,7 +42,7 @@ from .submission import (
     restore_submission,
     verify_submission,
 )
-from .graph import append_graph_record, initialize_graph, replay_graph
+from .graph import append_graph_record, graph_doctor, initialize_graph, replay_graph
 
 
 def _emit(value: Any, output: Path | None = None) -> None:
@@ -163,7 +163,7 @@ def _parser() -> argparse.ArgumentParser:
     body_source = graph_append.add_mutually_exclusive_group(required=True)
     body_source.add_argument("--body-json")
     body_source.add_argument("--body-file", type=Path)
-    for graph_command_name in ("replay", "validate"):
+    for graph_command_name in ("replay", "validate", "doctor"):
         graph_command = graph_commands.add_parser(graph_command_name)
         graph_command.add_argument("path", type=Path)
         graph_command.add_argument("--output", type=Path)
@@ -339,6 +339,9 @@ def main(argv: list[str] | None = None) -> int:
                         body=body,
                     )
                 )
+                return 0
+            if args.graph_command == "doctor":
+                _emit(graph_doctor(args.path), args.output)
                 return 0
             report = replay_graph(args.path)
             if args.graph_command == "validate":

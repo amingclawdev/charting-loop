@@ -25,6 +25,7 @@ from corridor_kit import (
     capture_command,
     create_scaffold,
     freeze_submission,
+    graph_doctor,
     initialize_graph,
     list_submissions,
     public_world_inventory,
@@ -1471,6 +1472,68 @@ class GraphKernelTests(unittest.TestCase):
             path, record_type=record_type, actor=actor, body=body
         )["record"]
 
+    def _ratified_rule(
+        self, path: Path, rule_id: str, statement: str, digest_digit: str
+    ) -> dict:
+        digest = "sha256:" + digest_digit * 64
+        rule = self._append(
+            path,
+            "rule_proposal",
+            {
+                "rule_id": rule_id,
+                "statement": statement,
+                "source_ref": f"official-task:{rule_id}",
+                "source_digest": digest,
+            },
+        )
+        self._append(
+            path,
+            "rule_ratification",
+            {
+                "rule_id": rule_id,
+                "rule_record_id": rule["record_id"],
+                "authority_ref": "official-task",
+                "authority_digest": digest,
+                "receipt_ref": f"receipt:{rule_id}",
+            },
+            actor="runner",
+        )
+        return rule
+
+    def _checklist(
+        self,
+        path: Path,
+        *,
+        item_id: str,
+        rule_id: str,
+        rule_record_id: str,
+        partitions: list[str],
+        required_partitions: list[str],
+    ) -> dict:
+        return self._append(
+            path,
+            "acceptance_checklist_item",
+            {
+                "checklist_item_id": item_id,
+                "source_rule_id": rule_id,
+                "source_rule_record_id": rule_record_id,
+                "obligation": "Exercise every declared behavior and retain evidence.",
+                "scope": {
+                    "artifact": "official-output",
+                    "required_partitions": required_partitions,
+                },
+                "quantifier": "all",
+                "behavioral_partitions": partitions,
+                "evidence_requirement": "An admitted replay receipt for each partition.",
+                "decision_rule": {
+                    "pass": "all required partitions have admitted witnesses",
+                    "fail": "a required partition contradicts the obligation",
+                    "unknown": "any required partition lacks an admitted witness",
+                },
+                "compilation_status": "complete",
+            },
+        )
+
     def test_graph_replays_authority_position_and_direction_without_pass(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "GRAPH.jsonl"
@@ -1824,6 +1887,677 @@ class GraphKernelTests(unittest.TestCase):
                 )
             self.assertEqual(path.read_bytes(), before)
             self.assertEqual(first["record"]["sequence"], 1)
+
+    def test_graph_doctor_detects_an_omitted_universal_partition_without_claiming_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            rule = self._ratified_rule(
+                path, "R-UNIVERSAL", "The output must work for every declared input class.", "8"
+            )
+            self._checklist(
+                path,
+                item_id="C-UNIVERSAL",
+                rule_id="R-UNIVERSAL",
+                rule_record_id=rule["record_id"],
+                partitions=["observed"],
+                required_partitions=["observed", "unobserved"],
+            )
+            position = self._append(
+                path,
+                "position_checkpoint",
+                {
+                    "position_id": "P-UNIVERSAL",
+                    "previous_position_ref": None,
+                    "task_identity": {"task_ref": "public/example"},
+                    "scope": {"working_set": ["/workspace"]},
+                    "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [],
+                    "artifact_record_ids": [],
+                    "checkpoint_kind": "acceptance_assessment",
+                    "checklist_item_ids": ["C-UNIVERSAL"],
+                    "ready_item_ids": ["C-UNIVERSAL"],
+                    "blocked_item_ids": [],
+                    "unresolved_checklist_item_ids": ["C-UNIVERSAL"],
+                    "checklist_assessments": {
+                        "C-UNIVERSAL": {
+                            "status": "unknown",
+                            "witness_fact_receipt_ids": [],
+                        }
+                    },
+                },
+            )
+            direction = self._append(
+                path,
+                "direction_proposal",
+                {
+                    "direction_id": "D-UNIVERSAL",
+                    "position_ref": position["record_id"],
+                    "statement": "Probe every required behavior before completion.",
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [],
+                    "evidence_refs": [],
+                    "checklist_item_ids": ["C-UNIVERSAL"],
+                    "ready_item_ids": ["C-UNIVERSAL"],
+                    "blocked_item_ids": [],
+                    "unresolved_checklist_item_ids": ["C-UNIVERSAL"],
+                },
+            )
+            self._append(
+                path,
+                "direction_snapshot",
+                {
+                    "position_ref": position["record_id"],
+                    "direction_record_ids": [direction["record_id"]],
+                    "selected_direction_record_id": direction["record_id"],
+                },
+            )
+
+            report = graph_doctor(path)
+            self.assertEqual("structurally_valid_but_incomplete", report["classification"])
+            self.assertIn(
+                "checklist_partition_coverage_missing:C-UNIVERSAL:unobserved",
+                report["incomplete_reasons"],
+            )
+            self.assertFalse(report["task_truth_assessed"])
+            self.assertFalse(report["pass_assessed"])
+            self.assertFalse(report["blocking_gate"])
+
+    def test_dependency_frontier_reprojection_and_invalidation_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            rule = self._ratified_rule(
+                path, "R-WORK", "Verify prerequisites before dependent work.", "9"
+            )
+            self._checklist(
+                path,
+                item_id="C-FIRST",
+                rule_id="R-WORK",
+                rule_record_id=rule["record_id"],
+                partitions=["first"],
+                required_partitions=["first"],
+            )
+            self._checklist(
+                path,
+                item_id="C-SECOND",
+                rule_id="R-WORK",
+                rule_record_id=rule["record_id"],
+                partitions=["second"],
+                required_partitions=["second"],
+            )
+            self._append(
+                path,
+                "typed_dependency",
+                {
+                    "dependency_id": "DEP-ORDER",
+                    "dependency_kind": "work",
+                    "from_ref": "C-SECOND",
+                    "to_ref": "C-FIRST",
+                    "relationship": "requires",
+                    "source_rule_id": "R-WORK",
+                    "source_rule_record_id": rule["record_id"],
+                },
+            )
+            before_cycle = path.read_bytes()
+            with self.assertRaisesRegex(CorridorKitError, "hard dependency graph contains a cycle"):
+                append_graph_record(
+                    path,
+                    record_type="typed_dependency",
+                    actor="worker",
+                    body={
+                        "dependency_id": "DEP-CYCLE",
+                        "dependency_kind": "work",
+                        "from_ref": "C-FIRST",
+                        "to_ref": "C-SECOND",
+                        "relationship": "requires",
+                        "source_rule_id": "R-WORK",
+                        "source_rule_record_id": rule["record_id"],
+                    },
+                )
+            self.assertEqual(before_cycle, path.read_bytes())
+            self._append(
+                path,
+                "typed_dependency",
+                {
+                    "dependency_id": "DEP-INVALIDATE",
+                    "dependency_kind": "work",
+                    "from_ref": "C-FIRST",
+                    "to_ref": "C-SECOND",
+                    "relationship": "invalidates",
+                    "source_rule_id": "R-WORK",
+                    "source_rule_record_id": rule["record_id"],
+                },
+            )
+            self._append(
+                path,
+                "typed_dependency",
+                {
+                    "dependency_id": "DEP-CONFLICT",
+                    "dependency_kind": "work",
+                    "from_ref": "C-FIRST",
+                    "to_ref": "C-SECOND",
+                    "relationship": "conflicts",
+                    "source_rule_id": "R-WORK",
+                    "source_rule_record_id": rule["record_id"],
+                },
+            )
+            conflict_position = self._append(
+                path,
+                "position_checkpoint",
+                {
+                    "position_id": "P-CONFLICT",
+                    "previous_position_ref": None,
+                    "task_identity": {"task_ref": "public/example"},
+                    "scope": {"working_set": ["/workspace"]},
+                    "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [],
+                    "artifact_record_ids": [],
+                    "checkpoint_kind": "row_progress",
+                    "checklist_item_ids": ["C-FIRST", "C-SECOND"],
+                    "ready_item_ids": [],
+                    "blocked_item_ids": ["C-FIRST", "C-SECOND"],
+                    "unresolved_checklist_item_ids": ["C-FIRST", "C-SECOND"],
+                    "checklist_assessments": {
+                        item: {"status": "unknown", "witness_fact_receipt_ids": []}
+                        for item in ("C-FIRST", "C-SECOND")
+                    },
+                },
+            )
+            self._append(
+                path,
+                "dependency_resolution",
+                {
+                    "dependency_id": "DEP-CONFLICT",
+                    "resolution": "precedence",
+                    "winner_ref": "C-FIRST",
+                    "authority_rule_id": "R-WORK",
+                    "authority_rule_record_id": rule["record_id"],
+                    "receipt_ref": "receipt:conflict-precedence",
+                },
+                actor="runner",
+            )
+            position = self._append(
+                path,
+                "position_checkpoint",
+                {
+                    "position_id": "P-READY",
+                    "previous_position_ref": conflict_position["record_id"],
+                    "task_identity": {"task_ref": "public/example"},
+                    "scope": {"working_set": ["/workspace"]},
+                    "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [],
+                    "artifact_record_ids": [],
+                    "checkpoint_kind": "row_progress",
+                    "checklist_item_ids": ["C-FIRST", "C-SECOND"],
+                    "ready_item_ids": ["C-FIRST"],
+                    "blocked_item_ids": ["C-SECOND"],
+                    "unresolved_checklist_item_ids": ["C-FIRST", "C-SECOND"],
+                    "checklist_assessments": {
+                        item: {"status": "unknown", "witness_fact_receipt_ids": []}
+                        for item in ("C-FIRST", "C-SECOND")
+                    },
+                },
+            )
+            premature = self._append(
+                path,
+                "direction_proposal",
+                {
+                    "direction_id": "D-PREMATURE",
+                    "position_ref": position["record_id"],
+                    "statement": "Start only the ready prerequisite; acceptance remains unknown.",
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [],
+                    "evidence_refs": [],
+                    "checklist_item_ids": ["C-FIRST", "C-SECOND"],
+                    "ready_item_ids": ["C-FIRST"],
+                    "blocked_item_ids": ["C-SECOND"],
+                    "unresolved_checklist_item_ids": ["C-FIRST", "C-SECOND"],
+                },
+            )
+            self._append(
+                path,
+                "direction_snapshot",
+                {
+                    "position_ref": position["record_id"],
+                    "direction_record_ids": [premature["record_id"]],
+                    "selected_direction_record_id": premature["record_id"],
+                },
+            )
+            premature_report = graph_doctor(path)
+            self.assertEqual(
+                "structurally_valid_but_incomplete",
+                premature_report["classification"],
+            )
+            self.assertIn(
+                "checklist_not_passed:C-FIRST",
+                premature_report["incomplete_reasons"],
+            )
+            before = path.read_bytes()
+            with self.assertRaisesRegex(CorridorKitError, "Direction ready_item_ids"):
+                append_graph_record(
+                    path,
+                    record_type="direction_proposal",
+                    actor="worker",
+                    body={
+                        "direction_id": "D-STALE",
+                        "position_ref": position["record_id"],
+                        "statement": "Skip the prerequisite.",
+                        "rule_record_ids": [rule["record_id"]],
+                        "fact_receipt_ids": [],
+                        "evidence_refs": [],
+                        "checklist_item_ids": ["C-FIRST", "C-SECOND"],
+                        "ready_item_ids": ["C-SECOND"],
+                        "blocked_item_ids": ["C-FIRST"],
+                        "unresolved_checklist_item_ids": ["C-FIRST", "C-SECOND"],
+                    },
+                )
+            self.assertEqual(before, path.read_bytes())
+
+            # A changed upstream assessment may not carry a dependent PASS forward.
+            before = path.read_bytes()
+            with self.assertRaisesRegex(CorridorKitError, "invalidate downstream"):
+                append_graph_record(
+                    path,
+                    record_type="position_checkpoint",
+                    actor="worker",
+                    body={
+                        "position_id": "P-BAD-CARRY",
+                        "previous_position_ref": position["record_id"],
+                        "task_identity": {"task_ref": "public/example"},
+                        "scope": {"working_set": ["/workspace"]},
+                        "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                        "rule_record_ids": [rule["record_id"]],
+                        "fact_receipt_ids": [],
+                        "artifact_record_ids": [],
+                        "checkpoint_kind": "acceptance_assessment",
+                        "checklist_item_ids": ["C-FIRST", "C-SECOND"],
+                        "ready_item_ids": [],
+                        "blocked_item_ids": [],
+                        "unresolved_checklist_item_ids": [],
+                        "checklist_assessments": {
+                            "C-FIRST": {"status": "pass", "witness_fact_receipt_ids": []},
+                            "C-SECOND": {"status": "pass", "witness_fact_receipt_ids": []},
+                        },
+                    },
+                )
+            self.assertEqual(before, path.read_bytes())
+
+            doctor = graph_doctor(path)
+            self.assertEqual("structurally_valid_but_incomplete", doctor["classification"])
+            self.assertEqual(["C-FIRST"], doctor["ready_item_ids"])
+            self.assertEqual(["C-SECOND"], doctor["blocked_item_ids"])
+            self.assertLess(
+                doctor["hard_dependency_topological_order"].index("C-FIRST"),
+                doctor["hard_dependency_topological_order"].index("C-SECOND"),
+            )
+
+    def test_position_binds_only_the_complete_latest_artifact_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            rule = self._ratified_rule(
+                path, "R-ARTIFACT", "Track the current declared artifact.", "d"
+            )
+            self._checklist(
+                path,
+                item_id="C-ARTIFACT",
+                rule_id="R-ARTIFACT",
+                rule_record_id=rule["record_id"],
+                partitions=["current-revision"],
+                required_partitions=["current-revision"],
+            )
+
+            def position_body(
+                position_id: str,
+                previous_position_ref: str | None,
+                artifact_record_ids: list[str],
+            ) -> dict:
+                return {
+                    "position_id": position_id,
+                    "previous_position_ref": previous_position_ref,
+                    "task_identity": {"task_ref": "public/example"},
+                    "scope": {"working_set": ["/workspace"]},
+                    "role_assignments": {
+                        "executor": "worker",
+                        "reviewer": "qa",
+                    },
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [],
+                    "artifact_record_ids": artifact_record_ids,
+                    "checkpoint_kind": "row_progress",
+                    "checklist_item_ids": ["C-ARTIFACT"],
+                    "ready_item_ids": ["C-ARTIFACT"],
+                    "blocked_item_ids": [],
+                    "unresolved_checklist_item_ids": ["C-ARTIFACT"],
+                    "checklist_assessments": {
+                        "C-ARTIFACT": {
+                            "status": "unknown",
+                            "witness_fact_receipt_ids": [],
+                        }
+                    },
+                }
+
+            intake = self._append(
+                path, "position_checkpoint", position_body("P-INTAKE", None, [])
+            )
+            artifact_v1 = self._append(
+                path,
+                "artifact_revision",
+                {
+                    "artifact_id": "A-OUTPUT",
+                    "path": "/workspace/output",
+                    "digest": "sha256:" + "1" * 64,
+                    "position_ref": intake["record_id"],
+                    "revision": 1,
+                },
+            )
+            before_omission = path.read_bytes()
+            with self.assertRaisesRegex(
+                CorridorKitError, "whole current latest artifact revision set"
+            ):
+                append_graph_record(
+                    path,
+                    record_type="position_checkpoint",
+                    actor="worker",
+                    body=position_body("P-OMITS-A1", intake["record_id"], []),
+                )
+            self.assertEqual(before_omission, path.read_bytes())
+
+            position_v1 = self._append(
+                path,
+                "position_checkpoint",
+                position_body("P-A1", intake["record_id"], [artifact_v1["record_id"]]),
+            )
+            direction_v1 = self._append(
+                path,
+                "direction_proposal",
+                {
+                    "direction_id": "D-A1",
+                    "position_ref": position_v1["record_id"],
+                    "statement": "Continue from the first artifact revision.",
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [],
+                    "evidence_refs": [],
+                    "checklist_item_ids": ["C-ARTIFACT"],
+                    "ready_item_ids": ["C-ARTIFACT"],
+                    "blocked_item_ids": [],
+                    "unresolved_checklist_item_ids": ["C-ARTIFACT"],
+                },
+            )
+            self._append(
+                path,
+                "direction_snapshot",
+                {
+                    "position_ref": position_v1["record_id"],
+                    "direction_record_ids": [direction_v1["record_id"]],
+                    "selected_direction_record_id": direction_v1["record_id"],
+                },
+            )
+            artifact_v2 = self._append(
+                path,
+                "artifact_revision",
+                {
+                    "artifact_id": "A-OUTPUT",
+                    "path": "/workspace/output",
+                    "digest": "sha256:" + "2" * 64,
+                    "position_ref": position_v1["record_id"],
+                    "revision": 2,
+                },
+            )
+            before_stale = path.read_bytes()
+            with self.assertRaisesRegex(
+                CorridorKitError, "whole current latest artifact revision set"
+            ):
+                append_graph_record(
+                    path,
+                    record_type="position_checkpoint",
+                    actor="worker",
+                    body=position_body(
+                        "P-STALE-A1",
+                        position_v1["record_id"],
+                        [artifact_v1["record_id"]],
+                    ),
+                )
+            self.assertEqual(before_stale, path.read_bytes())
+
+            position_v2 = self._append(
+                path,
+                "position_checkpoint",
+                position_body(
+                    "P-A2", position_v1["record_id"], [artifact_v2["record_id"]]
+                ),
+            )
+            before_reprojection = graph_doctor(path)
+            self.assertEqual(position_v2["record_id"], before_reprojection["latest_position_ref"])
+            self.assertIn(
+                "no_direction_for_latest_position",
+                before_reprojection["incomplete_reasons"],
+            )
+            direction_v2 = self._append(
+                path,
+                "direction_proposal",
+                {
+                    "direction_id": "D-A2",
+                    "position_ref": position_v2["record_id"],
+                    "statement": "Continue from the current artifact revision.",
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [],
+                    "evidence_refs": [],
+                    "checklist_item_ids": ["C-ARTIFACT"],
+                    "ready_item_ids": ["C-ARTIFACT"],
+                    "blocked_item_ids": [],
+                    "unresolved_checklist_item_ids": ["C-ARTIFACT"],
+                },
+            )
+            self._append(
+                path,
+                "direction_snapshot",
+                {
+                    "position_ref": position_v2["record_id"],
+                    "direction_record_ids": [direction_v2["record_id"]],
+                    "selected_direction_record_id": direction_v2["record_id"],
+                },
+            )
+            doctor = graph_doctor(path)
+            self.assertEqual(position_v2["record_id"], doctor["latest_position_ref"])
+            self.assertEqual(direction_v2["record_id"], doctor["direction_digest"])
+            self.assertNotIn(
+                "no_direction_for_latest_position", doctor["incomplete_reasons"]
+            )
+
+    def test_graph_doctor_complete_is_witness_bound_but_non_authoritative(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            admit_rule = self._ratified_rule(
+                path, "R-ADMIT", "Admit only replay-bound evidence.", "a"
+            )
+            task_rule = self._ratified_rule(
+                path, "R-TASK", "Produce the declared output.", "b"
+            )
+            self._checklist(
+                path,
+                item_id="C-ADMIT",
+                rule_id="R-ADMIT",
+                rule_record_id=admit_rule["record_id"],
+                partitions=["receipt"],
+                required_partitions=["receipt"],
+            )
+            self._checklist(
+                path,
+                item_id="C-TASK",
+                rule_id="R-TASK",
+                rule_record_id=task_rule["record_id"],
+                partitions=["declared-output"],
+                required_partitions=["declared-output"],
+            )
+            intake = self._append(
+                path,
+                "position_checkpoint",
+                {
+                    "position_id": "P-INTAKE-NEW",
+                    "previous_position_ref": None,
+                    "task_identity": {"task_ref": "public/example"},
+                    "scope": {"working_set": ["/workspace"]},
+                    "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                    "rule_record_ids": [admit_rule["record_id"], task_rule["record_id"]],
+                    "fact_receipt_ids": [],
+                    "artifact_record_ids": [],
+                    "checkpoint_kind": "row_progress",
+                    "checklist_item_ids": ["C-ADMIT", "C-TASK"],
+                    "ready_item_ids": ["C-ADMIT", "C-TASK"],
+                    "blocked_item_ids": [],
+                    "unresolved_checklist_item_ids": ["C-ADMIT", "C-TASK"],
+                    "checklist_assessments": {
+                        "C-ADMIT": {"status": "unknown", "witness_fact_receipt_ids": []},
+                        "C-TASK": {"status": "unknown", "witness_fact_receipt_ids": []}
+                    },
+                },
+            )
+            fact = self._append(
+                path,
+                "fact_proposal",
+                {
+                    "fact_id": "F-OUTPUT",
+                    "statement": "The declared output passed its replay.",
+                    "evidence_ref": "replay:output",
+                    "evidence_digest": "sha256:" + "c" * 64,
+                    "position_ref": intake["record_id"],
+                },
+            )
+            receipt = self._append(
+                path,
+                "fact_admission",
+                {
+                    "fact_id": "F-OUTPUT",
+                    "fact_record_id": fact["record_id"],
+                    "admission_rule_id": "R-ADMIT",
+                    "admission_rule_record_id": admit_rule["record_id"],
+                    "admitter_ref": "worker:replay",
+                    "receipt_ref": "receipt:output",
+                },
+            )
+            before_omission = path.read_bytes()
+            with self.assertRaisesRegex(
+                CorridorKitError, "whole current admitted Fact receipt set"
+            ):
+                append_graph_record(
+                    path,
+                    record_type="position_checkpoint",
+                    actor="worker",
+                    body={
+                        "position_id": "P-OMITS-ADMITTED-FACT",
+                        "previous_position_ref": intake["record_id"],
+                        "task_identity": {"task_ref": "public/example"},
+                        "scope": {"working_set": ["/workspace"]},
+                        "role_assignments": {
+                            "executor": "worker",
+                            "reviewer": "qa",
+                        },
+                        "rule_record_ids": [
+                            admit_rule["record_id"],
+                            task_rule["record_id"],
+                        ],
+                        "fact_receipt_ids": [],
+                        "artifact_record_ids": [],
+                        "checkpoint_kind": "row_progress",
+                        "checklist_item_ids": ["C-ADMIT", "C-TASK"],
+                        "ready_item_ids": ["C-ADMIT", "C-TASK"],
+                        "blocked_item_ids": [],
+                        "unresolved_checklist_item_ids": ["C-ADMIT", "C-TASK"],
+                        "checklist_assessments": {
+                            "C-ADMIT": {
+                                "status": "unknown",
+                                "witness_fact_receipt_ids": [],
+                            },
+                            "C-TASK": {
+                                "status": "unknown",
+                                "witness_fact_receipt_ids": [],
+                            },
+                        },
+                    },
+                )
+            self.assertEqual(before_omission, path.read_bytes())
+            accepted = self._append(
+                path,
+                "position_checkpoint",
+                {
+                    "position_id": "P-ACCEPTED",
+                    "previous_position_ref": intake["record_id"],
+                    "task_identity": {"task_ref": "public/example"},
+                    "scope": {"working_set": ["/workspace"]},
+                    "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                    "rule_record_ids": [admit_rule["record_id"], task_rule["record_id"]],
+                    "fact_receipt_ids": [receipt["record_id"]],
+                    "artifact_record_ids": [],
+                    "checkpoint_kind": "acceptance_assessment",
+                    "checklist_item_ids": ["C-ADMIT", "C-TASK"],
+                    "ready_item_ids": [],
+                    "blocked_item_ids": [],
+                    "unresolved_checklist_item_ids": [],
+                    "checklist_assessments": {
+                        "C-ADMIT": {
+                            "status": "pass",
+                            "witness_fact_receipt_ids": [receipt["record_id"]],
+                        },
+                        "C-TASK": {
+                            "status": "pass",
+                            "witness_fact_receipt_ids": [receipt["record_id"]],
+                        }
+                    },
+                },
+            )
+            before_direction = graph_doctor(path)
+            self.assertEqual(
+                "structurally_valid_but_incomplete",
+                before_direction["classification"],
+            )
+            self.assertIn(
+                "no_direction_for_latest_position",
+                before_direction["incomplete_reasons"],
+            )
+            direction = self._append(
+                path,
+                "direction_proposal",
+                {
+                    "direction_id": "D-DONE",
+                    "position_ref": accepted["record_id"],
+                    "statement": "Return the verified output.",
+                    "rule_record_ids": [task_rule["record_id"]],
+                    "fact_receipt_ids": [receipt["record_id"]],
+                    "evidence_refs": ["replay:output"],
+                    "checklist_item_ids": ["C-ADMIT", "C-TASK"],
+                    "ready_item_ids": [],
+                    "blocked_item_ids": [],
+                    "unresolved_checklist_item_ids": [],
+                },
+            )
+            self._append(
+                path,
+                "direction_snapshot",
+                {
+                    "position_ref": accepted["record_id"],
+                    "direction_record_ids": [direction["record_id"]],
+                    "selected_direction_record_id": direction["record_id"],
+                },
+            )
+
+            report = graph_doctor(path)
+            self.assertEqual("acceptance_assessed_complete", report["classification"])
+            self.assertTrue(report["structurally_valid"])
+            self.assertIsNotNone(report["acceptance_root"])
+            self.assertFalse(report["task_truth_assessed"])
+            self.assertFalse(report["pass_assessed"])
+            self.assertFalse(report["authorizes_mutation"])
+
+            path.write_text("{}\n", encoding="utf-8")
+            invalid = graph_doctor(path)
+            self.assertEqual("structurally_invalid", invalid["classification"])
+            self.assertFalse(invalid["blocking_gate"])
 
 
 if __name__ == "__main__":

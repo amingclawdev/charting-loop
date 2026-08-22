@@ -45,6 +45,30 @@ Each Builder must still compile the current task's acceptance items, Rule/Fact m
 coupled constraints, work rows, capability selections, domain checks, fixtures, and task adapter. Those bytes belong to
 the task-specific Corridor and must never be copied from an earlier benchmark task.
 
+The integrated benchmark executor is a separate, shorter profile. It has no Builder
+and does not pretend to construct a mature Corridor inside a task clock. Worker and
+QA instead share an append-only graph while doing and auditing the task. A Rule remains
+immutable authority; `acceptance_checklist_item` records are source-bound operational
+views that retain the Rule's obligation, scope, quantifier, behavioral partitions,
+evidence requirement, and pass/fail/unknown decision rule. An incomplete or ambiguous
+compilation remains explicit rather than becoming a weaker Rule.
+
+`typed_dependency` records distinguish normative, work-row, and evidence relations.
+Only `requires`, `produces_fact_for`, and `precondition_for` impose a hard order.
+For `requires`, `from_ref` depends on `to_ref`; for `produces_fact_for` and
+`precondition_for`, `to_ref` depends on `from_ref`.
+`overlaps`, `derived_from`, `subsumes`, and `can_parallelize_with` do not serialize
+work. A `conflicts` edge blocks the affected frontier until a current ratified source
+Rule authorizes a `dependency_resolution`; `invalidates` requires downstream
+assessment and Direction reprojection after upstream evidence changes.
+
+The graph retains one whole-state Position identity with two checkpoint projections:
+`row_progress` and `acceptance_assessment`. Both bind the whole current Rule closure,
+checklist, admitted-Fact root, artifact revisions, task/world identity, scope, roles,
+and parent Position. A Direction binds the exact Position plus its checklist and
+ready/blocked/unresolved frontier. It is not a free-floating status and cannot be
+reused after Position or upstream evidence changes.
+
 The acceptance report keeps three questions separate. `coverage.status` and
 `source_mapping_status` say whether every public normative clause has a ledger
 location. `definition_closure_status` says whether mapped clauses and acceptance
@@ -96,6 +120,26 @@ python3 -m corridor_kit capture \
   --output /tmp/charting-loop/builder-scratch/runs/baseline \
   --cwd /app -- python3 -m public_package.tests
 ```
+
+For the no-Builder benchmark profile, initialize, append, replay, and independently
+inspect the graph with:
+
+```sh
+python3 -m corridor_kit graph init /tmp/charting-loop/GRAPH.jsonl
+python3 -m corridor_kit graph append /tmp/charting-loop/GRAPH.jsonl \
+  --type acceptance_checklist_item --actor worker --body-file /tmp/item.json
+python3 -m corridor_kit graph replay /tmp/charting-loop/GRAPH.jsonl
+python3 -m corridor_kit graph doctor /tmp/charting-loop/GRAPH.jsonl
+```
+
+The Doctor is deterministic and read-only. It recomputes chain integrity, hard-edge
+topological order, checklist/Position alignment, Direction freshness, invalidation
+closure, and declared behavioral-partition coverage. Its report binds the exact graph
+bytes, graph identity, Doctor code, Position, Direction, and acceptance root. Its only
+classifications are `structurally_invalid`, `structurally_valid_but_incomplete`, and
+`acceptance_assessed_complete`. None is task truth, official PASS, delivery or mutation
+authority, or a blocking Gate. A valid but incomplete graph remains honest evidence;
+an invalid graph revision cannot erase the latest verified Worker submission.
 
 Inspect the reusable binary pack without selecting it for a task:
 

@@ -1637,6 +1637,11 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertIn("submission freeze", prompt)
             self.assertIn("first complete, locally verified, scorable freeze", prompt)
             self.assertIn("same total task clock", prompt)
+            self.assertIn("acceptance_checklist_item", prompt)
+            self.assertIn("typed_dependency", prompt)
+            self.assertIn("checkpoint_kind", prompt)
+            self.assertIn("graph doctor", prompt)
+            self.assertIn("structurally_valid_but_incomplete", prompt)
         self.assertIn(method_text, treatment)
         self.assertNotIn(method_text, control)
         qa = contract.graph_qa_prompt(
@@ -1664,6 +1669,9 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("snapshots/worker/worker-000001-example", qa)
         self.assertIn("Return exactly one JSON object", qa)
         self.assertIn(contract.GRAPH_AUDIT_SCHEMA, qa)
+        self.assertIn("recompute", qa.lower())
+        self.assertIn("invalidation closure", qa)
+        self.assertIn("not a QA verdict", qa)
         repair = contract.graph_repair_prompt(
             "Repair the public task.",
             arm="method",
@@ -1678,6 +1686,103 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("Reproduce every witness", repair)
         self.assertIn("Never overwrite or invalidate the prior freeze", repair)
         self.assertIn("same total task clock", repair)
+        self.assertIn("re-project invalidated checklist assessments", repair)
+        self.assertIn("graph doctor", repair)
+
+    def test_graph_revision_binds_matching_prefreeze_and_qa_intake_doctor_reports(self) -> None:
+        adapter = load_harbor_agent_with_stubs()
+        agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
+        doctor_calls: list[str] = []
+        writes: list[dict] = []
+        digest = "sha256:" + "d" * 64
+
+        async def doctor(self, environment, *, graph_path):
+            doctor_calls.append(graph_path)
+            return {
+                "schema_version": "charting-loop/graph-doctor-report/v1",
+                "classification": "structurally_valid_but_incomplete",
+                "structurally_valid": True,
+                "graph_digest": "sha256:" + "a" * 64,
+                "graph_bytes_digest": digest,
+                "doctor_code_digest": "sha256:" + "b" * 64,
+                "report_digest": "sha256:" + "c" * 64,
+                "head_record_id": "sha256:" + "e" * 64,
+                "record_count": 4,
+                "latest_position_ref": "sha256:" + "f" * 64,
+                "direction_digest": "sha256:" + "1" * 64,
+                "acceptance_root": "sha256:" + "2" * 64,
+            }
+
+        async def exec_root(self, environment, *, command):
+            return types.SimpleNamespace(return_code=0, stdout="", stderr="")
+
+        async def write(self, environment, *, path, value):
+            writes.append(value)
+
+        agent._graph_doctor_report = types.MethodType(doctor, agent)
+        agent.exec_as_root = types.MethodType(exec_root, agent)
+        agent._write_root_json = types.MethodType(write, agent)
+        report = asyncio.run(
+            agent._freeze_graph_revision(
+                object(), iteration=1, worker_snapshot_ref="worker-000001-example"
+            )
+        )
+
+        self.assertTrue(report["ok"])
+        self.assertEqual(2, len(doctor_calls))
+        self.assertEqual(adapter.GRAPH_PATH, doctor_calls[0])
+        self.assertTrue(doctor_calls[1].endswith("/GRAPH.jsonl"))
+        self.assertTrue(report["exact_graph_bytes_match"])
+        self.assertEqual("structurally_valid_but_incomplete", report["doctor_classification"])
+        self.assertEqual("sha256:" + "f" * 64, report["position_ref"])
+        self.assertEqual("sha256:" + "1" * 64, report["direction_digest"])
+        self.assertEqual("sha256:" + "2" * 64, report["acceptance_root"])
+        self.assertEqual(report["doctor_report_digest"], writes[0]["doctor_report_digest"])
+
+    def test_invalid_graph_revision_is_retained_read_only_without_blocking_fallback(self) -> None:
+        adapter = load_harbor_agent_with_stubs()
+        agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
+        writes: list[tuple[str, dict]] = []
+        commands: list[str] = []
+
+        async def doctor(self, environment, *, graph_path):
+            return {
+                "schema_version": "charting-loop/graph-doctor-report/v1",
+                "classification": "structurally_invalid",
+                "structurally_valid": False,
+                "graph_digest": None,
+                "graph_bytes_digest": "sha256:" + "d" * 64,
+                "doctor_code_digest": "sha256:" + "b" * 64,
+                "report_digest": "sha256:" + "c" * 64,
+                "errors": ["generic structural defect"],
+                "authorizes_mutation": False,
+                "blocking_gate": False,
+                "pass_assessed": False,
+            }
+
+        async def exec_root(self, environment, *, command):
+            commands.append(command)
+            return types.SimpleNamespace(return_code=0, stdout="", stderr="")
+
+        async def write(self, environment, *, path, value):
+            writes.append((path, value))
+
+        agent._graph_doctor_report = types.MethodType(doctor, agent)
+        agent.exec_as_root = types.MethodType(exec_root, agent)
+        agent._write_root_json = types.MethodType(write, agent)
+        report = asyncio.run(
+            agent._freeze_graph_revision(
+                object(), iteration=2, worker_snapshot_ref="worker-000002-example"
+            )
+        )
+
+        self.assertFalse(report["ok"])
+        self.assertEqual("graph_revision_invalid", report["status"])
+        self.assertTrue(report["manifest_path"].endswith("/GRAPH-FREEZE.json"))
+        self.assertEqual(report["manifest_path"], writes[0][0])
+        self.assertEqual("graph_revision_invalid", writes[0][1]["status"])
+        self.assertIn("chmod 0444", commands[-1])
+        self.assertIn("chmod 0555", commands[-1])
 
     def test_graph_audit_is_identity_bound_and_requires_replayable_repair_witness(self) -> None:
         snapshot_ref = "worker-000001-example"

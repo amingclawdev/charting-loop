@@ -2254,6 +2254,9 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
                 "structurally_valid": False,
                 "error": (validation.stderr or validation.stdout or "unreadable")[-2000:],
             }
+        doctor_report = await self._graph_doctor_report(
+            environment, graph_path=GRAPH_PATH
+        )
         raw_identity = await self.exec_as_root(
             environment,
             command=(
@@ -2294,6 +2297,7 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
             "graph_bytes_digest": raw_report.get("graph_bytes_digest"),
             "graph_bytes": raw_report.get("graph_bytes"),
             "graph_validation": graph_report,
+            "graph_doctor": doctor_report,
             "graph_structurally_valid": validation.return_code == 0
             and graph_report.get("ok") is True,
             "study_profile_path": STUDY_PROFILE_PATH,
@@ -2303,6 +2307,33 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
         }
         await self._write_root_json(environment, path=FREEZE_PATH, value=freeze)
         return freeze
+
+    async def _graph_doctor_report(
+        self, environment: BaseEnvironment, *, graph_path: str
+    ) -> dict[str, Any]:
+        """Run the read-only non-authoritative Doctor and retain its exact report."""
+
+        result = await self.exec_as_root(
+            environment,
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                f"python3 -m corridor_kit graph doctor {shlex.quote(graph_path)}"
+            ),
+        )
+        lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
+        try:
+            report = json.loads("\n".join(lines))
+        except (TypeError, json.JSONDecodeError):
+            report = {
+                "schema_version": "charting-loop/graph-doctor-report/v1",
+                "classification": "structurally_invalid",
+                "structurally_valid": False,
+                "errors": [(result.stderr or result.stdout or "unreadable")[-2000:]],
+                "authorizes_mutation": False,
+                "blocking_gate": False,
+                "pass_assessed": False,
+            }
+        return report
 
     async def _freeze_graph_revision(
         self,
@@ -2328,6 +2359,9 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
             "assert not root.exists(); root.mkdir(parents=True,mode=0o700); "
             "target.write_bytes(source.read_bytes()); target.chmod(0o444)"
         )
+        prefreeze_doctor = await self._graph_doctor_report(
+            environment, graph_path=GRAPH_PATH
+        )
         copied = await self.exec_as_root(
             environment,
             command=f"python3 -c {shlex.quote(copy_program)}",
@@ -2340,30 +2374,47 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
                 "status": "graph_revision_copy_failed",
                 "error": (copied.stderr or copied.stdout or "no output")[-2000:],
             }
-        validation = await self.exec_as_root(
-            environment,
-            command=(
-                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
-                f"python3 -m corridor_kit graph validate {shlex.quote(frozen_graph_path)}"
-            ),
+        qa_intake_doctor = await self._graph_doctor_report(
+            environment, graph_path=frozen_graph_path
         )
-        lines = [line for line in (validation.stdout or "").splitlines() if line.strip()]
-        try:
-            report = json.loads("\n".join(lines))
-        except (TypeError, json.JSONDecodeError):
-            report = {}
-        graph_digest = report.get("graph_digest")
+        graph_digest = qa_intake_doctor.get("graph_digest")
+        exact_bytes_match = (
+            prefreeze_doctor.get("graph_bytes_digest")
+            == qa_intake_doctor.get("graph_bytes_digest")
+            and isinstance(prefreeze_doctor.get("graph_bytes_digest"), str)
+        )
         if (
-            validation.return_code != 0
-            or report.get("ok") is not True
+            qa_intake_doctor.get("classification") == "structurally_invalid"
+            or qa_intake_doctor.get("structurally_valid") is not True
             or not isinstance(graph_digest, str)
+            or not exact_bytes_match
         ):
-            return {
-                "ok": False,
+            invalid_identity = {
+                "schema_version": "charting-loop/frozen-graph-revision/v1",
                 "iteration": iteration,
                 "worker_snapshot_ref": worker_snapshot_ref,
+                "graph_path": frozen_graph_path,
                 "status": "graph_revision_invalid",
-                "validation": report,
+                "prefreeze_doctor": prefreeze_doctor,
+                "qa_intake_doctor": qa_intake_doctor,
+                "exact_graph_bytes_match": exact_bytes_match,
+            }
+            await self._write_root_json(
+                environment,
+                path=manifest_path,
+                value=invalid_identity,
+            )
+            await self.exec_as_root(
+                environment,
+                command=(
+                    f"chmod 0444 {shlex.quote(manifest_path)} && "
+                    f"chmod 0555 {shlex.quote(revision_root.as_posix())}"
+                ),
+            )
+            return {
+                "ok": False,
+                **invalid_identity,
+                "manifest_path": manifest_path,
             }
         identity = {
             "schema_version": "charting-loop/frozen-graph-revision/v1",
@@ -2371,8 +2422,17 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
             "worker_snapshot_ref": worker_snapshot_ref,
             "graph_path": frozen_graph_path,
             "graph_digest": graph_digest,
-            "head_record_id": report.get("head_record_id"),
-            "record_count": report.get("record_count"),
+            "head_record_id": qa_intake_doctor.get("head_record_id"),
+            "record_count": qa_intake_doctor.get("record_count"),
+            "doctor_schema_version": qa_intake_doctor.get("schema_version"),
+            "doctor_code_digest": qa_intake_doctor.get("doctor_code_digest"),
+            "doctor_report_digest": qa_intake_doctor.get("report_digest"),
+            "doctor_classification": qa_intake_doctor.get("classification"),
+            "graph_bytes_digest": qa_intake_doctor.get("graph_bytes_digest"),
+            "position_ref": qa_intake_doctor.get("latest_position_ref"),
+            "direction_digest": qa_intake_doctor.get("direction_digest"),
+            "acceptance_root": qa_intake_doctor.get("acceptance_root"),
+            "exact_graph_bytes_match": exact_bytes_match,
         }
         await self._write_root_json(
             environment,
@@ -2386,7 +2446,13 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
                 f"chmod 0555 {shlex.quote(revision_root.as_posix())}"
             ),
         )
-        return {"ok": True, **identity, "manifest_path": manifest_path}
+        return {
+            "ok": True,
+            **identity,
+            "manifest_path": manifest_path,
+            "prefreeze_doctor": prefreeze_doctor,
+            "qa_intake_doctor": qa_intake_doctor,
+        }
 
     async def _read_graph_audit(
         self,
@@ -2668,6 +2734,7 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
         metadata["corridor_digest"] = freeze["corridor_digest"]
         metadata["graph_bytes_digest"] = freeze.get("graph_bytes_digest")
         metadata["graph_validation"] = freeze.get("graph_validation")
+        metadata["graph_doctor"] = freeze.get("graph_doctor")
         metadata["graph_structurally_valid"] = freeze.get("graph_structurally_valid")
         metadata["phase_events"].append("final_graph_sealed")
         metadata["submission_fallback"] = await self._restore_latest_worker_submission(

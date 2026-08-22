@@ -8,25 +8,30 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from .core import (
     MAX_JSON_BYTES,
     CorridorKitError,
     atomic_write_bytes,
     canonical_json_bytes,
+    sha256_bytes,
     sha256_json,
 )
 
 
 GRAPH_RECORD_SCHEMA = "charting-loop/graph-kernel-record/v1"
 GRAPH_REPLAY_SCHEMA = "charting-loop/graph-kernel-replay/v1"
+GRAPH_DOCTOR_SCHEMA = "charting-loop/graph-doctor-report/v1"
 GRAPH_RECORD_TYPES = frozenset(
     {
         "rule_proposal",
         "rule_revision",
         "rule_ratification",
         "rule_dependency",
+        "acceptance_checklist_item",
+        "typed_dependency",
+        "dependency_resolution",
         "fact_proposal",
         "fact_admission",
         "position_checkpoint",
@@ -36,6 +41,19 @@ GRAPH_RECORD_TYPES = frozenset(
     }
 )
 GRAPH_ACTORS = frozenset({"worker", "qa", "runner", "operator"})
+CHECKPOINT_KINDS = frozenset({"row_progress", "acceptance_assessment"})
+CHECKLIST_STATUSES = frozenset({"pass", "fail", "unknown"})
+CHECKLIST_COMPILATION_STATUSES = frozenset({"complete", "incomplete", "ambiguous"})
+DEPENDENCY_KINDS = frozenset({"normative", "work", "evidence"})
+HARD_DEPENDENCY_RELATIONSHIPS = frozenset(
+    {"requires", "produces_fact_for", "precondition_for"}
+)
+NON_ORDERING_DEPENDENCY_RELATIONSHIPS = frozenset(
+    {"derived_from", "subsumes", "overlaps", "can_parallelize_with"}
+)
+DEPENDENCY_RELATIONSHIPS = frozenset(
+    {*HARD_DEPENDENCY_RELATIONSHIPS, *NON_ORDERING_DEPENDENCY_RELATIONSHIPS, "conflicts", "invalidates"}
+)
 
 
 def _strict_object(raw: str, *, line_number: int) -> dict[str, Any]:
@@ -142,13 +160,13 @@ def load_graph(path: Path) -> list[dict[str, Any]]:
     return records
 
 
-def _assert_acyclic(edges: Mapping[str, set[str]]) -> None:
+def _assert_acyclic(edges: Mapping[str, set[str]], *, label: str = "rule dependency") -> None:
     visiting: set[str] = set()
     visited: set[str] = set()
 
     def visit(node: str) -> None:
         if node in visiting:
-            raise CorridorKitError("rule dependency graph contains a cycle")
+            raise CorridorKitError(f"{label} graph contains a cycle")
         if node in visited:
             return
         visiting.add(node)
@@ -161,6 +179,123 @@ def _assert_acyclic(edges: Mapping[str, set[str]]) -> None:
         visit(node)
 
 
+def _object(body: Mapping[str, Any], field: str, *, nonempty: bool = False) -> dict[str, Any]:
+    value = body.get(field)
+    if not isinstance(value, dict) or (nonempty and not value):
+        suffix = " non-empty" if nonempty else ""
+        raise CorridorKitError(f"graph body field {field} must be a{suffix} object")
+    return value
+
+
+def _topological_order(nodes: Iterable[str], edges: Mapping[str, set[str]]) -> list[str]:
+    """Return dependencies before dependants for source-depends-on-target edges."""
+
+    remaining = {node: set(edges.get(node, set())) for node in set(nodes)}
+    order: list[str] = []
+    while remaining:
+        ready = sorted(node for node, dependencies in remaining.items() if not dependencies)
+        if not ready:
+            raise CorridorKitError("hard dependency graph contains a cycle")
+        for node in ready:
+            order.append(node)
+            remaining.pop(node)
+        for dependencies in remaining.values():
+            dependencies.difference_update(ready)
+    return order
+
+
+def _hard_dependency_pair(dependency: Mapping[str, Any]) -> tuple[str, str]:
+    """Return (dependant, prerequisite) for one hard relationship."""
+
+    source = str(dependency["from_ref"])
+    target = str(dependency["to_ref"])
+    if dependency["relationship"] == "requires":
+        return source, target
+    return target, source
+
+
+def _position_bindings_present(body: Mapping[str, Any]) -> bool:
+    fields = {
+        "checkpoint_kind",
+        "checklist_item_ids",
+        "ready_item_ids",
+        "blocked_item_ids",
+        "unresolved_checklist_item_ids",
+        "checklist_assessments",
+    }
+    present = fields.intersection(body)
+    if present and present != fields:
+        missing = sorted(fields - present)
+        raise CorridorKitError(
+            "Position checkpoint has partial checklist bindings; missing " + ", ".join(missing)
+        )
+    return bool(present)
+
+
+def _direction_bindings_present(body: Mapping[str, Any]) -> bool:
+    fields = {
+        "checklist_item_ids",
+        "ready_item_ids",
+        "blocked_item_ids",
+        "unresolved_checklist_item_ids",
+    }
+    present = fields.intersection(body)
+    if present and present != fields:
+        missing = sorted(fields - present)
+        raise CorridorKitError(
+            "Direction proposal has partial checklist bindings; missing " + ", ".join(missing)
+        )
+    return bool(present)
+
+
+def _checklist_frontier(
+    *,
+    checklist_ids: set[str],
+    assessments: Mapping[str, Mapping[str, Any]],
+    typed_dependencies: Mapping[str, Mapping[str, Any]],
+    resolved_dependency_ids: set[str],
+    admitted_fact_ids: set[str],
+) -> tuple[list[str], list[str], list[str]]:
+    hard: dict[str, set[str]] = {item: set() for item in checklist_ids}
+    conflicts: dict[str, set[str]] = {item: set() for item in checklist_ids}
+    for dependency_id, dependency in typed_dependencies.items():
+        relationship = dependency["relationship"]
+        if relationship in HARD_DEPENDENCY_RELATIONSHIPS:
+            dependant, prerequisite = _hard_dependency_pair(dependency)
+            if dependant in checklist_ids:
+                hard[dependant].add(prerequisite)
+        elif relationship == "conflicts" and dependency_id not in resolved_dependency_ids:
+            source = dependency["from_ref"]
+            target = dependency["to_ref"]
+            if source not in checklist_ids:
+                continue
+            conflicts[source].add(target)
+            if target in checklist_ids:
+                conflicts[target].add(source)
+
+    def dependency_satisfied(target: str) -> bool:
+        if target in checklist_ids:
+            return assessments.get(target, {}).get("status") == "pass"
+        return target in admitted_fact_ids
+
+    ready: list[str] = []
+    blocked: list[str] = []
+    unresolved: list[str] = []
+    for item_id in sorted(checklist_ids):
+        status = assessments.get(item_id, {}).get("status", "unknown")
+        if status != "pass":
+            unresolved.append(item_id)
+        if status == "pass":
+            continue
+        if conflicts[item_id] or any(
+            not dependency_satisfied(target) for target in hard[item_id]
+        ):
+            blocked.append(item_id)
+        else:
+            ready.append(item_id)
+    return ready, blocked, unresolved
+
+
 def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Validate chain identity, authority receipts, and reference closure."""
 
@@ -168,6 +303,10 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     rule_source_digests: dict[str, str] = {}
     ratified_rules: dict[str, str] = {}
     dependencies: dict[str, set[str]] = {}
+    checklist_items: dict[str, dict[str, Any]] = {}
+    typed_dependencies: dict[str, dict[str, Any]] = {}
+    dependency_resolutions: dict[str, dict[str, Any]] = {}
+    hard_dependencies: dict[str, set[str]] = {}
     fact_records: dict[str, str] = {}
     fact_receipts: dict[str, str] = {}
     positions: dict[str, dict[str, Any]] = {}
@@ -175,7 +314,7 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     directions: dict[str, dict[str, Any]] = {}
     direction_ids: set[str] = set()
     artifacts: dict[str, int] = {}
-    artifact_record_ids: set[str] = set()
+    latest_artifact_record_ids: dict[str, str] = {}
     content_ids: set[str] = set()
     previous: str | None = None
 
@@ -271,6 +410,118 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             if relationship == "requires":
                 dependencies.setdefault(source, set()).add(target)
                 _assert_acyclic(dependencies)
+        elif record_type == "acceptance_checklist_item":
+            checklist_item_id = _text(body, "checklist_item_id")
+            source_rule_id = _text(body, "source_rule_id")
+            source_rule_record_id = _text(body, "source_rule_record_id")
+            _text(body, "obligation")
+            _object(body, "scope", nonempty=True)
+            _text(body, "quantifier")
+            _text_list(body, "behavioral_partitions", nonempty=True)
+            _text(body, "evidence_requirement")
+            decision_rule = _object(body, "decision_rule", nonempty=True)
+            if set(decision_rule) != {"pass", "fail", "unknown"} or any(
+                not isinstance(value, str) or not value.strip()
+                for value in decision_rule.values()
+            ):
+                raise CorridorKitError(
+                    "acceptance checklist decision_rule must define non-empty pass/fail/unknown"
+                )
+            compilation_status = _text(body, "compilation_status")
+            if compilation_status not in CHECKLIST_COMPILATION_STATUSES:
+                raise CorridorKitError("unknown checklist compilation_status")
+            if (
+                rule_records.get(source_rule_id) != source_rule_record_id
+                or source_rule_id not in ratified_rules
+            ):
+                raise CorridorKitError(
+                    "acceptance checklist item must bind the current ratified source Rule"
+                )
+            if checklist_item_id in checklist_items:
+                raise CorridorKitError(
+                    f"acceptance checklist item already exists: {checklist_item_id}"
+                )
+            checklist_items[checklist_item_id] = {
+                **body,
+                "record_id": expected_record,
+            }
+        elif record_type == "typed_dependency":
+            dependency_id = _text(body, "dependency_id")
+            dependency_kind = _text(body, "dependency_kind")
+            relationship = _text(body, "relationship")
+            source = _text(body, "from_ref")
+            target = _text(body, "to_ref")
+            source_rule_id = _text(body, "source_rule_id")
+            source_rule_record_id = _text(body, "source_rule_record_id")
+            if dependency_kind not in DEPENDENCY_KINDS:
+                raise CorridorKitError(f"unknown dependency kind: {dependency_kind}")
+            if relationship not in DEPENDENCY_RELATIONSHIPS:
+                raise CorridorKitError(f"unknown dependency relationship: {relationship}")
+            if source == target:
+                raise CorridorKitError("typed dependency cannot be self-referential")
+            if (
+                rule_records.get(source_rule_id) != source_rule_record_id
+                or source_rule_id not in ratified_rules
+            ):
+                raise CorridorKitError(
+                    "typed dependency must bind a current ratified source Rule"
+                )
+            known_rule_ids = set(rule_records)
+            known_checklist_ids = set(checklist_items)
+            known_fact_ids = set(fact_records)
+            if dependency_kind == "normative":
+                endpoints_valid = source in known_rule_ids and target in known_rule_ids
+            elif dependency_kind == "work":
+                endpoints_valid = source in known_checklist_ids and target in known_checklist_ids
+            else:
+                evidence_nodes = known_checklist_ids.union(known_fact_ids)
+                endpoints_valid = (
+                    source in evidence_nodes
+                    and target in evidence_nodes
+                    and bool({source, target}.intersection(known_checklist_ids))
+                )
+                if relationship == "invalidates":
+                    endpoints_valid = endpoints_valid and target in known_checklist_ids
+            if not endpoints_valid:
+                raise CorridorKitError("typed dependency contains a dangling or wrong-kind reference")
+            if dependency_id in typed_dependencies:
+                raise CorridorKitError(f"typed dependency already exists: {dependency_id}")
+            typed_dependencies[dependency_id] = dict(body)
+            if relationship in HARD_DEPENDENCY_RELATIONSHIPS:
+                dependant, prerequisite = _hard_dependency_pair(body)
+                hard_dependencies.setdefault(dependant, set()).add(prerequisite)
+                _assert_acyclic(hard_dependencies, label="hard dependency")
+        elif record_type == "dependency_resolution":
+            dependency_id = _text(body, "dependency_id")
+            resolution = _text(body, "resolution")
+            authority_rule_id = _text(body, "authority_rule_id")
+            authority_rule_record_id = _text(body, "authority_rule_record_id")
+            _text(body, "receipt_ref")
+            dependency = typed_dependencies.get(dependency_id)
+            if dependency is None or dependency["relationship"] != "conflicts":
+                raise CorridorKitError("dependency resolution must reference an unresolved conflict")
+            if dependency_id in dependency_resolutions:
+                raise CorridorKitError(f"dependency conflict is already resolved: {dependency_id}")
+            if resolution not in {"precedence", "reconciled", "waived"}:
+                raise CorridorKitError("unknown dependency conflict resolution")
+            if (
+                rule_records.get(authority_rule_id) != authority_rule_record_id
+                or authority_rule_id not in ratified_rules
+                or authority_rule_id != dependency["source_rule_id"]
+                or authority_rule_record_id != dependency["source_rule_record_id"]
+            ):
+                raise CorridorKitError(
+                    "dependency resolution requires its current ratified source authority Rule"
+                )
+            winner_ref = body.get("winner_ref")
+            if resolution == "precedence":
+                if winner_ref not in {dependency["from_ref"], dependency["to_ref"]}:
+                    raise CorridorKitError(
+                        "precedence resolution winner_ref must be one conflict endpoint"
+                    )
+            elif winner_ref is not None:
+                raise CorridorKitError("winner_ref is only valid for precedence resolution")
+            dependency_resolutions[dependency_id] = dict(body)
         elif record_type == "fact_proposal":
             fact_id = _text(body, "fact_id")
             _text(body, "statement")
@@ -318,12 +569,113 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 raise CorridorKitError(
                     "Position checkpoint must bind the whole current ratified Rule closure"
                 )
-            if not set(receipt_refs).issubset(set(fact_receipts.values())):
-                raise CorridorKitError("Position checkpoint references an unknown Fact receipt")
-            if not set(artifact_refs).issubset(artifact_record_ids):
-                raise CorridorKitError("Position checkpoint references an unknown artifact revision")
+            if set(receipt_refs) != set(fact_receipts.values()):
+                raise CorridorKitError(
+                    "Position checkpoint must bind the whole current admitted Fact receipt set"
+                )
+            if set(artifact_refs) != set(latest_artifact_record_ids.values()):
+                raise CorridorKitError(
+                    "Position checkpoint must bind the whole current latest artifact revision set"
+                )
             if position_id in position_ids:
                 raise CorridorKitError(f"Position checkpoint already exists: {position_id}")
+            if _position_bindings_present(body):
+                checkpoint_kind = _text(body, "checkpoint_kind")
+                if checkpoint_kind not in CHECKPOINT_KINDS:
+                    raise CorridorKitError(f"unknown Position checkpoint_kind: {checkpoint_kind}")
+                checklist_refs = _text_list(body, "checklist_item_ids")
+                current_checklist_ids = {
+                    item_id
+                    for item_id, item in checklist_items.items()
+                    if rule_records.get(item["source_rule_id"])
+                    == item["source_rule_record_id"]
+                    and item["source_rule_id"] in ratified_rules
+                }
+                if set(checklist_refs) != current_checklist_ids:
+                    raise CorridorKitError(
+                        "Position checkpoint must bind the whole current acceptance checklist"
+                    )
+                assessments = _object(body, "checklist_assessments")
+                if set(assessments) != current_checklist_ids:
+                    raise CorridorKitError(
+                        "Position checklist assessments must cover every current checklist item"
+                    )
+                for item_id, assessment in assessments.items():
+                    if not isinstance(assessment, dict) or set(assessment) != {
+                        "status",
+                        "witness_fact_receipt_ids",
+                    }:
+                        raise CorridorKitError(
+                            f"checklist assessment {item_id} must bind status and witnesses"
+                        )
+                    if assessment.get("status") not in CHECKLIST_STATUSES:
+                        raise CorridorKitError(f"checklist assessment {item_id} has unknown status")
+                    witness_refs = _text_list(assessment, "witness_fact_receipt_ids")
+                    if not set(witness_refs).issubset(set(receipt_refs)):
+                        raise CorridorKitError(
+                            f"checklist assessment {item_id} uses Facts outside its Position"
+                        )
+                active_typed_dependencies = {
+                    dependency_id: dependency
+                    for dependency_id, dependency in typed_dependencies.items()
+                    if dependency["source_rule_id"] in ratified_rules
+                    and rule_records.get(dependency["source_rule_id"])
+                    == dependency["source_rule_record_id"]
+                }
+                active_dependency_resolutions = {
+                    dependency_id
+                    for dependency_id, resolution in dependency_resolutions.items()
+                    if resolution["authority_rule_id"] in ratified_rules
+                    and rule_records.get(resolution["authority_rule_id"])
+                    == resolution["authority_rule_record_id"]
+                }
+                ready, blocked, unresolved = _checklist_frontier(
+                    checklist_ids=current_checklist_ids,
+                    assessments=assessments,
+                    typed_dependencies=active_typed_dependencies,
+                    resolved_dependency_ids=active_dependency_resolutions,
+                    admitted_fact_ids={
+                        fact_id
+                        for fact_id, receipt_id in fact_receipts.items()
+                        if receipt_id in receipt_refs
+                    },
+                )
+                if _text_list(body, "ready_item_ids") != ready:
+                    raise CorridorKitError("Position ready frontier does not match the graph")
+                if _text_list(body, "blocked_item_ids") != blocked:
+                    raise CorridorKitError("Position blocked frontier does not match the graph")
+                if _text_list(body, "unresolved_checklist_item_ids") != unresolved:
+                    raise CorridorKitError("Position unresolved checklist does not match the graph")
+                if expected_previous is not None:
+                    previous_position = positions[expected_previous]
+                    if _position_bindings_present(previous_position):
+                        prior_assessments = previous_position["checklist_assessments"]
+                        for dependency in active_typed_dependencies.values():
+                            if dependency["relationship"] != "invalidates":
+                                continue
+                            source = dependency["from_ref"]
+                            target = dependency["to_ref"]
+                            if target not in assessments:
+                                continue
+                            source_changed = (
+                                prior_assessments.get(source) != assessments.get(source)
+                                if source in assessments
+                                else (
+                                    (fact_receipts.get(source) in receipt_refs)
+                                    != (
+                                        fact_receipts.get(source)
+                                        in previous_position["fact_receipt_ids"]
+                                    )
+                                )
+                            )
+                            if source_changed:
+                                target_assessment = assessments[target]
+                                if target_assessment["status"] != "unknown" or target_assessment[
+                                    "witness_fact_receipt_ids"
+                                ]:
+                                    raise CorridorKitError(
+                                        "changed upstream assessment must invalidate downstream assessment"
+                                    )
             position_ids.add(position_id)
             positions[expected_record] = {"position_id": position_id, **body}
         elif record_type == "direction_proposal":
@@ -340,6 +692,21 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 raise CorridorKitError("Direction proposal uses Rules outside its Position")
             if not set(receipt_refs).issubset(set(position["fact_receipt_ids"])):
                 raise CorridorKitError("Direction proposal uses Facts outside its Position")
+            if _direction_bindings_present(body):
+                if not _position_bindings_present(position):
+                    raise CorridorKitError(
+                        "Direction checklist bindings require a checklist-bound Position"
+                    )
+                for field in (
+                    "checklist_item_ids",
+                    "ready_item_ids",
+                    "blocked_item_ids",
+                    "unresolved_checklist_item_ids",
+                ):
+                    if _text_list(body, field) != position[field]:
+                        raise CorridorKitError(
+                            f"Direction {field} does not match its exact Position"
+                        )
             if direction_id in direction_ids:
                 raise CorridorKitError(f"Direction proposal already exists: {direction_id}")
             direction_ids.add(direction_id)
@@ -370,7 +737,7 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             if revision != artifacts.get(artifact_id, 0) + 1:
                 raise CorridorKitError("artifact revision is not monotonic")
             artifacts[artifact_id] = revision
-            artifact_record_ids.add(expected_record)
+            latest_artifact_record_ids[artifact_id] = expected_record
 
     return {
         "ok": True,
@@ -379,6 +746,9 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         "head_record_id": previous,
         "rule_count": len(rule_records),
         "ratified_rule_count": len(ratified_rules),
+        "acceptance_checklist_item_count": len(checklist_items),
+        "typed_dependency_count": len(typed_dependencies),
+        "dependency_resolution_count": len(dependency_resolutions),
         "fact_proposal_count": len(fact_records),
         "admitted_fact_count": len(fact_receipts),
         "position_count": len(positions),
@@ -390,6 +760,288 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         "authorizes_mutation": False,
         "blocking_gate": False,
     }
+
+
+def _graph_projection(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Project current identities after structural validation, without task judgment."""
+
+    rule_records: dict[str, str] = {}
+    ratified_rules: set[str] = set()
+    checklist_items: dict[str, dict[str, Any]] = {}
+    dependencies: dict[str, dict[str, Any]] = {}
+    resolutions: dict[str, dict[str, Any]] = {}
+    fact_ids: set[str] = set()
+    fact_receipts: dict[str, str] = {}
+    positions: dict[str, dict[str, Any]] = {}
+    directions: dict[str, dict[str, Any]] = {}
+    direction_snapshots: list[dict[str, Any]] = []
+    for record in records:
+        record_type = record["record_type"]
+        body = record["body"]
+        if record_type == "rule_proposal":
+            rule_records[body["rule_id"]] = record["record_id"]
+        elif record_type == "rule_revision":
+            rule_records[body["rule_id"]] = record["record_id"]
+            ratified_rules.discard(body["rule_id"])
+        elif record_type == "rule_ratification":
+            ratified_rules.add(body["rule_id"])
+        elif record_type == "acceptance_checklist_item":
+            checklist_items[body["checklist_item_id"]] = {
+                **body,
+                "record_id": record["record_id"],
+            }
+        elif record_type == "typed_dependency":
+            dependencies[body["dependency_id"]] = dict(body)
+        elif record_type == "dependency_resolution":
+            resolutions[body["dependency_id"]] = dict(body)
+        elif record_type == "fact_proposal":
+            fact_ids.add(body["fact_id"])
+        elif record_type == "fact_admission":
+            fact_receipts[body["fact_id"]] = record["record_id"]
+        elif record_type == "position_checkpoint":
+            positions[record["record_id"]] = dict(body)
+        elif record_type == "direction_proposal":
+            directions[record["record_id"]] = dict(body)
+        elif record_type == "direction_snapshot":
+            direction_snapshots.append({**body, "record_id": record["record_id"]})
+    current_checklists = {
+        item_id: item
+        for item_id, item in checklist_items.items()
+        if item["source_rule_id"] in ratified_rules
+        and rule_records.get(item["source_rule_id"]) == item["source_rule_record_id"]
+    }
+    return {
+        "rule_records": rule_records,
+        "ratified_rules": ratified_rules,
+        "checklist_items": current_checklists,
+        "dependencies": dependencies,
+        "resolutions": resolutions,
+        "fact_ids": fact_ids,
+        "fact_receipts": fact_receipts,
+        "positions": positions,
+        "directions": directions,
+        "direction_snapshots": direction_snapshots,
+    }
+
+
+def _doctor_code_digest() -> str:
+    try:
+        return sha256_bytes(Path(__file__).read_bytes())
+    except OSError:
+        return sha256_json(
+            {
+                "schema_version": GRAPH_DOCTOR_SCHEMA,
+                "relationships": sorted(DEPENDENCY_RELATIONSHIPS),
+                "checkpoint_kinds": sorted(CHECKPOINT_KINDS),
+            }
+        )
+
+
+def graph_doctor(path: Path) -> dict[str, Any]:
+    """Inspect exact graph bytes without mutation or authority side effects.
+
+    The classification describes graph evidence only.  It is never task truth,
+    official verification, delivery authority, or a runtime Gate.
+    """
+
+    graph_bytes_digest: str | None = None
+    try:
+        if path.is_symlink() or not path.is_file():
+            raise CorridorKitError(f"graph must be a regular non-symlink file: {path}")
+        if path.stat().st_size > MAX_JSON_BYTES:
+            raise CorridorKitError(f"graph exceeds {MAX_JSON_BYTES} bytes: {path}")
+        graph_bytes_digest = sha256_bytes(path.read_bytes())
+        records = load_graph(path)
+        validation = validate_graph_records(records)
+    except (CorridorKitError, OSError, UnicodeError) as exc:
+        report: dict[str, Any] = {
+            "schema_version": GRAPH_DOCTOR_SCHEMA,
+            "classification": "structurally_invalid",
+            "structurally_valid": False,
+            "graph_digest": None,
+            "graph_bytes_digest": graph_bytes_digest,
+            "doctor_code_digest": _doctor_code_digest(),
+            "errors": [str(exc)],
+            "incomplete_reasons": [],
+            "hard_dependency_topological_order": [],
+            "latest_position_ref": None,
+            "direction_digest": None,
+            "acceptance_root": None,
+            "task_truth_assessed": False,
+            "pass_assessed": False,
+            "authorizes_mutation": False,
+            "blocking_gate": False,
+        }
+        report["report_digest"] = sha256_json(report)
+        return report
+
+    projection = _graph_projection(records)
+    checklist_items: dict[str, dict[str, Any]] = projection["checklist_items"]
+    dependencies: dict[str, dict[str, Any]] = projection["dependencies"]
+    current_nodes = set(checklist_items).union(projection["ratified_rules"])
+    # Proposed Facts belong to the dependency topology, but only a receipt in
+    # ``fact_receipts`` satisfies an evidence dependency.  Keeping those two
+    # identities separate lets Doctor expose a blocked edge without pretending
+    # that observing a proposal admitted it.
+    current_nodes.update(projection["fact_ids"])
+    hard_edges: dict[str, set[str]] = {}
+    unresolved_conflicts: list[str] = []
+    stale_dependency_ids: list[str] = []
+    active_resolutions = {
+        dependency_id
+        for dependency_id, resolution in projection["resolutions"].items()
+        if resolution["authority_rule_id"] in projection["ratified_rules"]
+        and projection["rule_records"].get(resolution["authority_rule_id"])
+        == resolution["authority_rule_record_id"]
+    }
+    for dependency_id, dependency in dependencies.items():
+        if (
+            dependency["source_rule_id"] not in projection["ratified_rules"]
+            or projection["rule_records"].get(dependency["source_rule_id"])
+            != dependency["source_rule_record_id"]
+        ):
+            stale_dependency_ids.append(dependency_id)
+            continue
+        source = dependency["from_ref"]
+        target = dependency["to_ref"]
+        if source not in current_nodes or target not in current_nodes:
+            continue
+        if dependency["relationship"] in HARD_DEPENDENCY_RELATIONSHIPS:
+            dependant, prerequisite = _hard_dependency_pair(dependency)
+            hard_edges.setdefault(dependant, set()).add(prerequisite)
+        elif (
+            dependency["relationship"] == "conflicts"
+            and dependency_id not in active_resolutions
+        ):
+            unresolved_conflicts.append(dependency_id)
+    topological_order = _topological_order(current_nodes, hard_edges)
+
+    positions: dict[str, dict[str, Any]] = projection["positions"]
+    latest_position_ref = next(reversed(positions), None)
+    latest_position = positions.get(latest_position_ref) if latest_position_ref else None
+    incomplete_reasons: list[str] = []
+    if not checklist_items:
+        incomplete_reasons.append("no_current_acceptance_checklist")
+    checklist_rule_ids = {item["source_rule_id"] for item in checklist_items.values()}
+    for rule_id in sorted(projection["ratified_rules"] - checklist_rule_ids):
+        incomplete_reasons.append(f"rule_missing_checklist:{rule_id}")
+    for item_id, item in sorted(checklist_items.items()):
+        if item["compilation_status"] != "complete":
+            incomplete_reasons.append(
+                f"checklist_compilation_{item['compilation_status']}:{item_id}"
+            )
+        required_partitions = item["scope"].get("required_partitions")
+        if isinstance(required_partitions, list) and all(
+            isinstance(value, str) and value.strip() for value in required_partitions
+        ):
+            omitted = sorted(set(required_partitions) - set(item["behavioral_partitions"]))
+            if omitted:
+                incomplete_reasons.append(
+                    f"checklist_partition_coverage_missing:{item_id}:" + ",".join(omitted)
+                )
+    if unresolved_conflicts:
+        incomplete_reasons.extend(
+            f"unresolved_dependency_conflict:{value}"
+            for value in sorted(unresolved_conflicts)
+        )
+    incomplete_reasons.extend(
+        f"stale_dependency_authority:{value}" for value in sorted(stale_dependency_ids)
+    )
+
+    assessments: dict[str, Any] = {}
+    acceptance_root: str | None = None
+    if latest_position is None:
+        incomplete_reasons.append("no_position_checkpoint")
+    elif not _position_bindings_present(latest_position):
+        incomplete_reasons.append("legacy_position_missing_checklist_bindings")
+    else:
+        assessments = latest_position["checklist_assessments"]
+        if latest_position["checkpoint_kind"] != "acceptance_assessment":
+            incomplete_reasons.append("latest_position_not_acceptance_assessment")
+        acceptance_root = sha256_json(
+            {
+                "checklist_items": {
+                    item_id: checklist_items[item_id]
+                    for item_id in sorted(checklist_items)
+                },
+                "assessments": {
+                    item_id: assessments[item_id] for item_id in sorted(assessments)
+                },
+            }
+        )
+        for item_id in sorted(checklist_items):
+            assessment = assessments.get(item_id, {})
+            if assessment.get("status") != "pass":
+                incomplete_reasons.append(f"checklist_not_passed:{item_id}")
+            elif not assessment.get("witness_fact_receipt_ids"):
+                incomplete_reasons.append(f"checklist_pass_missing_witness:{item_id}")
+        if latest_position.get("unresolved_checklist_item_ids"):
+            incomplete_reasons.append("latest_position_has_unresolved_checklist_items")
+        if latest_position.get("blocked_item_ids"):
+            incomplete_reasons.append("latest_position_has_blocked_checklist_items")
+
+    selected_direction_ref: str | None = None
+    for snapshot in reversed(projection["direction_snapshots"]):
+        if snapshot["position_ref"] == latest_position_ref:
+            selected_direction_ref = snapshot.get("selected_direction_record_id")
+            break
+    if selected_direction_ref is None:
+        selected_direction_ref = next(
+            (
+                record_id
+                for record_id, body in reversed(list(projection["directions"].items()))
+                if body["position_ref"] == latest_position_ref
+            ),
+            None,
+        )
+    selected_direction = projection["directions"].get(selected_direction_ref)
+    if selected_direction is None:
+        incomplete_reasons.append("no_direction_for_latest_position")
+    elif not _direction_bindings_present(selected_direction):
+        incomplete_reasons.append("legacy_direction_missing_checklist_bindings")
+    elif latest_position is not None:
+        for field in (
+            "checklist_item_ids",
+            "ready_item_ids",
+            "blocked_item_ids",
+            "unresolved_checklist_item_ids",
+        ):
+            if selected_direction[field] != latest_position[field]:
+                incomplete_reasons.append(f"stale_direction_{field}")
+
+    classification = (
+        "acceptance_assessed_complete"
+        if not incomplete_reasons
+        else "structurally_valid_but_incomplete"
+    )
+    report = {
+        "schema_version": GRAPH_DOCTOR_SCHEMA,
+        "classification": classification,
+        "structurally_valid": True,
+        "graph_digest": sha256_json(records),
+        "graph_bytes_digest": graph_bytes_digest,
+        "doctor_code_digest": _doctor_code_digest(),
+        "record_count": validation["record_count"],
+        "head_record_id": validation["head_record_id"],
+        "errors": [],
+        "incomplete_reasons": sorted(set(incomplete_reasons)),
+        "hard_dependency_topological_order": topological_order,
+        "ready_item_ids": (
+            list(latest_position.get("ready_item_ids", [])) if latest_position else []
+        ),
+        "blocked_item_ids": (
+            list(latest_position.get("blocked_item_ids", [])) if latest_position else []
+        ),
+        "latest_position_ref": latest_position_ref,
+        "direction_digest": selected_direction_ref,
+        "acceptance_root": acceptance_root,
+        "task_truth_assessed": False,
+        "pass_assessed": False,
+        "authorizes_mutation": False,
+        "blocking_gate": False,
+    }
+    report["report_digest"] = sha256_json(report)
+    return report
 
 
 def replay_graph(path: Path) -> dict[str, Any]:

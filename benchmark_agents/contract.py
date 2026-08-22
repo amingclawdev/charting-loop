@@ -1108,6 +1108,16 @@ bind each current Rule to its public source with `rule_ratification`. Add
 from another. Propose evidence as `fact_proposal`; admit it only through a current
 ratified admission Rule and an explicit `fact_admission` receipt.
 
+Compile each current Rule into source-bound `acceptance_checklist_item` records.
+Preserve its exact obligation, scope and quantifier, required behavioral partitions,
+evidence requirement, and pass/fail/unknown decision rule; mark an incomplete or
+ambiguous compilation honestly. Add `typed_dependency` records for normative,
+work-row, and evidence dependencies. Only `requires`, `produces_fact_for`, and
+`precondition_for` impose order; a conflict remains blocked until a current ratified
+Rule authorizes a `dependency_resolution`. `requires` points from dependant to
+prerequisite; `produces_fact_for` and `precondition_for` point from prerequisite to
+dependant.
+
 At meaningful state changes, append a whole-state `position_checkpoint` that binds
 the current Rule records, admitted Fact receipts, task/world identity, scope, role
 assignments, and known artifact revisions. Then write one or more
@@ -1115,11 +1125,26 @@ assignments, and known artifact revisions. Then write one or more
 Kernel only checks identity and reference closure. A later QA reviews the path but
 does not authoritatively choose Direction for you.
 
+For new checkpoints, bind `checkpoint_kind` (`row_progress` or
+`acceptance_assessment`), the whole current checklist, pass/fail/unknown assessments
+and Fact-receipt witnesses, plus the recomputed ready, blocked, and unresolved
+frontier. Bind those same checklist/frontier identities into every Direction. If an
+upstream assessment changes, re-project downstream assessment and Direction instead
+of carrying a stale completion claim forward.
+
 Use:
 
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph append {GRAPH_PATH} --type <record-type> --actor worker --body-file <json-file>`
 
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph replay {GRAPH_PATH}`
+
+Immediately before each submission freeze, run the deterministic read-only check:
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph doctor {GRAPH_PATH}`
+
+Its only classifications are `structurally_invalid`,
+`structurally_valid_but_incomplete`, and `acceptance_assessed_complete`. The report
+does not choose Direction or establish task truth, delivery authority, or PASS.
 
 An invalid graph mutation fails closed and leaves graph bytes unchanged, but it is
 advisory: correct the record or continue the official task. Never wait for graph
@@ -1173,6 +1198,10 @@ There was no Builder. Read the byte-identical Graph Kernel, frozen Study profile
 
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph replay {graph_path}`
 
+Re-run the same read-only Doctor over those exact frozen bytes:
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph doctor {graph_path}`
+
 Audit the entire path: official-source Rule coverage and dependencies, authority
 receipts, evidence-bound Facts, whole-state Position checkpoints, whether each
 Direction is projected from its claimed Position, and whether the latest official
@@ -1189,6 +1218,10 @@ is not task truth or PASS. You may identify a better Direction, but you must not
 mutate the task, graph, Worker snapshot, or official outputs. Only a concrete
 replayable witness may recommend that the harness resume the same Worker for repair;
 QA itself never repairs or blocks final submission.
+Treat the Doctor as deterministic audit material: inspect checklist partition
+coverage, dependency order, ready/blocked frontier, invalidation closure, and exact
+Position-bound Direction freshness. Its classification is not a QA verdict, Gate,
+or substitute for inspecting the official output.
 The latest verified Worker snapshot ref is {json.dumps(latest_worker_snapshot_ref)}.
 This is audit iteration {audit_iteration}. About {remaining_seconds} seconds remain
 on the same total task clock; there is no QA-owned time slice. Write a complete
@@ -1235,7 +1268,8 @@ not authority: reject a suggested repair if replay or the current ratified Rules
 admitted Facts do not support it.
 
 If a repair is justified, update the official task, append new evidence/Position and
-Direction records to the live graph, verify the complete task, and freeze a new
+Direction records to the live graph, re-project invalidated checklist assessments,
+run `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph doctor {GRAPH_PATH}`, verify the complete task, and freeze a new
 complete scorable Worker revision. Never overwrite or invalidate the prior freeze.
 If no witness reproduces or the repair remains incomplete, preserve the prior freeze
 and return without advancing it.

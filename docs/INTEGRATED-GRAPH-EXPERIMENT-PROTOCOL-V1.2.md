@@ -62,6 +62,24 @@ answer, truth inference, planner, completion authority, or blocking Gate.
 Graph validity means only structural validity. It cannot establish correctness,
 deliverability, PASS, authority to mutate the task, or convergence.
 
+For the CL-110 task-neutral projection, each ratified Rule may be compiled into
+source-bound acceptance checklist items that preserve its exact scope, quantifier,
+behavioral partitions, evidence requirement, and three-way decision rule. Typed
+normative, work-row, and evidence dependencies distinguish hard order, conflict,
+invalidation, and explicitly non-ordering relations. Position remains one whole-state
+identity, with `row_progress` and `acceptance_assessment` projections; every effective
+Direction binds that exact Position's checklist and ready/blocked/unresolved frontier.
+These operational records do not replace Rule authority.
+
+Immediately before pairing a Worker snapshot with a graph revision, the harness runs
+the read-only graph Doctor over the live bytes, copies them, and runs the same Doctor
+again at QA intake. The paired manifest binds graph/byte digest, Doctor schema/code/
+report digest, PositionRef, Direction digest, and acceptance root. Byte mismatch or a
+`structurally_invalid` graph makes that graph revision non-auditable evidence, but it
+does not erase a verified Worker snapshot, prevent deadline fallback, or prevent the
+official verifier. `structurally_valid_but_incomplete` remains auditable honest
+evidence. `acceptance_assessed_complete` is still not official PASS.
+
 ## One-clock execution sequence
 
 There is one official task clock and no fixed Builder, Worker, QA, or repair allocation.
@@ -70,7 +88,9 @@ The harness uses this sequence entirely **before** the official verifier:
 1. The Worker solves the task with its frozen arm condition and K. It creates a
    complete scorable output early and freezes Worker revision 1.
 2. The harness freezes the exact graph revision paired with that Worker snapshot.
-3. The arm-native QA audits the immutable pair under the same remaining task clock.
+3. The harness binds matching pre-freeze and QA-intake Doctor reports to the immutable
+   graph/Worker pair; arm-native QA re-runs the Doctor and audits the pair under the
+   same remaining task clock.
 4. QA may recommend repair only with an identity-bound, replayable witness naming the
    observation, expected condition, evidence, replay procedure, Position, and exact
    Worker snapshot. QA is advisory; it neither mutates output nor acts as a Gate.
@@ -113,6 +133,15 @@ all audit reports, invalid append attempts, timing/usage, final restore identity
 official verifier output, and private Harbor custody. Report the complete revision and
 audit sequence, not only the final score. A score difference remains conditional on K;
 a single pair or adaptive rerun does not establish general Method efficacy.
+
+The CL-109 launch attempts are not official Study results: all four original jobs are
+invalid because the harness raised a retained finalization exception. Their post-hoc
+diagnostic verifier output is mechanism evidence only. The two observed shapes were
+a universal acceptance boundary narrowed to one observed partition, and Direction
+projected before sufficient source Facts with a local check mistaken for whole-task
+acceptance. The generic checklist, dependency, Position binding, and Doctor behaviors
+above address those shapes without embedding task names, task solutions, or verifier
+answers in the Kit.
 
 ## Launch rule
 
