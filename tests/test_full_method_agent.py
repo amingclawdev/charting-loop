@@ -2097,8 +2097,8 @@ class FullMethodContractTests(unittest.TestCase):
         adapter = load_harbor_agent_with_stubs()
         method = object.__new__(adapter.ChartingLoopGraphKernelMethodAgent)
         neutral = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
-        self.assertEqual(method.version(), "1.1.0")
-        self.assertEqual(neutral.version(), "1.1.0")
+        self.assertEqual(method.version(), "1.2.0")
+        self.assertEqual(neutral.version(), "1.2.0")
         self.assertEqual(method.ROLE_SEQUENCE, ("worker", "qa"))
         self.assertEqual(neutral.ROLE_SEQUENCE, ("worker", "qa"))
         self.assertIn("Worker compile", method.ORCHESTRATION_MESSAGE)
@@ -2138,8 +2138,15 @@ class FullMethodContractTests(unittest.TestCase):
         }
         roles = {"worker": object(), "qa": object()}
         agent._child_agent = lambda role: roles[role]
+        test_case = self
         events: list[str] = []
-        state = {"worker_snapshot": None, "compile_iteration": 0}
+        state = {
+            "worker_snapshot": None,
+            "compile_iteration": 0,
+            "rule_closure_established": False,
+            "position_ref": None,
+            "direction_digest": None,
+        }
 
         async def write_root_json(self, environment, *, path, value):
             events.append("study-frozen")
@@ -2155,7 +2162,19 @@ class FullMethodContractTests(unittest.TestCase):
 
         async def resume(self, role, child, prompt, environment, *, phase, deadline):
             events.append(f"{role}-resume:{phase}")
+            if role == "worker" and phase.startswith("worker-recompile-"):
+                test_case.assertFalse(state["rule_closure_established"])
+                test_case.assertIsNone(state["position_ref"])
+                test_case.assertIsNone(state["direction_digest"])
             if role == "worker" and phase == "worker-implementation":
+                test_case.assertTrue(state["rule_closure_established"])
+                test_case.assertIn("RuleClosure", prompt)
+                test_case.assertIn("position_checkpoint", prompt)
+                test_case.assertIn("direction_proposal", prompt)
+                state["position_ref"] = "sha256:" + "e" * 64
+                state["direction_digest"] = "sha256:" + "f" * 64
+                events.append("position-checkpoint-created")
+                events.append("direction-proposal-created")
                 state["worker_snapshot"] = "worker-000001-implemented"
             return adapter.AgentContext(), {
                 "phase": phase,
@@ -2206,6 +2225,11 @@ class FullMethodContractTests(unittest.TestCase):
         async def install_closure(self, environment, *, candidate, qa_path, iteration):
             events.append(f"rule-closure-{iteration}")
             passed = iteration == 2
+            if passed:
+                state["rule_closure_established"] = True
+            else:
+                test_case.assertIsNone(state["position_ref"])
+                test_case.assertIsNone(state["direction_digest"])
             return {
                 "ok": True,
                 "graph_digest": "sha256:" + str(iteration) * 64,
@@ -2215,11 +2239,16 @@ class FullMethodContractTests(unittest.TestCase):
             }
 
         async def freeze_graph(self, environment, *, iteration, worker_snapshot_ref):
+            test_case.assertTrue(state["rule_closure_established"])
+            test_case.assertIsNotNone(state["position_ref"])
+            test_case.assertIsNotNone(state["direction_digest"])
             events.append(f"graph-freeze-{iteration}:{worker_snapshot_ref}")
             return {
                 "ok": True,
                 "graph_path": f"/audit/graph-{iteration}.jsonl",
                 "graph_digest": "sha256:" + str(iteration) * 64,
+                "position_ref": state["position_ref"],
+                "direction_digest": state["direction_digest"],
             }
 
         async def open_qa(self, environment):
@@ -2314,6 +2343,8 @@ class FullMethodContractTests(unittest.TestCase):
                 "compile-decision-2:True",
                 "rule-closure-2",
                 "worker-resume:worker-implementation",
+                "position-checkpoint-created",
+                "direction-proposal-created",
                 "graph-freeze-1:worker-000001-implemented",
                 "qa-open",
                 "qa-resume:qa-audit-0001",
@@ -2331,6 +2362,32 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertFalse(context.metadata["qa_budget_is_separate"])
         self.assertFalse(context.metadata["qa_can_repair"])
         self.assertEqual(context.metadata["repair_actor"], "same_worker_session")
+        self.assertEqual(
+            context.metadata["graph_revision_freezes"][0]["position_ref"],
+            "sha256:" + "e" * 64,
+        )
+        self.assertEqual(
+            context.metadata["graph_revision_freezes"][0]["direction_digest"],
+            "sha256:" + "f" * 64,
+        )
+        self.assertEqual(
+            context.metadata["graph_path_observations"],
+            [
+                {
+                    "iteration": 1,
+                    "worker_snapshot_ref": "worker-000001-implemented",
+                    "rule_closure_established": True,
+                    "position_ref": "sha256:" + "e" * 64,
+                    "direction_digest": "sha256:" + "f" * 64,
+                    "complete": True,
+                    "advisory_only": True,
+                    "blocking_gate": False,
+                }
+            ],
+        )
+        self.assertIn(
+            "implementation_graph_path_complete", context.metadata["phase_events"]
+        )
         self.assertEqual(
             context.metadata["submission_fallback"]["snapshot_id"],
             "worker-000001-implemented",

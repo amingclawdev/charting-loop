@@ -78,7 +78,7 @@ from benchmark_agents.contract import (
 
 
 AGENT_VERSION = "0.9.0"
-GRAPH_AGENT_VERSION = "1.1.0"
+GRAPH_AGENT_VERSION = "1.2.0"
 METHOD_SOURCE_COMMIT = "3c3813444a7d43d0a56837e9cb960be86ce26d06"
 METHOD_SOURCE_PATH = "method-paper/METHOD.md"
 METHOD_SCOPE_PATH = "method-paper/SCOPE-DATUM.md"
@@ -3076,6 +3076,31 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
                 worker_snapshot_ref=snapshot_ref,
             )
             metadata["graph_revision_freezes"].append(graph_revision)
+            position_ref = graph_revision.get("position_ref")
+            direction_digest = graph_revision.get("direction_digest")
+            graph_path_complete = (
+                isinstance(position_ref, str)
+                and bool(position_ref)
+                and isinstance(direction_digest, str)
+                and bool(direction_digest)
+            )
+            metadata.setdefault("graph_path_observations", []).append(
+                {
+                    "iteration": audit_iteration,
+                    "worker_snapshot_ref": snapshot_ref,
+                    "rule_closure_established": rule_closure is not None,
+                    "position_ref": position_ref,
+                    "direction_digest": direction_digest,
+                    "complete": graph_path_complete,
+                    "advisory_only": True,
+                    "blocking_gate": False,
+                }
+            )
+            metadata["phase_events"].append(
+                "implementation_graph_path_complete"
+                if graph_path_complete
+                else "implementation_graph_path_incomplete"
+            )
             if graph_revision.get("ok") is not True:
                 metadata["phase_events"].append("qa_skipped_invalid_graph_revision")
                 break

@@ -63,7 +63,7 @@ NEUTRAL_AGENT_IMPORT = (
     "benchmark_agents.harbor_agent:ChartingLoopGraphKernelNeutralAgent"
 )
 AGENT_IMPORT = METHOD_AGENT_IMPORT
-AGENT_VERSION = "1.1.0"
+AGENT_VERSION = "1.2.0"
 CORRIDOR_SDK_VERSION = "0.7.0"
 MODEL = "openai/gpt-5.6-sol"
 REASONING_EFFORT = "max"
@@ -572,7 +572,7 @@ def _check_git_and_method(
         return _failed(
             "immutable_inputs",
             "Frozen method or agent bytes do not match the declared condition.",
-            "Restore the frozen v8 method, Graph Agent v1.1.0, and Corridor SDK v0.7.0 before running.",
+            f"Restore the frozen v8 method, Graph Agent v{AGENT_VERSION}, and Corridor SDK v0.7.0 before running.",
             {
                 "head": actual_head,
                 "method_version_id": METHOD_VERSION_ID,
