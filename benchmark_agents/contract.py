@@ -65,6 +65,7 @@ METHOD_SCOPE_SHA256 = (
 )
 GRAPH_STUDY_SCHEMA = "charting-loop/method-guided-graph-study/v2"
 GRAPH_AUDIT_SCHEMA = "charting-loop/graph-path-audit/v2"
+RULE_COMPILE_AUDIT_SCHEMA = "charting-loop/rule-compile-audit/v1"
 VERIFIER_ALIGNMENT_SCHEMA = "charting-loop/verifier-alignment/v1"
 PRE_VERIFIER_ROOT_SCHEMA = "charting-loop/pre-verifier-root/v1"
 VERIFIER_ORDER_RECEIPT_SCHEMA = "charting-loop/verifier-order-receipt/v1"
@@ -1194,7 +1195,7 @@ def graph_study_profile(
         "roles": ["worker", "qa"],
         "task_clock_roles": ["worker", "qa"],
         "builder_present": False,
-        "qa_schedule": "in_clock_after_each_worker_freeze",
+        "qa_schedule": "compile_candidate_then_each_worker_freeze",
         "qa_budget_is_separate": False,
         "qa_can_recommend_repair": True,
         "qa_can_repair": False,
@@ -1317,10 +1318,10 @@ def graph_worker_prompt(
     remaining_seconds: int,
     method_text: str | None,
 ) -> str:
-    """Prompt one integrated Worker; no task-specific Builder runs first."""
+    """Prompt stage one: the Worker compiles public authority, but does not implement."""
 
     condition = _graph_condition_block(arm, method_text)
-    return f"""You are the Worker responsible for completing the official task.
+    return f"""You are the Worker responsible for compiling the official task authority.
 
 {_task_block(task_instruction)}
 
@@ -1331,7 +1332,9 @@ task-neutral Graph Kernel is available at `{SDK_PACKAGE_PATH}` in both study arm
 The frozen Study profile is `{STUDY_PROFILE_PATH}` with digest
 `{study_profile_digest}`. The append-only execution graph is `{GRAPH_PATH}`.
 
-Use the graph while doing the task, not as a separate construction project. First
+This is stage 1 of one in-clock lifecycle. Do not implement, patch, or submit the
+official task in this turn. The runner will construct and seal the candidate graph;
+do not append runner- or QA-owned records yourself. First
 compile the complete public task authority into `charting-loop/typed-rule-ir/v4`.
 Write the immutable first attempt to `{TYPED_RULE_IR_PATH}` and run
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit rules compile {TYPED_RULE_IR_PATH} > {TYPED_RULE_REPORT_PATH}`.
@@ -1357,15 +1360,14 @@ For each semantic Rule dependency, declare either direct provenance from relatio
 slices or derived provenance from the exact current endpoint Rule provenance digests.
 Also declare endpoint semantics, scope, cardinality and an explicit keyed,
 aggregate-to-members, exact-pairs, or source-backed all-to-all alignment. Never infer
-an edge from list order or an implicit Cartesian product. After the runner-owned
-`authority_snapshot`, record the returned `source_artifact_templates` as
-`task_source_artifact`, then
-`source_clause_templates` as `source_clause`, then `rule_bodies` as `rule_proposal`
-records. Treat them as immutable RuleCandidates, not authority. Read the compiler's
+an edge from list order or an implicit Cartesian product. The runner will project the
+returned `authority_snapshot_template`, `source_artifact_templates`,
+`source_clause_templates`, and `rule_bodies` into a sealed candidate graph for QA.
+Treat them as immutable RuleCandidates, not authority. Read the compiler's
 reverse semantic projection and SemanticDelta back against exact source slices; if the
 delta is non-empty, append a separate semantic-repair candidate revision and recompile.
 The runner replays the IR and freezes the complete compiler output plus current Rule
-record IDs as `rule_candidate_report`. QA appends a digest-bound
+record IDs as `rule_candidate_report`. QA returns a digest-bound
 `rule_qa_assessment` against that existing report. Only a later authorized
 runner/operator `rule_ratification` receipt may establish RuleClosure, and only when
 the referenced report reproduces exactly, compilation is complete, all
@@ -1434,16 +1436,142 @@ advisory: correct the record or continue the official task. Never wait for graph
 completeness, create a Gate, or infer truth/PASS from a structurally valid graph.
 Do not build a task-specific harness unless the official task itself requires one.
 
-About {remaining_seconds} seconds remain on the single official task clock. Create a
-complete scorable result early. After each verified improvement, preserve the
-official output paths with:
+About {remaining_seconds} seconds remain on the same total task clock. Finish
+the complete IR and deterministic compile report early, then return immediately for
+independent compilation QA. If QA rejects this exact candidate, the harness resumes
+this same Worker session with the evidence and a new immutable output path. Only a
+passing compilation advances to implementation.
+"""
+
+
+def graph_compile_qa_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    graph_digest: str,
+    candidate_report_record_id: str,
+    candidate_report_digest: str,
+    remaining_seconds: int,
+    method_text: str | None,
+    graph_path: str,
+    qa_output_path: str,
+    audit_iteration: int,
+) -> str:
+    """Prompt stage two: independent QA audits one sealed compilation candidate."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""You are the independent compilation QA reviewer.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+This is stage 2 of one in-clock lifecycle. The Worker has not implemented the task.
+Audit the sealed candidate graph `{graph_path}` with graph digest `{graph_digest}`.
+Replay it and run the read-only Doctor. Independently re-read every public authority
+source. Do not trust the Worker's inventory, semantic roles, dependency edges,
+quantifiers, applicability predicates, or checklist projections merely because the
+compiler accepted their shape.
+
+The exact candidate report is `{candidate_report_record_id}` with digest
+`{candidate_report_digest}`. Verify complete clause coverage, ordered byte slices,
+source-to-role semantics, reverse projection, zero SemanticDelta, explicit dependency
+alignment, temporal and conditional relations, required/optional classification,
+and deterministic checklist coverage. Bounds and digests establish identity, not
+meaning. QA must not mutate the task, graph, IR, or candidate and must not ratify
+Rules. A `pass` means this exact candidate can become RuleClosure; otherwise return
+`fail` or `not_assessed` with one or more concise replayable findings that cite the
+source clause/range and the mismatched Rule or edge.
+
+This is compilation audit iteration {audit_iteration}. About {remaining_seconds}
+seconds remain on the same total task clock; there is no QA-owned phase budget.
+Write exactly one JSON object to `{qa_output_path}` with schema
+`{RULE_COMPILE_AUDIT_SCHEMA}` and exactly these fields: `schema_version`,
+`study_profile_digest`, `graph_digest`, `candidate_report_record_id`,
+`candidate_report_digest`, `outcome` (`pass|fail|not_assessed`), `findings` (strings),
+and `scope_limitations` (strings). A passing outcome has no findings; every
+non-passing outcome has at least one finding. Return promptly.
+"""
+
+
+def graph_compile_repair_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    prior_graph_digest: str,
+    prior_candidate_report_record_id: str,
+    qa_path: str,
+    output_ir_path: str,
+    output_report_path: str,
+    remaining_seconds: int,
+    method_text: str | None,
+) -> str:
+    """Resume the same Worker to produce a new immutable compilation candidate."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""Resume as the SAME compilation Worker.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+Stage-2 QA rejected or could not assess candidate
+`{prior_candidate_report_record_id}` in graph `{prior_graph_digest}`. Read the sealed
+QA report `{qa_path}`. Reproduce every finding against public authority before
+changing semantics. Do not overwrite the prior IR, report, or graph. Write a complete
+new `charting-loop/typed-rule-ir/v4` candidate to `{output_ir_path}` and its compiler
+report to `{output_report_path}` using
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit rules compile {output_ir_path} > {output_report_path}`.
+Create parent directories as needed. Bind the revision to the prior candidate and QA
+evidence using the IR's semantic-repair lineage fields. Do not implement, patch, or
+submit the official task in this turn. About {remaining_seconds} seconds remain on
+the same total clock. Return immediately after the new compile report is complete.
+"""
+
+
+def graph_implementation_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    graph_digest: str,
+    qa_assessment_ref: str,
+    remaining_seconds: int,
+    method_text: str | None,
+) -> str:
+    """Prompt stage three: resume the same Worker after RuleClosure exists."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""Resume as the SAME Worker and now implement the official task.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+Compilation QA `{qa_assessment_ref}` passed and the runner materialized RuleClosure
+in `{GRAPH_PATH}` at graph digest `{graph_digest}`. Replay the graph. Before changing
+the task, append an initial whole-state `position_checkpoint` that binds every current
+Rule record and RuleClosure digest and the complete checklist/frontier. Then append a
+`direction_proposal` against that exact Position and those same Rule/checklist
+identities. Direction is your task-specific projection from the current Position; the
+Kernel validates reference closure but does not choose it.
+
+During implementation, append a new Position for meaningful state changes and a new
+Position-bound Direction before the next move. Respect hard dependency order and
+recompute downstream checklist/frontier state when upstream evidence changes. Run the
+read-only graph Doctor before each submission freeze; it is diagnostic and never task
+truth or PASS. Invalid graph writes leave bytes unchanged and do not authorize task
+mutation.
+
+Create a complete scorable result early and freeze each verified improvement with:
 
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit submission freeze --root {SUBMISSION_ROOT} --role worker --path <absolute-output-path> [--path <absolute-output-path> ...]`
 
-As soon as the first complete, locally verified, scorable freeze exists, return so QA
-can audit that exact version while the same total task clock continues. QA is
-advisory: it cannot mutate the task or choose Direction. If it returns a replayable
-failure witness, the harness may resume this same Worker session for repair.
+About {remaining_seconds} seconds remain on the same total task clock. Return after
+the first complete locally verified scorable freeze so independent result QA can
+audit it. A witnessed defect may resume this same Worker for repair.
 """
 
 
@@ -1523,12 +1651,9 @@ Bounds and digests prove source identity, not semantic
 correctness; independently judge whether each selected slice and role actually
 expresses the claimed Rule or relationship. Audit the immutable first-attempt revision as written;
 do not overwrite it. If compilation drift is concrete, emit a replayable source-clause
-witness so the same Worker can author a separate `semantic_repair` IR bound to the
-first IR digest and this QA witness. QA does not ratify Rules. Append this assessment
-as a digest-bound `rule_qa_assessment` against the existing frozen candidate report.
-A runner/operator receipt must verify that report, its zero-delta complete compilation,
-AuthoritySnapshot, reverse projection, and this passing assessment before RuleClosure
-can be used by Position or effective Direction.
+witness in the result audit. Compilation QA and runner ratification have already
+established RuleClosure; result QA must not append a second Rule assessment, revise
+Rule authority, or reinterpret the sealed compile candidate.
 Treat the Doctor as deterministic audit material: inspect checklist partition
 coverage, typed Rule coverage cells, witness-operator/semantics alignment, dependency
 order, ready/blocked frontier, invalidation closure, and exact Position-bound
@@ -1595,6 +1720,62 @@ About {remaining_seconds} seconds remain on the same total task clock. There is 
 repair-owned time slice. Return promptly after either freezing a newer valid revision
 or determining that the prior freeze should remain current.
 """
+
+
+def validate_graph_compile_audit(
+    value: Any,
+    *,
+    study_profile_digest: str,
+    graph_digest: str,
+    candidate_report_record_id: str,
+    candidate_report_digest: str,
+) -> list[str]:
+    """Validate the identity and outcome of one sealed compilation audit."""
+
+    errors: list[str] = []
+    if not isinstance(value, dict):
+        return ["RULE_COMPILE_AUDIT_OBJECT_REQUIRED"]
+    expected_keys = {
+        "schema_version",
+        "study_profile_digest",
+        "graph_digest",
+        "candidate_report_record_id",
+        "candidate_report_digest",
+        "outcome",
+        "findings",
+        "scope_limitations",
+    }
+    if set(value) != expected_keys:
+        errors.append("RULE_COMPILE_AUDIT_FIELDS")
+    if value.get("schema_version") != RULE_COMPILE_AUDIT_SCHEMA:
+        errors.append("RULE_COMPILE_AUDIT_SCHEMA")
+    for field, expected in (
+        ("study_profile_digest", study_profile_digest),
+        ("graph_digest", graph_digest),
+        ("candidate_report_record_id", candidate_report_record_id),
+        ("candidate_report_digest", candidate_report_digest),
+    ):
+        if value.get(field) != expected:
+            errors.append(f"RULE_COMPILE_AUDIT_{field.upper()}_IDENTITY")
+    outcome = value.get("outcome")
+    if outcome not in {"pass", "fail", "not_assessed"}:
+        errors.append("RULE_COMPILE_AUDIT_OUTCOME")
+    findings = value.get("findings")
+    if not isinstance(findings, list) or any(
+        not isinstance(item, str) or not item.strip() for item in findings
+    ):
+        errors.append("RULE_COMPILE_AUDIT_FINDINGS")
+        findings = []
+    limitations = value.get("scope_limitations")
+    if not isinstance(limitations, list) or any(
+        not isinstance(item, str) or not item.strip() for item in limitations
+    ):
+        errors.append("RULE_COMPILE_AUDIT_SCOPE_LIMITATIONS")
+    if outcome == "pass" and findings:
+        errors.append("RULE_COMPILE_AUDIT_PASS_WITH_FINDINGS")
+    if outcome in {"fail", "not_assessed"} and not findings:
+        errors.append("RULE_COMPILE_AUDIT_NONPASS_REQUIRES_FINDING")
+    return errors
 
 
 def validate_graph_audit(

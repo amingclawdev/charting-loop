@@ -7,6 +7,8 @@ but deliberately does not decide task truth, correctness, completion, or PASS.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -2395,6 +2397,223 @@ def initialize_graph(path: Path) -> dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_bytes(path, b"", mode=0o600)
     return replay_graph(path)
+
+
+def _staged_graph_path(path: Path) -> Path:
+    """Create a same-directory staging file for an all-or-nothing graph mutation."""
+
+    descriptor, raw_path = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".staging", dir=path.parent
+    )
+    os.close(descriptor)
+    staged = Path(raw_path)
+    staged.write_bytes(path.read_bytes())
+    staged.chmod(0o600)
+    return staged
+
+
+def freeze_rule_candidate(
+    path: Path, *, typed_rule_ir: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Freeze one compiler candidate into an otherwise empty graph.
+
+    Compilation QA reviews this immutable candidate graph.  A failed candidate is
+    retained outside the live graph; a later attempt is built from an empty graph so
+    no rejected interpretation can silently become Rule authority.
+    """
+
+    if load_graph(path):
+        raise CorridorKitError("Rule candidate freeze requires an empty graph")
+    report = compile_typed_rule_ir(typed_rule_ir)
+    staged = _staged_graph_path(path)
+    try:
+        snapshot = append_graph_record(
+            staged,
+            record_type="authority_snapshot",
+            actor="runner",
+            body=report["authority_snapshot_template"],
+        )["record"]
+        for body in report["source_artifact_templates"]:
+            append_graph_record(
+                staged, record_type="task_source_artifact", actor="runner", body=body
+            )
+        for body in report["source_clause_templates"]:
+            append_graph_record(
+                staged, record_type="source_clause", actor="worker", body=body
+            )
+        rule_record_ids: dict[str, str] = {}
+        for body in report["rule_bodies"]:
+            record = append_graph_record(
+                staged, record_type="rule_proposal", actor="worker", body=body
+            )["record"]
+            rule_record_ids[body["rule_id"]] = record["record_id"]
+        candidate_body = {
+            "schema_version": RULE_CANDIDATE_REPORT_SCHEMA,
+            "authority_snapshot_record_id": snapshot["record_id"],
+            "typed_rule_ir": dict(typed_rule_ir),
+            "compile_report": report,
+            "rule_record_ids": rule_record_ids,
+        }
+        candidate = append_graph_record(
+            staged,
+            record_type="rule_candidate_report",
+            actor="runner",
+            body={
+                **candidate_body,
+                "candidate_report_digest": sha256_json(candidate_body),
+            },
+        )["record"]
+        final_report = replay_graph(staged)
+        atomic_write_bytes(path, staged.read_bytes(), mode=0o600)
+    finally:
+        staged.unlink(missing_ok=True)
+    return {
+        "ok": True,
+        "candidate_report_record_id": candidate["record_id"],
+        "candidate_report_digest": candidate["body"]["candidate_report_digest"],
+        "compile_report": report,
+        "graph_digest": final_report["graph_digest"],
+        "head_record_id": candidate["record_id"],
+        "record_count": len(final_report["records"]),
+    }
+
+
+def ratify_rule_candidate(
+    path: Path,
+    *,
+    candidate_report_record_id: str,
+    candidate_report_digest: str,
+    outcome: str,
+    findings: Iterable[str],
+    ratifier_ref: str,
+) -> dict[str, Any]:
+    """Record compile QA and materialize a passing RuleClosure atomically.
+
+    QA supplies an identity-bound assessment but never ratifies authority.  The
+    runner owns ratification and deterministic checklist/dependency projection.
+    Non-passing assessments are retained without creating RuleClosure.
+    """
+
+    records = load_graph(path)
+    candidate = next(
+        (
+            record
+            for record in records
+            if record["record_type"] == "rule_candidate_report"
+            and record["record_id"] == candidate_report_record_id
+        ),
+        None,
+    )
+    if candidate is None or candidate["body"]["candidate_report_digest"] != candidate_report_digest:
+        raise CorridorKitError("Rule QA does not bind the frozen candidate report")
+    finding_list = list(findings)
+    assessment_body = {
+        "schema_version": RULE_QA_ASSESSMENT_SCHEMA,
+        "candidate_report_record_id": candidate_report_record_id,
+        "candidate_report_digest": candidate_report_digest,
+        "outcome": outcome,
+        "findings": finding_list,
+    }
+    assessment_body["assessment_digest"] = sha256_json(assessment_body)
+    staged = _staged_graph_path(path)
+    try:
+        assessment = append_graph_record(
+            staged,
+            record_type="rule_qa_assessment",
+            actor="qa",
+            body=assessment_body,
+        )["record"]
+        if outcome == "pass":
+            report = candidate["body"]["compile_report"]
+            rule_record_ids = candidate["body"]["rule_record_ids"]
+            for rule_body in report["rule_bodies"]:
+                rule_id = rule_body["rule_id"]
+                closure_inputs = {
+                    "rule_id": rule_id,
+                    "rule_record_id": rule_record_ids[rule_id],
+                    "candidate_report_record_id": candidate_report_record_id,
+                    "candidate_report_digest": candidate_report_digest,
+                    "candidate_revision_digest": report["candidate_revision_digest"],
+                    "authority_snapshot_digest": report["authority_snapshot_digest"],
+                    "reverse_projection_digest": report[
+                        "reverse_semantic_projection_digest"
+                    ],
+                    "semantic_delta_digest": report["semantic_delta_digest"],
+                    "qa_assessment_ref": assessment["record_id"],
+                    "qa_assessment_digest": assessment_body["assessment_digest"],
+                    "ratifier_ref": ratifier_ref,
+                }
+                append_graph_record(
+                    staged,
+                    record_type="rule_ratification",
+                    actor="runner",
+                    body={
+                        "rule_id": rule_id,
+                        "rule_record_id": rule_record_ids[rule_id],
+                        "authority_ref": rule_body["source_ref"],
+                        "authority_digest": rule_body["source_digest"],
+                        "receipt_ref": f"{ratifier_ref}:{rule_id}",
+                        "ratification_schema": RULE_RATIFICATION_SCHEMA_V2,
+                        **{
+                            key: value
+                            for key, value in closure_inputs.items()
+                            if key not in {"rule_id", "rule_record_id"}
+                        },
+                        "rule_closure_digest": sha256_json(closure_inputs),
+                    },
+                )
+            for template in report["checklist_templates"]:
+                rule_id = template["source_rule_id"]
+                append_graph_record(
+                    staged,
+                    record_type="acceptance_checklist_item",
+                    actor="runner",
+                    body={
+                        **template,
+                        "source_rule_record_id": rule_record_ids[rule_id],
+                    },
+                )
+            for template in report["rule_dependency_templates"]:
+                append_graph_record(
+                    staged,
+                    record_type="rule_dependency",
+                    actor="runner",
+                    body=template,
+                )
+            for template in report["typed_dependency_templates"]:
+                append_graph_record(
+                    staged,
+                    record_type="typed_dependency",
+                    actor="runner",
+                    body={
+                        **template,
+                        "source_rule_record_id": rule_record_ids[
+                            template["source_rule_id"]
+                        ],
+                        "target_rule_record_id": rule_record_ids[
+                            template["target_rule_id"]
+                        ],
+                    },
+                )
+        final_report = replay_graph(staged)
+        atomic_write_bytes(path, staged.read_bytes(), mode=0o600)
+    finally:
+        staged.unlink(missing_ok=True)
+    return {
+        "ok": True,
+        "outcome": outcome,
+        "qa_assessment_ref": assessment["record_id"],
+        "rule_closure_established": outcome == "pass",
+        "graph_digest": final_report["graph_digest"],
+        "head_record_id": final_report["records"][-1]["record_id"],
+        "record_count": len(final_report["records"]),
+        "rule_closure_digests": {
+            record["body"]["rule_id"]: record["body"]["rule_closure_digest"]
+            for record in final_report["records"]
+            if record["record_type"] == "rule_ratification"
+            and "rule_closure_digest" in record["body"]
+        },
+    }
 
 
 def append_graph_record(

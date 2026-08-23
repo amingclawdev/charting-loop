@@ -39,6 +39,8 @@ from benchmark_agents.contract import (
     CORRIDOR_PATH,
     GRAPH_PATH,
     STUDY_PROFILE_PATH,
+    TYPED_RULE_IR_PATH,
+    TYPED_RULE_REPORT_PATH,
     METHOD_PATH,
     METHOD_CONTENT_SHA256,
     METHOD_SCOPE_SHA256,
@@ -64,9 +66,13 @@ from benchmark_agents.contract import (
     verify_freeze_program,
     worker_prompt,
     graph_study_profile,
+    graph_compile_qa_prompt,
+    graph_compile_repair_prompt,
+    graph_implementation_prompt,
     graph_qa_prompt,
     graph_repair_prompt,
     graph_worker_prompt,
+    validate_graph_compile_audit,
     validate_graph_audit,
 )
 
@@ -2251,8 +2257,8 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
     ROLE_SEQUENCE = ("worker", "qa")
     ORCHESTRATION_MESSAGE = (
         "Deterministic orchestration: frozen Study profile plus shared Graph "
-        "Kernel -> Worker freeze -> in-clock advisory QA -> same-Worker "
-        "repair/refreeze when witnessed -> latest-valid submission -> official scoring."
+        "Kernel -> Worker compile -> compile QA/recompile -> RuleClosure -> "
+        "same-Worker implementation -> frozen-result QA/repair -> official scoring."
     )
     ORCHESTRATION_METHOD = "method-guided-graph-kernel"
 
@@ -2506,6 +2512,218 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
             "qa_intake_doctor": qa_intake_doctor,
         }
 
+    @staticmethod
+    def _rule_compile_paths(iteration: int) -> tuple[str, str]:
+        if iteration == 1:
+            return TYPED_RULE_IR_PATH, TYPED_RULE_REPORT_PATH
+        root = PurePosixPath(CORRIDOR_PATH) / "compile-revisions"
+        return (
+            (root / f"typed-rule-ir-{iteration:04d}.json").as_posix(),
+            (root / f"typed-rule-report-{iteration:04d}.json").as_posix(),
+        )
+
+    async def _freeze_rule_compile_candidate(
+        self,
+        environment: BaseEnvironment,
+        *,
+        iteration: int,
+        ir_path: str,
+    ) -> dict[str, Any]:
+        """Build and seal one prospective graph from Worker IR without touching live state."""
+
+        candidate_root = (
+            PurePosixPath(RUNTIME_ROOT)
+            / "compile-candidates"
+            / f"candidate-{iteration:04d}"
+        )
+        graph_path = (candidate_root / "GRAPH.jsonl").as_posix()
+        build_program = (
+            "import json; from pathlib import Path; "
+            "from corridor_kit.graph import freeze_rule_candidate; "
+            f"p=Path({graph_path!r}); ir=json.loads(Path({ir_path!r}).read_text(encoding='utf-8')); "
+            "print(json.dumps(freeze_rule_candidate(p,typed_rule_ir=ir),sort_keys=True))"
+        )
+        command = (
+            f"test -f {shlex.quote(ir_path)} && "
+            f"test ! -e {shlex.quote(candidate_root.as_posix())} && "
+            f"install -d -m 0700 {shlex.quote(candidate_root.as_posix())} && "
+            f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+            f"python3 -m corridor_kit graph init {shlex.quote(graph_path)} && "
+            f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+            f"python3 -c {shlex.quote(build_program)}"
+        )
+        built = await self.exec_as_root(environment, command=command)
+        lines = [line for line in (built.stdout or "").splitlines() if line.strip()]
+        if built.return_code != 0 or not lines:
+            return {
+                "ok": False,
+                "iteration": iteration,
+                "ir_path": ir_path,
+                "graph_path": graph_path,
+                "status": "compile_candidate_build_failed",
+                "error": (built.stderr or built.stdout or "no output")[-4000:],
+            }
+        try:
+            candidate = json.loads(lines[-1])
+        except json.JSONDecodeError:
+            return {
+                "ok": False,
+                "iteration": iteration,
+                "ir_path": ir_path,
+                "graph_path": graph_path,
+                "status": "compile_candidate_result_unreadable",
+                "error": (built.stdout or "")[-4000:],
+            }
+        doctor = await self._graph_doctor_report(environment, graph_path=graph_path)
+        if (
+            candidate.get("ok") is not True
+            or doctor.get("structurally_valid") is not True
+            or doctor.get("graph_digest") != candidate.get("graph_digest")
+        ):
+            return {
+                "ok": False,
+                "iteration": iteration,
+                "ir_path": ir_path,
+                "graph_path": graph_path,
+                "status": "compile_candidate_identity_invalid",
+                "candidate": candidate,
+                "doctor": doctor,
+            }
+        await self.exec_as_root(
+            environment,
+            command=(
+                f"find {shlex.quote(candidate_root.as_posix())} -type f -exec chmod 0444 {{}} + && "
+                f"chmod 0555 {shlex.quote(candidate_root.as_posix())}"
+            ),
+        )
+        return {
+            "ok": True,
+            "iteration": iteration,
+            "ir_path": ir_path,
+            "graph_path": graph_path,
+            **candidate,
+            "doctor": doctor,
+        }
+
+    async def _read_rule_compile_audit(
+        self,
+        environment: BaseEnvironment,
+        *,
+        path: str,
+        study_profile_digest: str,
+        candidate: dict[str, Any],
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        result = await environment.exec(
+            command=f"python3 -c {shlex.quote(remote_json_read_program(path))}",
+            user=environment.default_user,
+        )
+        if result.return_code != 0 or not result.stdout:
+            return None, {
+                "valid": False,
+                "errors": ["RULE_COMPILE_AUDIT_UNREADABLE"],
+                "outcome": "not_assessed",
+                "rule_closure_ready": False,
+            }
+        try:
+            value = load_qa_json_text(result.stdout)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None, {
+                "valid": False,
+                "errors": ["RULE_COMPILE_AUDIT_JSON"],
+                "outcome": "not_assessed",
+                "rule_closure_ready": False,
+            }
+        errors = validate_graph_compile_audit(
+            value,
+            study_profile_digest=study_profile_digest,
+            graph_digest=str(candidate["graph_digest"]),
+            candidate_report_record_id=str(candidate["candidate_report_record_id"]),
+            candidate_report_digest=str(candidate["candidate_report_digest"]),
+        )
+        outcome = value.get("outcome") if not errors else "not_assessed"
+        return value, {
+            "valid": not errors,
+            "errors": errors,
+            "outcome": outcome,
+            "rule_closure_ready": not errors and outcome == "pass",
+            "advisory_only": True,
+            "blocking_gate": False,
+            "authorizes_mutation": False,
+        }
+
+    async def _install_rule_closure(
+        self,
+        environment: BaseEnvironment,
+        *,
+        candidate: dict[str, Any],
+        qa_path: str,
+        iteration: int,
+    ) -> dict[str, Any]:
+        """Retain runner-owned QA evidence; install only a passing RuleClosure."""
+
+        user = shlex.quote(str(environment.default_user or "root"))
+        closure_staging = (
+            PurePosixPath(RUNTIME_ROOT)
+            / "compile-candidates"
+            / f"rule-closure-{iteration:04d}.jsonl"
+        ).as_posix()
+        program = (
+            "import json; from pathlib import Path; "
+            "from corridor_kit.graph import ratify_rule_candidate; "
+            f"a=json.loads(Path({qa_path!r}).read_text(encoding='utf-8')); "
+            f"r=ratify_rule_candidate(Path({closure_staging!r}),"
+            f"candidate_report_record_id={candidate['candidate_report_record_id']!r},"
+            f"candidate_report_digest={candidate['candidate_report_digest']!r},"
+            "outcome=a['outcome'],findings=a['findings'],"
+            f"ratifier_ref={'runner:compile-audit-' + str(iteration).zfill(4)!r}); "
+            "print(json.dumps(r,sort_keys=True))"
+        )
+        installed = await self.exec_as_root(
+            environment,
+            command=(
+                f"test ! -e {shlex.quote(closure_staging)} && "
+                f"install -m 0600 {shlex.quote(str(candidate['graph_path']))} "
+                f"{shlex.quote(closure_staging)} && "
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                f"python3 -c {shlex.quote(program)} && "
+                f"chmod 0444 {shlex.quote(closure_staging)}"
+            ),
+        )
+        lines = [line for line in (installed.stdout or "").splitlines() if line.strip()]
+        if installed.return_code != 0 or not lines:
+            return {
+                "ok": False,
+                "status": "rule_closure_install_failed",
+                "error": (installed.stderr or installed.stdout or "no output")[-4000:],
+            }
+        try:
+            result = json.loads(lines[-1])
+        except json.JSONDecodeError:
+            return {
+                "ok": False,
+                "status": "rule_closure_result_unreadable",
+                "error": (installed.stdout or "")[-4000:],
+            }
+        result["assessed_graph_path"] = closure_staging
+        if result.get("rule_closure_established") is not True:
+            return result
+        live_install = await self.exec_as_root(
+            environment,
+            command=(
+                f"install -m 0600 {shlex.quote(closure_staging)} "
+                f"{shlex.quote(GRAPH_PATH)} && "
+                f"chown {user} {shlex.quote(GRAPH_PATH)}"
+            ),
+        )
+        if live_install.return_code != 0:
+            return {
+                "ok": False,
+                "status": "rule_closure_live_install_failed",
+                "assessed_graph_path": closure_staging,
+                "error": (live_install.stderr or live_install.stdout or "no output")[-4000:],
+            }
+        return result
+
     async def _read_graph_audit(
         self,
         environment: BaseEnvironment,
@@ -2604,9 +2822,13 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
             "builder_present": False,
             "roles": ["worker", "qa"],
             "task_clock_roles": ["worker", "qa"],
-            "qa_schedule": "in_clock_after_each_worker_freeze",
+            "qa_schedule": "compile_candidate_then_each_worker_freeze",
             "qa_budget_is_separate": False,
-            "phase_events": ["study_profile_frozen", "graph_kernel_ready"],
+            "phase_events": [
+                "study_profile_frozen",
+                "graph_kernel_ready",
+                "worker_compile_started",
+            ],
             "phase_runs": [],
             "deadline_policy": "single_task_deadline",
             "task_timeout_seconds": task_timeout_seconds,
@@ -2628,28 +2850,196 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
         }
         context.metadata = metadata
 
-        if _remaining_seconds(execution_deadline) > 0:
-            _, worker_run = await self._run_new_role(
-                "worker",
-                worker,
-                graph_worker_prompt(
+        qa_started = False
+        worker_started = False
+        compile_iteration = 0
+        compile_candidate: dict[str, Any] | None = None
+        compile_qa_path: str | None = None
+        rule_closure: dict[str, Any] | None = None
+        compile_decision: dict[str, Any] = {
+            "valid": False,
+            "errors": ["RULE_COMPILE_QA_NOT_RUN"],
+            "outcome": "not_assessed",
+            "rule_closure_ready": False,
+        }
+        prior_candidate: dict[str, Any] | None = None
+        while _remaining_seconds(execution_deadline) > 0 and rule_closure is None:
+            compile_iteration += 1
+            ir_path, report_path = self._rule_compile_paths(compile_iteration)
+            if worker_started:
+                assert prior_candidate is not None and compile_qa_path is not None
+                _, worker_run = await self._resume_role(
+                    "worker",
+                    worker,
+                    graph_compile_repair_prompt(
+                        instruction,
+                        arm=self.ARM,
+                        study_profile_digest=str(profile["profile_digest"]),
+                        prior_graph_digest=str(prior_candidate["graph_digest"]),
+                        prior_candidate_report_record_id=str(
+                            prior_candidate["candidate_report_record_id"]
+                        ),
+                        qa_path=compile_qa_path,
+                        output_ir_path=ir_path,
+                        output_report_path=report_path,
+                        remaining_seconds=_remaining_seconds(execution_deadline),
+                        method_text=method_text,
+                    ),
+                    environment,
+                    phase=f"worker-recompile-{compile_iteration:04d}",
+                    deadline=execution_deadline,
+                )
+            else:
+                _, worker_run = await self._run_new_role(
+                    "worker",
+                    worker,
+                    graph_worker_prompt(
+                        instruction,
+                        arm=self.ARM,
+                        study_profile_digest=str(profile["profile_digest"]),
+                        remaining_seconds=_remaining_seconds(execution_deadline),
+                        method_text=method_text,
+                    ),
+                    environment,
+                    deadline=execution_deadline,
+                )
+                worker_started = True
+            self._record_phase_outcome(metadata, worker_run, context)
+            compile_candidate = await self._freeze_rule_compile_candidate(
+                environment,
+                iteration=compile_iteration,
+                ir_path=ir_path,
+            )
+            metadata.setdefault("compile_candidates", []).append(compile_candidate)
+            if compile_candidate.get("ok") is not True:
+                metadata["phase_events"].append("compile_candidate_build_failed")
+                break
+
+            compile_qa_path = (
+                PurePosixPath(RUNTIME_ROOT)
+                / "qa"
+                / f"compile-audit-{compile_iteration:04d}.json"
+            ).as_posix()
+            await self._open_qa_directory(environment)
+            try:
+                compile_prompt = graph_compile_qa_prompt(
                     instruction,
                     arm=self.ARM,
-                    study_profile_digest=profile["profile_digest"],
+                    study_profile_digest=str(profile["profile_digest"]),
+                    graph_digest=str(compile_candidate["graph_digest"]),
+                    candidate_report_record_id=str(
+                        compile_candidate["candidate_report_record_id"]
+                    ),
+                    candidate_report_digest=str(
+                        compile_candidate["candidate_report_digest"]
+                    ),
+                    remaining_seconds=_remaining_seconds(execution_deadline),
+                    method_text=method_text,
+                    graph_path=str(compile_candidate["graph_path"]),
+                    qa_output_path=compile_qa_path,
+                    audit_iteration=compile_iteration,
+                )
+                if qa_started:
+                    _, qa_run = await self._resume_role(
+                        "qa",
+                        qa,
+                        compile_prompt,
+                        environment,
+                        phase=f"compile-qa-{compile_iteration:04d}",
+                        deadline=execution_deadline,
+                    )
+                else:
+                    _, qa_run = await self._run_new_role(
+                        "qa", qa, compile_prompt, environment, deadline=execution_deadline
+                    )
+                    qa_started = True
+                qa_snapshot = await self._freeze_submission_paths(
+                    environment, role="qa", paths=[compile_qa_path]
+                )
+                metadata["submission_snapshots"].append(qa_snapshot)
+            finally:
+                await self._seal_qa_directory(environment)
+            self._record_phase_outcome(metadata, qa_run, context)
+            compile_assessment, compile_decision = await self._read_rule_compile_audit(
+                environment,
+                path=compile_qa_path,
+                study_profile_digest=str(profile["profile_digest"]),
+                candidate=compile_candidate,
+            )
+            metadata["qa_audits"].append(
+                {
+                    "kind": "rule_compile",
+                    "iteration": compile_iteration,
+                    "qa_path": compile_qa_path,
+                    "graph_digest": compile_candidate["graph_digest"],
+                    "candidate_report_record_id": compile_candidate[
+                        "candidate_report_record_id"
+                    ],
+                    "decision": compile_decision,
+                    "assessment": compile_assessment,
+                }
+            )
+            compile_assessment_record: dict[str, Any] | None = None
+            if compile_decision.get("valid") is True:
+                compile_assessment_record = await self._install_rule_closure(
+                    environment,
+                    candidate=compile_candidate,
+                    qa_path=compile_qa_path,
+                    iteration=compile_iteration,
+                )
+                metadata.setdefault("compile_assessment_graphs", []).append(
+                    compile_assessment_record
+                )
+                if compile_assessment_record.get("ok") is not True:
+                    metadata["phase_events"].append("compile_assessment_record_failed")
+                    break
+            if compile_decision.get("rule_closure_ready") is True:
+                if (
+                    compile_assessment_record is None
+                    or compile_assessment_record.get("rule_closure_established") is not True
+                ):
+                    metadata["phase_events"].append("rule_closure_install_failed")
+                    break
+                rule_closure = compile_assessment_record
+                metadata["phase_events"].append("rule_closure_established")
+                break
+            if (
+                compile_assessment_record is not None
+                and compile_assessment_record.get("rule_closure_established") is True
+            ):
+                metadata["phase_events"].append("nonpassing_compile_created_closure")
+                break
+            metadata["phase_events"].append("compile_qa_returned_for_recompile")
+            prior_candidate = compile_candidate
+
+        metadata["compile_qa_decision"] = compile_decision
+        metadata["rule_closure"] = rule_closure
+        if rule_closure is not None and _remaining_seconds(execution_deadline) > 0:
+            _, implementation_run = await self._resume_role(
+                "worker",
+                worker,
+                graph_implementation_prompt(
+                    instruction,
+                    arm=self.ARM,
+                    study_profile_digest=str(profile["profile_digest"]),
+                    graph_digest=str(rule_closure["graph_digest"]),
+                    qa_assessment_ref=str(rule_closure["qa_assessment_ref"]),
                     remaining_seconds=_remaining_seconds(execution_deadline),
                     method_text=method_text,
                 ),
                 environment,
+                phase="worker-implementation",
                 deadline=execution_deadline,
             )
-            self._record_phase_outcome(metadata, worker_run, context)
+            self._record_phase_outcome(metadata, implementation_run, context)
             metadata["worker_revision_progress"] = await self._worker_revision_progress(
                 environment
             )
+        elif rule_closure is None:
+            metadata["phase_events"].append("implementation_not_started_without_rule_closure")
         else:
-            metadata["phase_events"].append("worker_skipped_task_deadline")
+            metadata["phase_events"].append("implementation_skipped_task_deadline")
 
-        qa_started = False
         audited_snapshot_refs: set[str] = set()
         audit_iteration = 0
         last_decision: dict[str, Any] = {
@@ -2745,6 +3135,7 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
             )
             metadata["qa_audits"].append(
                 {
+                    "kind": "frozen_result",
                     "iteration": audit_iteration,
                     "qa_path": qa_path,
                     "worker_snapshot_ref": snapshot_ref,

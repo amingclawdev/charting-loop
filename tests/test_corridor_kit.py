@@ -58,6 +58,7 @@ from corridor_kit.core import load_json
 from corridor_kit.acceptance import qa_assessment_decision
 from corridor_kit.runtime import validate_qa_assessment_path
 from corridor_kit.scaffold import validate_method_capsule
+from corridor_kit.graph import freeze_rule_candidate, ratify_rule_candidate
 
 
 def valid_ledger() -> dict[str, object]:
@@ -2087,6 +2088,56 @@ class TypedRuleCompilerTests(unittest.TestCase):
             )
             closures.append(closure)
         return closures
+
+    def test_runner_freezes_candidate_then_materializes_only_passing_rule_closure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            candidate = freeze_rule_candidate(path, typed_rule_ir=self._v4_ir())
+            before = replay_graph(path)
+            self.assertEqual(0, before["rule_closure_count"])
+            self.assertEqual(0, before["acceptance_checklist_item_count"])
+
+            closure = ratify_rule_candidate(
+                path,
+                candidate_report_record_id=candidate["candidate_report_record_id"],
+                candidate_report_digest=candidate["candidate_report_digest"],
+                outcome="pass",
+                findings=[],
+                ratifier_ref="runner:test-four-stage",
+            )
+            after = replay_graph(path)
+            self.assertTrue(closure["rule_closure_established"])
+            self.assertEqual(
+                len(candidate["compile_report"]["rule_bodies"]),
+                after["rule_closure_count"],
+            )
+            self.assertEqual(
+                len(candidate["compile_report"]["checklist_templates"]),
+                after["acceptance_checklist_item_count"],
+            )
+            self.assertEqual(
+                candidate["compile_report"]["typed_dependency_count"],
+                after["typed_dependency_count"],
+            )
+
+    def test_nonpassing_compile_qa_never_materializes_rule_closure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            candidate = freeze_rule_candidate(path, typed_rule_ir=self._v4_ir())
+            result = ratify_rule_candidate(
+                path,
+                candidate_report_record_id=candidate["candidate_report_record_id"],
+                candidate_report_digest=candidate["candidate_report_digest"],
+                outcome="fail",
+                findings=["CL-VERIFY omits the trailing temporal qualification."],
+                ratifier_ref="runner:test-four-stage",
+            )
+            replay = replay_graph(path)
+            self.assertFalse(result["rule_closure_established"])
+            self.assertEqual(0, replay["rule_closure_count"])
+            self.assertEqual(0, replay["acceptance_checklist_item_count"])
 
     def test_v4_bidirectional_compile_has_no_implicit_cartesian_projection(self) -> None:
         report = compile_typed_rule_ir(self._v4_ir())
