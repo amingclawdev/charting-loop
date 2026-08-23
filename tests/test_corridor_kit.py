@@ -1797,6 +1797,706 @@ class TypedRuleCompilerTests(unittest.TestCase):
             ],
         }
 
+    @classmethod
+    def _v4_ir(cls) -> dict:
+        value = json.loads(json.dumps(cls._v3_ir()))
+        value["schema_version"] = "charting-loop/typed-rule-ir/v4"
+        legacy_sources = value["source_bundle"]["sources"]
+        sources = []
+        for source in legacy_sources:
+            extractor_digest = "sha256:" + "5" * 64
+            extraction_content = source["content_utf8"]
+            artifact_digest = sha256_bytes(extraction_content.encode("utf-8"))
+            sources.append(
+                {
+                    "source_id": source["source_id"],
+                    "source_ref": source["source_ref"],
+                    "plane": "normative_rule",
+                    "role": source["role"],
+                    "byte_status": "available",
+                    "byte_digest": source["source_digest"],
+                    "byte_size": len(source["content_utf8"].encode("utf-8")),
+                    "media_type": "text/plain",
+                    "content_encoding": "utf-8",
+                    "content_utf8": source["content_utf8"],
+                    "semantic_extraction_status": "complete",
+                    "extractor": {
+                        "identity": "test.source-clause-extractor",
+                        "version": "1",
+                        "digest": extractor_digest,
+                    },
+                    "extraction_artifact": {
+                        "ref": f"memory:{source['source_id']}:clauses",
+                        "digest": artifact_digest,
+                        "source_byte_digest": source["source_digest"],
+                        "content_encoding": "utf-8",
+                        "content_utf8": extraction_content,
+                        "byte_size": len(extraction_content.encode("utf-8")),
+                    },
+                }
+            )
+        snapshot = {
+            "schema_version": "charting-loop/authority-snapshot/v3",
+            "snapshot_id": "AUTHORITY-SNAPSHOT-001",
+            "snapshot_revision": 1,
+            "parent_snapshot_digest": None,
+            "manifest_digest": None,
+            "freeze_receipt": {
+                "actor_role": "runner",
+                "ref": "runner-freeze:test-001",
+                "digest": "sha256:" + "7" * 64,
+            },
+            "closure_status": "complete",
+            "sources": sources,
+        }
+        manifest = {
+            "snapshot_id": snapshot["snapshot_id"],
+            "snapshot_revision": snapshot["snapshot_revision"],
+            "parent_snapshot_digest": snapshot["parent_snapshot_digest"],
+            "sources": [
+                {
+                    "source_id": source["source_id"],
+                    "source_ref": source["source_ref"],
+                    "plane": source["plane"],
+                    "role": source["role"],
+                    "byte_status": source["byte_status"],
+                    "byte_digest": source["byte_digest"],
+                    "byte_size": source["byte_size"],
+                    "media_type": source["media_type"],
+                    "semantic_extraction_status": source[
+                        "semantic_extraction_status"
+                    ],
+                    "extractor_digest": source["extractor"]["digest"],
+                    "extraction_artifact_digest": source["extraction_artifact"][
+                        "digest"
+                    ],
+                }
+                for source in sources
+            ],
+        }
+        snapshot["manifest_digest"] = sha256_json(manifest)
+        snapshot["freeze_receipt"]["digest"] = sha256_json(
+            {
+                "actor_role": "runner",
+                "ref": snapshot["freeze_receipt"]["ref"],
+                "manifest_digest": snapshot["manifest_digest"],
+            }
+        )
+        value["source_bundle"] = snapshot
+        value["revision"]["revision_id"] = "IR-REV-V4"
+        for clause in value["source_clause_inventory"]:
+            for source_slice in clause["source_slices"]:
+                source_slice["representation"] = "source_bytes"
+            roles = set(clause["required_semantic_roles"])
+            roles.update(
+                {
+                    "obligation",
+                    "domain",
+                    "quantifier",
+                    "condition",
+                    "outcome",
+                    "evidence_requirement",
+                    "witness_requirement",
+                }
+            )
+            clause["required_semantic_roles"] = sorted(roles)
+        for rule in value["rules"]:
+            semantics = rule["semantics"]
+            semantics["schema_version"] = "charting-loop/typed-rule-semantics/v4"
+            for condition in semantics["conditions"]:
+                condition["condition_kind"] = "static"
+            primary_slice = rule["source_slices"][0]["slice_id"]
+            bound_roles = {item["semantic_role"] for item in rule["source_slices"]}
+            for role in (
+                "obligation",
+                "domain",
+                "quantifier",
+                "condition",
+                "outcome",
+                "evidence_requirement",
+                "witness_requirement",
+            ):
+                if role not in bound_roles:
+                    rule["source_slices"].append(
+                        {"slice_id": primary_slice, "semantic_role": role}
+                    )
+            semantics["guidance"] = [
+                {
+                    "guidance_id": f"GUIDANCE-{rule['rule_id']}",
+                    "trigger": "before assessing this Rule",
+                    "action": "re-read its bound source slices",
+                    "source_slice_ids": [primary_slice],
+                }
+            ]
+            for dependency in semantics["dependencies"]:
+                dependency["alignment"] = {
+                    "mode": "keyed",
+                    "source_endpoint": "dependant",
+                    "target_endpoint": "prerequisite",
+                    "key_pairs": [
+                        {"source_key": "subject_id", "target_key": "subject_id"}
+                    ],
+                    "source_scope": [],
+                    "target_scope": [],
+                    "source_cardinality": {"minimum": 1, "maximum": 1},
+                    "target_cardinality": {"minimum": 1, "maximum": 1},
+                    "membership_ref": None,
+                    "explicit_pairs": [],
+                    "rationale": None,
+                }
+        return value
+
+    @staticmethod
+    def _refresh_v4_snapshot(snapshot: dict) -> None:
+        manifest = {
+            "snapshot_id": snapshot["snapshot_id"],
+            "snapshot_revision": snapshot["snapshot_revision"],
+            "parent_snapshot_digest": snapshot["parent_snapshot_digest"],
+            "sources": [
+                {
+                    "source_id": source["source_id"],
+                    "source_ref": source["source_ref"],
+                    "plane": source["plane"],
+                    "role": source["role"],
+                    "byte_status": source["byte_status"],
+                    "byte_digest": source["byte_digest"],
+                    "byte_size": source["byte_size"],
+                    "media_type": source["media_type"],
+                    "semantic_extraction_status": source[
+                        "semantic_extraction_status"
+                    ],
+                    "extractor_digest": (
+                        source["extractor"]["digest"] if source["extractor"] else None
+                    ),
+                    "extraction_artifact_digest": (
+                        source["extraction_artifact"]["digest"]
+                        if source["extraction_artifact"]
+                        else None
+                    ),
+                }
+                for source in snapshot["sources"]
+            ],
+        }
+        snapshot["manifest_digest"] = sha256_json(manifest)
+        snapshot["freeze_receipt"]["digest"] = sha256_json(
+            {
+                "actor_role": "runner",
+                "ref": snapshot["freeze_receipt"]["ref"],
+                "manifest_digest": snapshot["manifest_digest"],
+            }
+        )
+
+    @staticmethod
+    def _append_v4_candidate(path: Path, ir: dict) -> tuple[dict, dict, dict]:
+        report = compile_typed_rule_ir(ir)
+        snapshot = append_graph_record(
+            path,
+            record_type="authority_snapshot",
+            actor="runner",
+            body=report["authority_snapshot_template"],
+        )["record"]
+        for body in report["source_artifact_templates"]:
+            append_graph_record(
+                path, record_type="task_source_artifact", actor="runner", body=body
+            )
+        for body in report["source_clause_templates"]:
+            append_graph_record(
+                path, record_type="source_clause", actor="worker", body=body
+            )
+        rule_records = {}
+        for body in report["rule_bodies"]:
+            record = append_graph_record(
+                path, record_type="rule_proposal", actor="worker", body=body
+            )["record"]
+            rule_records[body["rule_id"]] = record["record_id"]
+        candidate_body = {
+            "schema_version": "charting-loop/rule-candidate-report/v1",
+            "authority_snapshot_record_id": snapshot["record_id"],
+            "typed_rule_ir": ir,
+            "compile_report": report,
+            "rule_record_ids": rule_records,
+        }
+        candidate = append_graph_record(
+            path,
+            record_type="rule_candidate_report",
+            actor="runner",
+            body={
+                **candidate_body,
+                "candidate_report_digest": sha256_json(candidate_body),
+            },
+        )["record"]
+        return report, candidate, rule_records
+
+    @staticmethod
+    def _ratify_v4_candidate(
+        path: Path, report: dict, candidate: dict, rule_records: dict
+    ) -> list[str]:
+        qa_body = {
+            "schema_version": "charting-loop/rule-qa-assessment/v1",
+            "candidate_report_record_id": candidate["record_id"],
+            "candidate_report_digest": candidate["body"][
+                "candidate_report_digest"
+            ],
+            "outcome": "pass",
+            "findings": [],
+        }
+        qa = append_graph_record(
+            path,
+            record_type="rule_qa_assessment",
+            actor="qa",
+            body={**qa_body, "assessment_digest": sha256_json(qa_body)},
+        )["record"]
+        closures = []
+        for body in report["rule_bodies"]:
+            payload = {
+                "rule_id": body["rule_id"],
+                "rule_record_id": rule_records[body["rule_id"]],
+                "candidate_report_record_id": candidate["record_id"],
+                "candidate_report_digest": candidate["body"][
+                    "candidate_report_digest"
+                ],
+                "candidate_revision_digest": report["candidate_revision_digest"],
+                "authority_snapshot_digest": report["authority_snapshot_digest"],
+                "reverse_projection_digest": report[
+                    "reverse_semantic_projection_digest"
+                ],
+                "semantic_delta_digest": report["semantic_delta_digest"],
+                "qa_assessment_ref": qa["record_id"],
+                "qa_assessment_digest": qa["body"]["assessment_digest"],
+                "ratifier_ref": "runner:test-v4",
+            }
+            closure = sha256_json(payload)
+            append_graph_record(
+                path,
+                record_type="rule_ratification",
+                actor="runner",
+                body={
+                    "rule_id": body["rule_id"],
+                    "rule_record_id": rule_records[body["rule_id"]],
+                    "authority_ref": body["source_ref"],
+                    "authority_digest": body["source_digest"],
+                    "receipt_ref": f"ratification:{body['rule_id']}",
+                    "ratification_schema": "charting-loop/rule-ratification/v2",
+                    **{
+                        key: item
+                        for key, item in payload.items()
+                        if key not in {"rule_id", "rule_record_id"}
+                    },
+                    "rule_closure_digest": closure,
+                },
+            )
+            closures.append(closure)
+        return closures
+
+    def test_v4_bidirectional_compile_has_no_implicit_cartesian_projection(self) -> None:
+        report = compile_typed_rule_ir(self._v4_ir())
+        self.assertEqual("charting-loop/typed-rule-compilation/v4", report["schema_version"])
+        self.assertTrue(report["compilation_complete"], report["compile_issues"])
+        self.assertEqual([], report["semantic_delta"])
+        self.assertEqual([], report["relationship_alignment_issues"])
+        self.assertEqual(1, len(report["typed_dependency_templates"]))
+        self.assertEqual(
+            "keyed",
+            report["typed_dependency_templates"][0]["relationship_alignment"]["mode"],
+        )
+        self.assertTrue(report["candidate_revision_digest"].startswith("sha256:"))
+        self.assertTrue(report["reverse_semantic_projection_digest"].startswith("sha256:"))
+
+    def test_v4_reverse_projection_exposes_missing_semantic_role(self) -> None:
+        value = self._v4_ir()
+        value["rules"][0]["source_slices"] = [
+            item
+            for item in value["rules"][0]["source_slices"]
+            if item["semantic_role"] != "outcome"
+        ]
+        report = compile_typed_rule_ir(value)
+        self.assertFalse(report["compilation_complete"])
+        self.assertEqual("R-EXIST", report["semantic_delta"][0]["rule_id"])
+        self.assertIn(
+            "outcome", report["semantic_delta"][0]["missing_semantic_roles"]
+        )
+
+    def test_v4_separates_available_bytes_from_incomplete_extraction(self) -> None:
+        value = self._v4_ir()
+        source = value["source_bundle"]["sources"][0]
+        source["semantic_extraction_status"] = "incomplete"
+        source["extractor"] = None
+        source["extraction_artifact"] = None
+        value["source_bundle"]["closure_status"] = "unresolved"
+        manifest = {
+            "snapshot_id": value["source_bundle"]["snapshot_id"],
+            "snapshot_revision": 1,
+            "parent_snapshot_digest": None,
+            "sources": [
+                {
+                    "source_id": item["source_id"],
+                    "source_ref": item["source_ref"],
+                    "plane": item["plane"],
+                    "role": item["role"],
+                    "byte_status": item["byte_status"],
+                    "byte_digest": item["byte_digest"],
+                    "byte_size": item["byte_size"],
+                    "media_type": item["media_type"],
+                    "semantic_extraction_status": item["semantic_extraction_status"],
+                    "extractor_digest": item["extractor"]["digest"] if item["extractor"] else None,
+                    "extraction_artifact_digest": item["extraction_artifact"]["digest"] if item["extraction_artifact"] else None,
+                }
+                for item in value["source_bundle"]["sources"]
+            ],
+        }
+        value["source_bundle"]["manifest_digest"] = sha256_json(manifest)
+        value["source_bundle"]["freeze_receipt"]["digest"] = sha256_json(
+            {
+                "actor_role": "runner",
+                "ref": value["source_bundle"]["freeze_receipt"]["ref"],
+                "manifest_digest": value["source_bundle"]["manifest_digest"],
+            }
+        )
+        report = compile_typed_rule_ir(value)
+        self.assertFalse(report["compilation_complete"])
+        self.assertEqual("available", source["byte_status"])
+        self.assertEqual("incomplete", source["semantic_extraction_status"])
+
+    def test_v4_binary_extraction_and_non_normative_planes_are_accounted_separately(self) -> None:
+        value = self._v4_ir()
+        source = value["source_bundle"]["sources"][0]
+        source["media_type"] = "application/pdf"
+        source["content_encoding"] = None
+        source["content_utf8"] = None
+        for clause in value["source_clause_inventory"]:
+            for source_slice in clause["source_slices"]:
+                if source_slice["source_id"] == source["source_id"]:
+                    source_slice["representation"] = "extraction_artifact"
+        fact_bytes = b"public world fact"
+        value["source_bundle"]["sources"].append(
+            {
+                "source_id": "SRC-WORLD-FACT",
+                "source_ref": "memory:world-fact",
+                "plane": "public_task_fact",
+                "role": "task_world",
+                "byte_status": "available",
+                "byte_digest": sha256_bytes(fact_bytes),
+                "byte_size": len(fact_bytes),
+                "media_type": "text/plain",
+                "content_encoding": "utf-8",
+                "content_utf8": fact_bytes.decode(),
+                "semantic_extraction_status": "not_required",
+                "extractor": None,
+                "extraction_artifact": None,
+            }
+        )
+        self._refresh_v4_snapshot(value["source_bundle"])
+        report = compile_typed_rule_ir(value)
+        self.assertTrue(report["compilation_complete"], report["compile_issues"])
+        self.assertEqual([], report["unaccounted_normative_ranges"])
+        self.assertEqual(3, report["source_closure"]["source_count"])
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            self._append_v4_candidate(path, value)
+            doctor = graph_doctor(path)
+            self.assertNotIn(
+                "SRC-WORLD-FACT",
+                doctor["source_provenance"]["uninventoried_source_ids"],
+            )
+
+    def test_v4_ruleclosure_rejects_nonzero_delta_or_missing_qa(self) -> None:
+        value = self._v4_ir()
+        value["rules"][0]["source_slices"] = [
+            item
+            for item in value["rules"][0]["source_slices"]
+            if item["semantic_role"] != "outcome"
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            report, candidate, rule_records = self._append_v4_candidate(path, value)
+            body = report["rule_bodies"][0]
+            closure_payload = {
+                "rule_id": body["rule_id"],
+                "rule_record_id": rule_records[body["rule_id"]],
+                "candidate_report_record_id": candidate["record_id"],
+                "candidate_report_digest": candidate["body"][
+                    "candidate_report_digest"
+                ],
+                "candidate_revision_digest": report["candidate_revision_digest"],
+                "authority_snapshot_digest": report["authority_snapshot_digest"],
+                "reverse_projection_digest": report[
+                    "reverse_semantic_projection_digest"
+                ],
+                "semantic_delta_digest": report["semantic_delta_digest"],
+                "qa_assessment_ref": "sha256:" + "8" * 64,
+                "qa_assessment_digest": "sha256:" + "9" * 64,
+                "ratifier_ref": "runner:test-invalid",
+            }
+            with self.assertRaisesRegex(
+                CorridorKitError, "complete zero-delta compile report"
+            ):
+                append_graph_record(
+                    path,
+                    record_type="rule_ratification",
+                    actor="runner",
+                    body={
+                        "rule_id": body["rule_id"],
+                        "rule_record_id": rule_records[body["rule_id"]],
+                        "authority_ref": body["source_ref"],
+                        "authority_digest": body["source_digest"],
+                        "receipt_ref": "ratification:invalid",
+                        "ratification_schema": "charting-loop/rule-ratification/v2",
+                        **{
+                            key: item
+                            for key, item in closure_payload.items()
+                            if key not in {"rule_id", "rule_record_id"}
+                        },
+                        "rule_closure_digest": sha256_json(closure_payload),
+                    },
+                )
+
+    def test_v4_graph_rejects_cross_key_edge_and_doctor_requires_exact_edge_set(self) -> None:
+        value = self._v4_ir()
+        for rule in value["rules"]:
+            rule["semantics"]["quantifier"]["subjects"] = ["a", "b"]
+            rule["semantics"]["checklist_projection"][
+                "projection_mode"
+            ] = "per_subject"
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            report, candidate, rule_records = self._append_v4_candidate(path, value)
+            self._ratify_v4_candidate(path, report, candidate, rule_records)
+            for body in report["checklist_templates"]:
+                append_graph_record(
+                    path,
+                    record_type="acceptance_checklist_item",
+                    actor="worker",
+                    body={
+                        **body,
+                        "source_rule_record_id": rule_records[
+                            body["source_rule_id"]
+                        ],
+                    },
+                )
+            dependencies = report["typed_dependency_templates"]
+            self.assertEqual(2, len(dependencies))
+            first, second = dependencies
+            invalid = {
+                **first,
+                "dependency_id": "DEP-CROSS-KEY",
+                "to_ref": second["to_ref"],
+                "source_rule_record_id": rule_records[first["source_rule_id"]],
+                "target_rule_record_id": rule_records[first["target_rule_id"]],
+            }
+            with self.assertRaisesRegex(CorridorKitError, "outside relationship alignment"):
+                append_graph_record(
+                    path,
+                    record_type="typed_dependency",
+                    actor="worker",
+                    body=invalid,
+                )
+            append_graph_record(
+                path,
+                record_type="typed_dependency",
+                actor="worker",
+                body={
+                    **first,
+                    "source_rule_record_id": rule_records[first["source_rule_id"]],
+                    "target_rule_record_id": rule_records[first["target_rule_id"]],
+                },
+            )
+            doctor = graph_doctor(path)
+            issues = doctor["source_provenance"][
+                "relationship_alignment_edge_issues"
+            ]
+            self.assertEqual(1, len(issues))
+            self.assertEqual(1, len(issues[0]["missing_pairs"]))
+
+    def test_v4_ruleclosure_must_precede_position_and_effective_direction(self) -> None:
+        ir = self._v4_ir()
+        report = compile_typed_rule_ir(ir)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            snapshot_record = append_graph_record(
+                path,
+                record_type="authority_snapshot",
+                actor="runner",
+                body=report["authority_snapshot_template"],
+            )["record"]
+            for body in report["source_artifact_templates"]:
+                append_graph_record(
+                    path, record_type="task_source_artifact", actor="runner", body=body
+                )
+            for body in report["source_clause_templates"]:
+                append_graph_record(
+                    path, record_type="source_clause", actor="worker", body=body
+                )
+            rule_records = {}
+            closure_digests = []
+            for body in report["rule_bodies"]:
+                proposal = append_graph_record(
+                    path, record_type="rule_proposal", actor="worker", body=body
+                )
+                rule_record_id = proposal["record"]["record_id"]
+                rule_records[body["rule_id"]] = rule_record_id
+            candidate_without_digest = {
+                "schema_version": "charting-loop/rule-candidate-report/v1",
+                "authority_snapshot_record_id": snapshot_record["record_id"],
+                "typed_rule_ir": ir,
+                "compile_report": report,
+                "rule_record_ids": rule_records,
+            }
+            candidate = append_graph_record(
+                path,
+                record_type="rule_candidate_report",
+                actor="runner",
+                body={
+                    **candidate_without_digest,
+                    "candidate_report_digest": sha256_json(candidate_without_digest),
+                },
+            )["record"]
+            first_body = report["rule_bodies"][0]
+            missing_qa_payload = {
+                "rule_id": first_body["rule_id"],
+                "rule_record_id": rule_records[first_body["rule_id"]],
+                "candidate_report_record_id": candidate["record_id"],
+                "candidate_report_digest": candidate["body"][
+                    "candidate_report_digest"
+                ],
+                "candidate_revision_digest": report["candidate_revision_digest"],
+                "authority_snapshot_digest": report["authority_snapshot_digest"],
+                "reverse_projection_digest": report[
+                    "reverse_semantic_projection_digest"
+                ],
+                "semantic_delta_digest": report["semantic_delta_digest"],
+                "qa_assessment_ref": "sha256:" + "8" * 64,
+                "qa_assessment_digest": "sha256:" + "9" * 64,
+                "ratifier_ref": "runner:missing-qa",
+            }
+            with self.assertRaisesRegex(CorridorKitError, "passing QA assessment"):
+                append_graph_record(
+                    path,
+                    record_type="rule_ratification",
+                    actor="runner",
+                    body={
+                        "rule_id": first_body["rule_id"],
+                        "rule_record_id": rule_records[first_body["rule_id"]],
+                        "authority_ref": first_body["source_ref"],
+                        "authority_digest": first_body["source_digest"],
+                        "receipt_ref": "ratification:missing-qa",
+                        "ratification_schema": "charting-loop/rule-ratification/v2",
+                        **{
+                            key: item
+                            for key, item in missing_qa_payload.items()
+                            if key not in {"rule_id", "rule_record_id"}
+                        },
+                        "rule_closure_digest": sha256_json(missing_qa_payload),
+                    },
+                )
+            qa_without_digest = {
+                "schema_version": "charting-loop/rule-qa-assessment/v1",
+                "candidate_report_record_id": candidate["record_id"],
+                "candidate_report_digest": candidate["body"][
+                    "candidate_report_digest"
+                ],
+                "outcome": "pass",
+                "findings": [],
+            }
+            qa = append_graph_record(
+                path,
+                record_type="rule_qa_assessment",
+                actor="qa",
+                body={
+                    **qa_without_digest,
+                    "assessment_digest": sha256_json(qa_without_digest),
+                },
+            )["record"]
+            for body in report["rule_bodies"]:
+                rule_record_id = rule_records[body["rule_id"]]
+                closure_payload = {
+                    "rule_id": body["rule_id"],
+                    "rule_record_id": rule_record_id,
+                    "candidate_report_record_id": candidate["record_id"],
+                    "candidate_report_digest": candidate["body"][
+                        "candidate_report_digest"
+                    ],
+                    "candidate_revision_digest": report["candidate_revision_digest"],
+                    "authority_snapshot_digest": report["authority_snapshot_digest"],
+                    "reverse_projection_digest": report[
+                        "reverse_semantic_projection_digest"
+                    ],
+                    "semantic_delta_digest": report["semantic_delta_digest"],
+                    "qa_assessment_ref": qa["record_id"],
+                    "qa_assessment_digest": qa["body"]["assessment_digest"],
+                    "ratifier_ref": "runner:test-v4",
+                }
+                closure_digest = sha256_json(closure_payload)
+                closure_digests.append(closure_digest)
+                append_graph_record(
+                    path,
+                    record_type="rule_ratification",
+                    actor="runner",
+                    body={
+                        "rule_id": body["rule_id"],
+                        "rule_record_id": rule_record_id,
+                        "authority_ref": body["source_ref"],
+                        "authority_digest": body["source_digest"],
+                        "receipt_ref": f"ratification:{body['rule_id']}",
+                        "ratification_schema": "charting-loop/rule-ratification/v2",
+                        **{
+                            key: value
+                            for key, value in closure_payload.items()
+                            if key not in {"rule_id", "rule_record_id"}
+                        },
+                        "rule_closure_digest": closure_digest,
+                    },
+                )
+            position_body = {
+                "position_id": "POSITION-V4-001",
+                "previous_position_ref": None,
+                "task_identity": {"task": "synthetic-v4"},
+                "scope": {"kind": "whole-task"},
+                "role_assignments": {"worker": "test"},
+                "rule_record_ids": list(rule_records.values()),
+                "fact_receipt_ids": [],
+                "artifact_record_ids": [],
+            }
+            with self.assertRaisesRegex(CorridorKitError, "RuleClosure digests"):
+                append_graph_record(
+                    path,
+                    record_type="position_checkpoint",
+                    actor="worker",
+                    body=position_body,
+                )
+            position = append_graph_record(
+                path,
+                record_type="position_checkpoint",
+                actor="worker",
+                body={**position_body, "rule_closure_digests": closure_digests},
+            )
+            direction_body = {
+                "direction_id": "DIRECTION-V4-001",
+                "position_ref": position["record"]["record_id"],
+                "statement": "execute the ready synthetic row",
+                "rule_record_ids": list(rule_records.values()),
+                "fact_receipt_ids": [],
+                "evidence_refs": [],
+            }
+            with self.assertRaisesRegex(CorridorKitError, "RuleClosure digests"):
+                append_graph_record(
+                    path,
+                    record_type="direction_proposal",
+                    actor="worker",
+                    body=direction_body,
+                )
+            append_graph_record(
+                path,
+                record_type="direction_proposal",
+                actor="worker",
+                body={**direction_body, "rule_closure_digests": closure_digests},
+            )
+            doctor = graph_doctor(path)
+            self.assertEqual([], doctor["rule_ratification"]["missing_or_stale_rule_ids"])
+
     def test_v3_binds_exact_disjoint_cross_source_slices_and_edge_provenance(self) -> None:
         report = compile_typed_rule_ir(self._v3_ir())
         self.assertEqual("charting-loop/typed-rule-compilation/v3", report["schema_version"])

@@ -19,16 +19,26 @@ from .core import (
     sha256_json,
 )
 from .compiler import (
+    TASK_SOURCE_BUNDLE_SCHEMA_V3,
     TASK_SOURCE_BUNDLE_SCHEMA_V2,
     RULE_RELATIONSHIPS,
     TYPED_RULE_SEMANTICS_SCHEMA_V3,
+    TYPED_RULE_SEMANTICS_SCHEMA_V4,
+    compile_typed_rule_ir,
+    project_relationship_alignment,
     project_rule_checklist_templates,
     rule_source_provenance_identity,
     validate_rule_source_slices,
     validate_rule_semantics,
     validate_source_artifact,
+    validate_authority_source_artifact,
+    validate_source_bundle,
     validate_source_clause_inventory_v3,
 )
+
+RULE_RATIFICATION_SCHEMA_V2 = "charting-loop/rule-ratification/v2"
+RULE_CANDIDATE_REPORT_SCHEMA = "charting-loop/rule-candidate-report/v1"
+RULE_QA_ASSESSMENT_SCHEMA = "charting-loop/rule-qa-assessment/v1"
 
 
 GRAPH_RECORD_SCHEMA = "charting-loop/graph-kernel-record/v1"
@@ -37,9 +47,12 @@ GRAPH_DOCTOR_SCHEMA = "charting-loop/graph-doctor-report/v1"
 GRAPH_RECORD_TYPES = frozenset(
     {
         "task_source_artifact",
+        "authority_snapshot",
         "source_clause",
         "rule_proposal",
         "rule_revision",
+        "rule_candidate_report",
+        "rule_qa_assessment",
         "rule_ratification",
         "rule_dependency",
         "acceptance_checklist_item",
@@ -134,6 +147,37 @@ def _digest(body: Mapping[str, Any], field: str) -> str:
             f"graph body field {field} must be a sha256 digest"
         ) from exc
     return value
+
+
+def _validate_rule_qa_assessment_body(body: Mapping[str, Any]) -> dict[str, Any]:
+    if set(body) != {
+        "schema_version",
+        "candidate_report_record_id",
+        "candidate_report_digest",
+        "outcome",
+        "findings",
+        "assessment_digest",
+    }:
+        raise CorridorKitError("Rule QA assessment has unknown or missing fields")
+    if body.get("schema_version") != RULE_QA_ASSESSMENT_SCHEMA:
+        raise CorridorKitError("Rule QA assessment has the wrong schema")
+    normalized = {
+        "schema_version": RULE_QA_ASSESSMENT_SCHEMA,
+        "candidate_report_record_id": _text(body, "candidate_report_record_id"),
+        "candidate_report_digest": _digest(body, "candidate_report_digest"),
+        "outcome": _text(body, "outcome"),
+        "findings": _text_list(body, "findings"),
+    }
+    if normalized["outcome"] not in {"pass", "fail", "not_assessed"}:
+        raise CorridorKitError("Rule QA assessment has an unknown outcome")
+    if normalized["outcome"] == "pass" and normalized["findings"]:
+        raise CorridorKitError("passing Rule QA assessment cannot retain findings")
+    if normalized["outcome"] != "pass" and not normalized["findings"]:
+        raise CorridorKitError("non-passing Rule QA assessment requires findings")
+    assessment_digest = _digest(body, "assessment_digest")
+    if assessment_digest != sha256_json(normalized):
+        raise CorridorKitError("Rule QA assessment digest does not match its content")
+    return {**normalized, "assessment_digest": assessment_digest}
 
 
 def _identity_payload(
@@ -270,7 +314,22 @@ def _direction_bindings_present(body: Mapping[str, Any]) -> bool:
 def _successor_source_bundle(
     source_artifacts: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
-    sources = list(source_artifacts.values())
+    sources = [
+        (
+            {
+                "source_id": source["source_id"],
+                "source_ref": source["source_ref"],
+                "source_digest": source["byte_digest"],
+                "role": source["role"],
+                "retrieval_status": source["byte_status"],
+                "content_encoding": source["content_encoding"],
+                "content_utf8": source["content_utf8"],
+            }
+            if "plane" in source
+            else dict(source)
+        )
+        for source in source_artifacts.values()
+    ]
     return {
         "schema_version": TASK_SOURCE_BUNDLE_SCHEMA_V2,
         "closure_status": (
@@ -289,6 +348,7 @@ def _validate_successor_rule_source(
     source_artifacts: Mapping[str, Mapping[str, Any]],
     source_clauses: Mapping[str, Mapping[str, Any]],
     source_slice_to_clause: Mapping[str, str],
+    authority_snapshot: Mapping[str, Any] | None = None,
 ) -> str:
     rule_id = _text(body, "rule_id")
     statement = _text(body, "statement")
@@ -336,7 +396,11 @@ def _validate_successor_rule_source(
         raise CorridorKitError(
             f"successor Rule source slices fall outside mapped clauses: {outside_slices}"
         )
-    source_bundle = _successor_source_bundle(source_artifacts)
+    source_bundle = (
+        dict(authority_snapshot)
+        if authority_snapshot is not None
+        else _successor_source_bundle(source_artifacts)
+    )
     source_identity = rule_source_provenance_identity(
         rule_id=rule_id,
         statement=statement,
@@ -348,6 +412,20 @@ def _validate_successor_rule_source(
     provenance_digest = _digest(body, "rule_source_provenance_digest")
     if sha256_json(source_identity) != provenance_digest:
         raise CorridorKitError("successor Rule source provenance digest does not match")
+    is_v4 = body.get("semantics", {}).get("schema_version") == TYPED_RULE_SEMANTICS_SCHEMA_V4
+    if is_v4:
+        snapshot_digest = _digest(body, "source_digest")
+        if authority_snapshot is None:
+            raise CorridorKitError("v4 Rule requires a runner AuthoritySnapshot")
+        if snapshot_digest != sha256_json(source_bundle):
+            raise CorridorKitError("v4 Rule does not bind the current AuthoritySnapshot")
+        if _digest(body, "authority_snapshot_manifest_digest") != source_bundle[
+            "manifest_digest"
+        ]:
+            raise CorridorKitError("v4 Rule manifest digest differs from AuthoritySnapshot")
+        if body.get("source_ref") != f"authority-snapshot:{snapshot_digest}":
+            raise CorridorKitError("v4 Rule source_ref does not bind AuthoritySnapshot")
+        return provenance_digest
     bundle_digest = sha256_json(source_bundle)
     if body.get("source_ref") != f"source-bundle:{bundle_digest}":
         raise CorridorKitError("successor Rule source_ref does not bind current source bundle")
@@ -419,16 +497,22 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Validate chain identity, authority receipts, and reference closure."""
 
     source_artifacts: dict[str, dict[str, Any]] = {}
+    authority_snapshot: dict[str, Any] | None = None
+    authority_snapshot_record_id: str | None = None
     source_clauses: dict[str, dict[str, Any]] = {}
     source_clause_order_keys: set[str] = set()
     source_slice_to_clause: dict[str, str] = {}
     rule_records: dict[str, str] = {}
+    current_rule_bodies: dict[str, dict[str, Any]] = {}
     rule_source_digests: dict[str, str] = {}
     rule_source_provenance_digests: dict[str, str] = {}
     rule_source_bindings: dict[str, list[dict[str, str]]] = {}
     rule_semantics: dict[str, dict[str, Any]] = {}
     rule_semantics_digests: dict[str, str] = {}
     ratified_rules: dict[str, str] = {}
+    ratified_rule_closures: dict[str, str] = {}
+    candidate_reports: dict[str, dict[str, Any]] = {}
+    qa_assessments: dict[str, dict[str, Any]] = {}
     dependencies: dict[str, set[str]] = {}
     checklist_items: dict[str, dict[str, Any]] = {}
     typed_dependencies: dict[str, dict[str, Any]] = {}
@@ -492,8 +576,39 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             raise CorridorKitError(f"graph record {index + 1} has the wrong record identity")
         previous = expected_record
 
-        if record_type == "task_source_artifact":
-            artifact = validate_source_artifact(body)
+        if record_type == "authority_snapshot":
+            if actor != "runner":
+                raise CorridorKitError("AuthoritySnapshot must be frozen by the runner")
+            if authority_snapshot is not None:
+                raise CorridorKitError("graph already contains an AuthoritySnapshot")
+            snapshot = validate_source_bundle(body)
+            if snapshot["schema_version"] != TASK_SOURCE_BUNDLE_SCHEMA_V3:
+                raise CorridorKitError("authority_snapshot record requires schema v3")
+            authority_snapshot = snapshot
+            authority_snapshot_record_id = expected_record
+        elif record_type == "task_source_artifact":
+            artifact = (
+                validate_authority_source_artifact(body)
+                if "plane" in body
+                else validate_source_artifact(body)
+            )
+            if "plane" in artifact:
+                if actor != "runner" or authority_snapshot is None:
+                    raise CorridorKitError(
+                        "v4 task source artifacts require a prior runner AuthoritySnapshot"
+                    )
+                frozen_source = next(
+                    (
+                        item
+                        for item in authority_snapshot["sources"]
+                        if item["source_id"] == artifact["source_id"]
+                    ),
+                    None,
+                )
+                if frozen_source != artifact:
+                    raise CorridorKitError(
+                        "task source artifact differs from runner AuthoritySnapshot"
+                    )
             source_id = artifact["source_id"]
             if source_id in source_artifacts or any(
                 item["source_ref"] == artifact["source_ref"]
@@ -508,7 +623,11 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 raise CorridorKitError(
                     "source clause requires prior frozen task source artifacts"
                 )
-            source_bundle = _successor_source_bundle(source_artifacts)
+            source_bundle = (
+                authority_snapshot
+                if authority_snapshot is not None
+                else _successor_source_bundle(source_artifacts)
+            )
             clause = validate_source_clause_inventory_v3(
                 [body], source_bundle=source_bundle
             )[0]
@@ -546,12 +665,16 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 if sha256_json(semantics) != semantics_digest:
                     raise CorridorKitError("typed Rule semantics digest does not match")
                 semantics_schema = semantics.get("schema_version")
-                if semantics_schema == TYPED_RULE_SEMANTICS_SCHEMA_V3:
+                if semantics_schema in {
+                    TYPED_RULE_SEMANTICS_SCHEMA_V3,
+                    TYPED_RULE_SEMANTICS_SCHEMA_V4,
+                }:
                     provenance_digest = _validate_successor_rule_source(
                         body,
                         source_artifacts=source_artifacts,
                         source_clauses=source_clauses,
                         source_slice_to_clause=source_slice_to_clause,
+                        authority_snapshot=authority_snapshot,
                     )
                 elif semantics_schema == "charting-loop/typed-rule-semantics/v2":
                     _text_list(body, "source_clause_ids", nonempty=True)
@@ -562,11 +685,15 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             if rule_id in rule_records:
                 raise CorridorKitError(f"rule proposal already exists: {rule_id}")
             rule_records[rule_id] = expected_record
+            current_rule_bodies[rule_id] = dict(body)
             rule_source_digests[rule_id] = source_digest
             if semantic_fields:
                 rule_semantics[rule_id] = semantics
                 rule_semantics_digests[rule_id] = semantics_digest
-                if semantics.get("schema_version") == TYPED_RULE_SEMANTICS_SCHEMA_V3:
+                if semantics.get("schema_version") in {
+                    TYPED_RULE_SEMANTICS_SCHEMA_V3,
+                    TYPED_RULE_SEMANTICS_SCHEMA_V4,
+                }:
                     rule_source_provenance_digests[rule_id] = provenance_digest
                     rule_source_bindings[rule_id] = list(body["source_slices"])
         elif record_type == "rule_revision":
@@ -589,12 +716,16 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 if sha256_json(semantics) != semantics_digest:
                     raise CorridorKitError("typed Rule semantics digest does not match")
                 semantics_schema = semantics.get("schema_version")
-                if semantics_schema == TYPED_RULE_SEMANTICS_SCHEMA_V3:
+                if semantics_schema in {
+                    TYPED_RULE_SEMANTICS_SCHEMA_V3,
+                    TYPED_RULE_SEMANTICS_SCHEMA_V4,
+                }:
                     provenance_digest = _validate_successor_rule_source(
                         body,
                         source_artifacts=source_artifacts,
                         source_clauses=source_clauses,
                         source_slice_to_clause=source_slice_to_clause,
+                        authority_snapshot=authority_snapshot,
                     )
                 elif semantics_schema == "charting-loop/typed-rule-semantics/v2":
                     _text_list(body, "source_clause_ids", nonempty=True)
@@ -605,11 +736,15 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             if rule_records.get(rule_id) != supersedes:
                 raise CorridorKitError(f"rule revision does not supersede the current rule: {rule_id}")
             rule_records[rule_id] = expected_record
+            current_rule_bodies[rule_id] = dict(body)
             rule_source_digests[rule_id] = source_digest
             if semantic_fields:
                 rule_semantics[rule_id] = semantics
                 rule_semantics_digests[rule_id] = semantics_digest
-                if semantics.get("schema_version") == TYPED_RULE_SEMANTICS_SCHEMA_V3:
+                if semantics.get("schema_version") in {
+                    TYPED_RULE_SEMANTICS_SCHEMA_V3,
+                    TYPED_RULE_SEMANTICS_SCHEMA_V4,
+                }:
                     rule_source_provenance_digests[rule_id] = provenance_digest
                     rule_source_bindings[rule_id] = list(body["source_slices"])
                 else:
@@ -621,6 +756,79 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 rule_source_provenance_digests.pop(rule_id, None)
                 rule_source_bindings.pop(rule_id, None)
             ratified_rules.pop(rule_id, None)
+            ratified_rule_closures.pop(rule_id, None)
+        elif record_type == "rule_candidate_report":
+            if actor != "runner":
+                raise CorridorKitError("Rule candidate report must be frozen by the runner")
+            if set(body) != {
+                "schema_version",
+                "authority_snapshot_record_id",
+                "typed_rule_ir",
+                "compile_report",
+                "rule_record_ids",
+                "candidate_report_digest",
+            }:
+                raise CorridorKitError("Rule candidate report has unknown or missing fields")
+            if body.get("schema_version") != RULE_CANDIDATE_REPORT_SCHEMA:
+                raise CorridorKitError("Rule candidate report has the wrong schema")
+            if authority_snapshot_record_id is None or body.get(
+                "authority_snapshot_record_id"
+            ) != authority_snapshot_record_id:
+                raise CorridorKitError(
+                    "Rule candidate report does not bind the runner AuthoritySnapshot"
+                )
+            expected_report = compile_typed_rule_ir(body.get("typed_rule_ir"))
+            if body.get("compile_report") != expected_report:
+                raise CorridorKitError(
+                    "Rule candidate report does not reproduce from its typed Rule IR"
+                )
+            expected_rule_ids = {
+                rule_body["rule_id"]: rule_records.get(rule_body["rule_id"])
+                for rule_body in expected_report["rule_bodies"]
+            }
+            if body.get("rule_record_ids") != expected_rule_ids or any(
+                current_rule_bodies.get(rule_body["rule_id"]) != rule_body
+                for rule_body in expected_report["rule_bodies"]
+            ):
+                raise CorridorKitError(
+                    "Rule candidate report does not bind the current Rule candidates"
+                )
+            if authority_snapshot != expected_report["authority_snapshot_template"]:
+                raise CorridorKitError(
+                    "Rule candidate report AuthoritySnapshot differs from Graph custody"
+                )
+            if list(source_artifacts.values()) != expected_report["source_artifact_templates"]:
+                raise CorridorKitError(
+                    "Rule candidate report source artifacts differ from Graph custody"
+                )
+            if list(source_clauses.values()) != expected_report["source_clause_templates"]:
+                raise CorridorKitError(
+                    "Rule candidate report source clauses differ from Graph custody"
+                )
+            normalized_candidate = {
+                key: body[key] for key in body if key != "candidate_report_digest"
+            }
+            candidate_digest = _digest(body, "candidate_report_digest")
+            if candidate_digest != sha256_json(normalized_candidate):
+                raise CorridorKitError("Rule candidate report digest does not match")
+            candidate_reports[expected_record] = {
+                **normalized_candidate,
+                "candidate_report_digest": candidate_digest,
+            }
+        elif record_type == "rule_qa_assessment":
+            if actor != "qa":
+                raise CorridorKitError("Rule QA assessment must be authored by QA")
+            assessment = _validate_rule_qa_assessment_body(body)
+            candidate = candidate_reports.get(
+                assessment["candidate_report_record_id"]
+            )
+            if candidate is None or assessment["candidate_report_digest"] != candidate[
+                "candidate_report_digest"
+            ]:
+                raise CorridorKitError(
+                    "Rule QA assessment does not bind an existing candidate report"
+                )
+            qa_assessments[expected_record] = assessment
         elif record_type == "rule_ratification":
             rule_id = _text(body, "rule_id")
             rule_record_id = _text(body, "rule_record_id")
@@ -635,6 +843,107 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 )
             if rule_id in ratified_rules:
                 raise CorridorKitError(f"current rule is already ratified: {rule_id}")
+            successor_fields = {
+                "ratification_schema",
+                "candidate_report_record_id",
+                "candidate_report_digest",
+                "candidate_revision_digest",
+                "authority_snapshot_digest",
+                "reverse_projection_digest",
+                "semantic_delta_digest",
+                "qa_assessment_ref",
+                "qa_assessment_digest",
+                "ratifier_ref",
+                "rule_closure_digest",
+            }
+            present = successor_fields.intersection(body)
+            if present:
+                if present != successor_fields:
+                    raise CorridorKitError(
+                        "v2 Rule ratification has partial closure bindings"
+                    )
+                if body.get("ratification_schema") != RULE_RATIFICATION_SCHEMA_V2:
+                    raise CorridorKitError("Rule ratification has the wrong schema")
+                if actor not in {"runner", "operator"}:
+                    raise CorridorKitError("QA and Worker cannot ratify Rule authority")
+                candidate_revision_digest = _digest(body, "candidate_revision_digest")
+                candidate_report_record_id = _text(
+                    body, "candidate_report_record_id"
+                )
+                candidate_report_digest = _digest(body, "candidate_report_digest")
+                snapshot_digest = _digest(body, "authority_snapshot_digest")
+                reverse_digest = _digest(body, "reverse_projection_digest")
+                semantic_delta_digest = _digest(body, "semantic_delta_digest")
+                qa_ref = _text(body, "qa_assessment_ref")
+                qa_digest = _digest(body, "qa_assessment_digest")
+                ratifier_ref = _text(body, "ratifier_ref")
+                if authority_digest != snapshot_digest:
+                    raise CorridorKitError(
+                        "Rule ratification authority_digest differs from AuthoritySnapshot"
+                    )
+                if rule_semantics.get(rule_id, {}).get("schema_version") != TYPED_RULE_SEMANTICS_SCHEMA_V4:
+                    raise CorridorKitError("v2 ratification requires a current v4 Rule candidate")
+                candidate = candidate_reports.get(candidate_report_record_id)
+                if candidate is None or candidate[
+                    "candidate_report_digest"
+                ] != candidate_report_digest:
+                    raise CorridorKitError(
+                        "Rule ratification does not bind an existing frozen candidate report"
+                    )
+                report = candidate["compile_report"]
+                if (
+                    not report["compilation_complete"]
+                    or report["compile_issues"]
+                    or report["semantic_delta"]
+                    or report["unaccounted_normative_ranges"]
+                    or report["relationship_alignment_issues"]
+                ):
+                    raise CorridorKitError(
+                        "RuleClosure requires a complete zero-delta compile report"
+                    )
+                if (
+                    candidate["rule_record_ids"].get(rule_id) != rule_record_id
+                    or report["candidate_revision_digest"]
+                    != candidate_revision_digest
+                    or report["authority_snapshot_digest"] != snapshot_digest
+                    or report["reverse_semantic_projection_digest"] != reverse_digest
+                    or report["semantic_delta_digest"] != semantic_delta_digest
+                ):
+                    raise CorridorKitError(
+                        "Rule ratification inputs differ from frozen candidate report"
+                    )
+                qa_assessment = qa_assessments.get(qa_ref)
+                if (
+                    qa_assessment is None
+                    or qa_assessment["assessment_digest"] != qa_digest
+                    or qa_assessment["candidate_report_record_id"]
+                    != candidate_report_record_id
+                    or qa_assessment["candidate_report_digest"]
+                    != candidate_report_digest
+                    or qa_assessment["outcome"] != "pass"
+                ):
+                    raise CorridorKitError(
+                        "RuleClosure requires a passing QA assessment of the same candidate"
+                    )
+                expected_closure = sha256_json(
+                    {
+                        "rule_id": rule_id,
+                        "rule_record_id": rule_record_id,
+                        "candidate_report_record_id": candidate_report_record_id,
+                        "candidate_report_digest": candidate_report_digest,
+                        "candidate_revision_digest": candidate_revision_digest,
+                        "authority_snapshot_digest": snapshot_digest,
+                        "reverse_projection_digest": reverse_digest,
+                        "semantic_delta_digest": semantic_delta_digest,
+                        "qa_assessment_ref": qa_ref,
+                        "qa_assessment_digest": qa_digest,
+                        "ratifier_ref": ratifier_ref,
+                    }
+                )
+                closure_digest = _digest(body, "rule_closure_digest")
+                if closure_digest != expected_closure:
+                    raise CorridorKitError("RuleClosure digest does not match ratification inputs")
+                ratified_rule_closures[rule_id] = closure_digest
             ratified_rules[rule_id] = expected_record
         elif record_type == "rule_dependency":
             source = _text(body, "from_rule_id")
@@ -648,13 +957,20 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 "edge_provenance",
                 "source_rule_provenance_digest",
                 "target_rule_provenance_digest",
+                "relationship_alignment",
             }.intersection(body)
             if source in rule_source_provenance_digests:
-                if successor_fields != {
+                expected_successor_fields = {
                     "edge_provenance",
                     "source_rule_provenance_digest",
                     "target_rule_provenance_digest",
-                }:
+                }
+                if (
+                    rule_semantics[source].get("schema_version")
+                    == TYPED_RULE_SEMANTICS_SCHEMA_V4
+                ):
+                    expected_successor_fields.add("relationship_alignment")
+                if successor_fields != expected_successor_fields:
                     raise CorridorKitError(
                         "successor rule dependency must bind edge and both endpoint provenances"
                     )
@@ -670,6 +986,14 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 if expected_dependency is None or body["edge_provenance"] != expected_dependency["provenance"]:
                     raise CorridorKitError(
                         "successor rule dependency contradicts its source Rule semantics"
+                    )
+                if (
+                    "alignment" in expected_dependency
+                    and body.get("relationship_alignment")
+                    != expected_dependency["alignment"]
+                ):
+                    raise CorridorKitError(
+                        "v4 Rule dependency contradicts relationship alignment"
                     )
                 if (
                     _digest(body, "source_rule_provenance_digest")
@@ -807,6 +1131,7 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 "source_rule_provenance_digest",
                 "target_rule_provenance_digest",
                 "edge_provenance",
+                "relationship_alignment",
             }.intersection(body)
             if source_rule_id in rule_source_provenance_digests:
                 expected_fields = {
@@ -816,6 +1141,11 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                     "target_rule_provenance_digest",
                     "edge_provenance",
                 }
+                if (
+                    rule_semantics[source_rule_id].get("schema_version")
+                    == TYPED_RULE_SEMANTICS_SCHEMA_V4
+                ):
+                    expected_fields.add("relationship_alignment")
                 if successor_fields != expected_fields:
                     raise CorridorKitError(
                         "successor typed dependency must bind edge and both current endpoint Rules"
@@ -857,6 +1187,14 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                     raise CorridorKitError(
                         "successor typed dependency contradicts its source Rule semantics"
                     )
+                if (
+                    "alignment" in expected_dependency
+                    and body.get("relationship_alignment")
+                    != expected_dependency["alignment"]
+                ):
+                    raise CorridorKitError(
+                        "v4 typed dependency contradicts relationship alignment"
+                    )
             elif successor_fields:
                 raise CorridorKitError(
                     "legacy typed dependency cannot claim successor provenance"
@@ -887,6 +1225,33 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                     raise CorridorKitError(
                         "successor work dependency endpoints contradict bound Rule direction"
                     )
+                if (
+                    rule_semantics[source_rule_id].get("schema_version")
+                    == TYPED_RULE_SEMANTICS_SCHEMA_V4
+                ):
+                    source_cells = [
+                        item
+                        for item in checklist_items.values()
+                        if item["source_rule_id"] == source_rule_id
+                    ]
+                    target_cells = [
+                        item
+                        for item in checklist_items.values()
+                        if item["source_rule_id"] == body["target_rule_id"]
+                    ]
+                    alignment_projection = project_relationship_alignment(
+                        alignment=body["relationship_alignment"],
+                        source_cells=source_cells,
+                        target_cells=target_cells,
+                    )
+                    allowed_pairs = {
+                        (item["from_ref"], item["to_ref"])
+                        for item in alignment_projection["edge_pairs"]
+                    }
+                    if alignment_projection["issues"] or (source, target) not in allowed_pairs:
+                        raise CorridorKitError(
+                            "v4 work dependency endpoint pair is outside relationship alignment"
+                        )
             if dependency_id in typed_dependencies:
                 raise CorridorKitError(f"typed dependency already exists: {dependency_id}")
             typed_dependencies[dependency_id] = dict(body)
@@ -997,6 +1362,22 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 raise CorridorKitError(
                     "Position checkpoint must bind the whole current ratified Rule closure"
                 )
+            closure_refs = body.get("rule_closure_digests")
+            if ratified_rule_closures:
+                if not isinstance(closure_refs, list) or any(
+                    not isinstance(item, str) for item in closure_refs
+                ):
+                    raise CorridorKitError(
+                        "v4 Position must bind current RuleClosure digests"
+                    )
+                if set(closure_refs) != set(ratified_rule_closures.values()):
+                    raise CorridorKitError(
+                        "Position does not bind the whole current RuleClosure"
+                    )
+            elif closure_refs is not None:
+                raise CorridorKitError(
+                    "legacy Position cannot claim successor RuleClosure digests"
+                )
             if set(receipt_refs) != set(fact_receipts.values()):
                 raise CorridorKitError(
                     "Position checkpoint must bind the whole current admitted Fact receipt set"
@@ -1030,10 +1411,11 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                     )
                 for item_id, assessment in assessments.items():
                     checklist_item = checklist_items[item_id]
-                    typed_v2 = (
-                        checklist_item.get("typed_rule_semantics_schema")
-                        == "charting-loop/typed-rule-semantics/v2"
-                    )
+                    typed_v2 = checklist_item.get("typed_rule_semantics_schema") in {
+                        "charting-loop/typed-rule-semantics/v2",
+                        TYPED_RULE_SEMANTICS_SCHEMA_V3,
+                        TYPED_RULE_SEMANTICS_SCHEMA_V4,
+                    }
                     expected_assessment_fields = {
                         "status",
                         "witness_fact_receipt_ids",
@@ -1160,6 +1542,17 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 raise CorridorKitError("Direction proposal uses Rules outside its Position")
             if not set(receipt_refs).issubset(set(position["fact_receipt_ids"])):
                 raise CorridorKitError("Direction proposal uses Facts outside its Position")
+            position_closures = position.get("rule_closure_digests")
+            direction_closures = body.get("rule_closure_digests")
+            if position_closures is not None:
+                if direction_closures != position_closures:
+                    raise CorridorKitError(
+                        "effective Direction must bind its Position RuleClosure digests"
+                    )
+            elif direction_closures is not None:
+                raise CorridorKitError(
+                    "Direction cannot introduce RuleClosure absent from its Position"
+                )
             if _direction_bindings_present(body):
                 if not _position_bindings_present(position):
                     raise CorridorKitError(
@@ -1216,6 +1609,7 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         "source_clause_count": len(source_clauses),
         "rule_count": len(rule_records),
         "ratified_rule_count": len(ratified_rules),
+        "rule_closure_count": len(ratified_rule_closures),
         "acceptance_checklist_item_count": len(checklist_items),
         "typed_dependency_count": len(typed_dependencies),
         "dependency_resolution_count": len(dependency_resolutions),
@@ -1245,6 +1639,7 @@ def _graph_projection(records: list[dict[str, Any]]) -> dict[str, Any]:
     rule_source_clause_ids: dict[str, list[str]] = {}
     rule_source_bindings: dict[str, list[dict[str, str]]] = {}
     ratified_rules: set[str] = set()
+    rule_closures: dict[str, str] = {}
     checklist_items: dict[str, dict[str, Any]] = {}
     rule_dependencies: list[dict[str, Any]] = []
     dependencies: dict[str, dict[str, Any]] = {}
@@ -1310,8 +1705,11 @@ def _graph_projection(records: list[dict[str, Any]]) -> dict[str, Any]:
                 rule_source_clause_ids.pop(body["rule_id"], None)
                 rule_source_bindings.pop(body["rule_id"], None)
             ratified_rules.discard(body["rule_id"])
+            rule_closures.pop(body["rule_id"], None)
         elif record_type == "rule_ratification":
             ratified_rules.add(body["rule_id"])
+            if "rule_closure_digest" in body:
+                rule_closures[body["rule_id"]] = body["rule_closure_digest"]
         elif record_type == "rule_dependency":
             rule_dependencies.append(dict(body))
         elif record_type == "acceptance_checklist_item":
@@ -1352,6 +1750,7 @@ def _graph_projection(records: list[dict[str, Any]]) -> dict[str, Any]:
         "rule_source_clause_ids": rule_source_clause_ids,
         "rule_source_bindings": rule_source_bindings,
         "ratified_rules": ratified_rules,
+        "rule_closures": rule_closures,
         "checklist_items": current_checklists,
         "rule_dependencies": rule_dependencies,
         "dependencies": dependencies,
@@ -1432,6 +1831,7 @@ def graph_doctor(path: Path) -> dict[str, Any]:
                 "provenance_less_dependency_ids": [],
                 "missing_rule_dependency_projections": [],
                 "stale_rule_dependency_projections": [],
+                "relationship_alignment_edge_issues": [],
                 "stale_dependency_provenance_ids": [],
                 "semantic_role_issues": [],
                 "out_of_bounds_slice_ids": out_of_bounds,
@@ -1460,7 +1860,11 @@ def graph_doctor(path: Path) -> dict[str, Any]:
     unresolved_source_ids = sorted(
         source_id
         for source_id, source in source_artifacts.items()
-        if source["retrieval_status"] != "available"
+        if source.get("retrieval_status", source.get("byte_status")) != "available"
+        or (
+            source.get("plane") == "normative_rule"
+            and source.get("semantic_extraction_status") != "complete"
+        )
     )
     unmapped_clause_ids = sorted(
         clause_id
@@ -1475,13 +1879,17 @@ def graph_doctor(path: Path) -> dict[str, Any]:
     uninventoried_source_ids = sorted(
         source_id
         for source_id, source in source_artifacts.items()
-        if source["retrieval_status"] == "available"
+        if source.get("retrieval_status", source.get("byte_status")) == "available"
+        and source.get("plane", "normative_rule") == "normative_rule"
         and source_id not in inventoried_source_ids
     )
     source_less_rule_ids = sorted(
         rule_id
         for rule_id, semantics in projection["rule_semantics"].items()
-        if semantics.get("schema_version") == TYPED_RULE_SEMANTICS_SCHEMA_V3
+        if semantics.get("schema_version") in {
+            TYPED_RULE_SEMANTICS_SCHEMA_V3,
+            TYPED_RULE_SEMANTICS_SCHEMA_V4,
+        }
         and rule_id not in projection["rule_source_provenance_digests"]
     )
     role_issues: list[str] = []
@@ -1513,8 +1921,12 @@ def graph_doctor(path: Path) -> dict[str, Any]:
     )
     missing_rule_dependency_projections: list[str] = []
     stale_rule_dependency_projections: list[str] = []
+    relationship_alignment_edge_issues: list[dict[str, Any]] = []
     for source_rule_id, semantics in projection["rule_semantics"].items():
-        if semantics.get("schema_version") != TYPED_RULE_SEMANTICS_SCHEMA_V3:
+        if semantics.get("schema_version") not in {
+            TYPED_RULE_SEMANTICS_SCHEMA_V3,
+            TYPED_RULE_SEMANTICS_SCHEMA_V4,
+        }:
             continue
         for semantic_dependency in semantics["dependencies"]:
             identity = (
@@ -1540,8 +1952,62 @@ def graph_doctor(path: Path) -> dict[str, Any]:
                 != projection["rule_source_provenance_digests"].get(
                     semantic_dependency["target_rule_id"]
                 )
+                or (
+                    "alignment" in semantic_dependency
+                    and projected.get("relationship_alignment")
+                    != semantic_dependency["alignment"]
+                )
             ):
                 stale_rule_dependency_projections.append(identity)
+            if (
+                semantics.get("schema_version") == TYPED_RULE_SEMANTICS_SCHEMA_V4
+                and "alignment" in semantic_dependency
+                and semantic_dependency["target_rule_id"]
+                in projection["rule_semantics"]
+            ):
+                target_rule_id = semantic_dependency["target_rule_id"]
+                alignment_projection = project_relationship_alignment(
+                    alignment=semantic_dependency["alignment"],
+                    source_cells=[
+                        item
+                        for item in checklist_items.values()
+                        if item["source_rule_id"] == source_rule_id
+                    ],
+                    target_cells=[
+                        item
+                        for item in checklist_items.values()
+                        if item["source_rule_id"] == target_rule_id
+                    ],
+                )
+                graph_relationship = (
+                    "precondition_for"
+                    if semantic_dependency["relationship"] == "precedes"
+                    else semantic_dependency["relationship"]
+                )
+                expected_pairs = {
+                    (item["from_ref"], item["to_ref"])
+                    for item in alignment_projection["edge_pairs"]
+                }
+                actual_pairs = {
+                    (item["from_ref"], item["to_ref"])
+                    for item in dependencies.values()
+                    if item.get("source_rule_id") == source_rule_id
+                    and item.get("target_rule_id") == target_rule_id
+                    and item.get("relationship") == graph_relationship
+                    and item.get("dependency_kind") == "work"
+                }
+                if (
+                    alignment_projection["issues"]
+                    or expected_pairs != actual_pairs
+                ):
+                    relationship_alignment_edge_issues.append(
+                        {
+                            "identity": identity,
+                            "projection_issues": alignment_projection["issues"],
+                            "missing_pairs": sorted(expected_pairs - actual_pairs),
+                            "extra_pairs": sorted(actual_pairs - expected_pairs),
+                        }
+                    )
     current_nodes = set(checklist_items).union(projection["ratified_rules"])
     # Proposed Facts belong to the dependency topology, but only a receipt in
     # ``fact_receipts`` satisfies an evidence dependency.  Keeping those two
@@ -1600,6 +2066,17 @@ def graph_doctor(path: Path) -> dict[str, Any]:
     latest_position_ref = next(reversed(positions), None)
     latest_position = positions.get(latest_position_ref) if latest_position_ref else None
     incomplete_reasons: list[str] = []
+    stale_or_missing_rule_closures = sorted(
+        rule_id
+        for rule_id, semantics in projection["rule_semantics"].items()
+        if semantics.get("schema_version") == TYPED_RULE_SEMANTICS_SCHEMA_V4
+        and rule_id in projection["ratified_rules"]
+        and rule_id not in projection["rule_closures"]
+    )
+    incomplete_reasons.extend(
+        f"v4_rule_missing_authorized_closure:{rule_id}"
+        for rule_id in stale_or_missing_rule_closures
+    )
     if source_artifacts:
         incomplete_reasons.extend(
             f"unresolved_task_source:{source_id}"
@@ -1631,6 +2108,10 @@ def graph_doctor(path: Path) -> dict[str, Any]:
         incomplete_reasons.extend(
             f"rule_dependency_projection_stale:{identity}"
             for identity in stale_rule_dependency_projections
+        )
+        incomplete_reasons.extend(
+            f"relationship_alignment_edge_set_mismatch:{item['identity']}"
+            for item in relationship_alignment_edge_issues
         )
     if not checklist_items:
         incomplete_reasons.append("no_current_acceptance_checklist")
@@ -1816,7 +2297,21 @@ def graph_doctor(path: Path) -> dict[str, Any]:
         "typed_rule_coverage": typed_rule_coverage,
         "source_provenance": {
             "status": (
-                "exact_byte_slices"
+                "authority_snapshot_with_exact_byte_slices"
+                if any("plane" in source for source in source_artifacts.values())
+                and not (
+                    unresolved_source_ids
+                    or unmapped_clause_ids
+                    or uninventoried_source_ids
+                    or source_less_rule_ids
+                    or role_issues
+                    or provenance_less_dependency_ids
+                    or missing_rule_dependency_projections
+                    or stale_rule_dependency_projections
+                    or relationship_alignment_edge_issues
+                    or stale_dependency_ids
+                )
+                else "exact_byte_slices"
                 if source_artifacts and not (
                     unresolved_source_ids
                     or unmapped_clause_ids
@@ -1826,6 +2321,7 @@ def graph_doctor(path: Path) -> dict[str, Any]:
                     or provenance_less_dependency_ids
                     or missing_rule_dependency_projections
                     or stale_rule_dependency_projections
+                    or relationship_alignment_edge_issues
                     or stale_dependency_ids
                 )
                 else "unresolved"
@@ -1845,6 +2341,7 @@ def graph_doctor(path: Path) -> dict[str, Any]:
             "stale_rule_dependency_projections": sorted(
                 stale_rule_dependency_projections
             ),
+            "relationship_alignment_edge_issues": relationship_alignment_edge_issues,
             "stale_dependency_provenance_ids": sorted(stale_dependency_ids),
             "semantic_role_issues": role_issues,
             "out_of_bounds_slice_ids": [],
@@ -1852,6 +2349,10 @@ def graph_doctor(path: Path) -> dict[str, Any]:
             "digest_mismatch_slice_ids": [],
             "dangling_dependency_provenance_ids": [],
             "internally_inconsistent_dependency_provenance_ids": [],
+        },
+        "rule_ratification": {
+            "rule_closure_digests": dict(sorted(projection["rule_closures"].items())),
+            "missing_or_stale_rule_ids": stale_or_missing_rule_closures,
         },
         "hard_dependency_topological_order": topological_order,
         "ready_item_ids": (

@@ -79,7 +79,10 @@ def _json_object(raw: str, *, name: str) -> dict[str, Any]:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m corridor_kit",
-        description="Task-neutral mechanics for building advisory Corridors",
+        description=(
+            "Task-neutral advisory Corridor mechanics with bidirectional v4 Rule "
+            "compilation and append-only Position/Direction graphs"
+        ),
     )
     parser.add_argument("--version", action="version", version=KIT_VERSION)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -152,11 +155,19 @@ def _parser() -> argparse.ArgumentParser:
     capability_builtins.add_argument("--output", type=Path)
 
     rules = commands.add_parser(
-        "rules", help="validate and project task-authored Typed Rule IR"
+        "rules",
+        help=(
+            "validate Typed Rule IR and project checklists, reverse semantics, "
+            "and SemanticDelta"
+        ),
     )
     rule_commands = rules.add_subparsers(dest="rule_command", required=True)
     rule_compile = rule_commands.add_parser(
-        "compile", help="project Rule coverage cells and compile-probe identity"
+        "compile",
+        help=(
+            "compile plane-typed AuthoritySnapshot and RuleCandidates into coverage "
+            "cells plus reverse semantic diagnostics"
+        ),
     )
     rule_compile.add_argument("ir", type=Path)
     rule_compile.add_argument(
@@ -167,7 +178,11 @@ def _parser() -> argparse.ArgumentParser:
     rule_compile.add_argument("--output", type=Path)
 
     graph = commands.add_parser(
-        "graph", help="append and replay task-neutral Method execution records"
+        "graph",
+        help=(
+            "append and replay task-neutral RuleCandidate, RuleClosure, Position, "
+            "and Direction records"
+        ),
     )
     graph_commands = graph.add_subparsers(dest="graph_command", required=True)
     graph_init = graph_commands.add_parser("init", help="create an empty graph chain")

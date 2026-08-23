@@ -18,16 +18,21 @@ from .core import CorridorKitError, sha256_bytes, sha256_json
 TYPED_RULE_IR_SCHEMA_V1 = "charting-loop/typed-rule-ir/v1"
 TYPED_RULE_IR_SCHEMA = "charting-loop/typed-rule-ir/v2"
 TYPED_RULE_IR_SCHEMA_V3 = "charting-loop/typed-rule-ir/v3"
+TYPED_RULE_IR_SCHEMA_V4 = "charting-loop/typed-rule-ir/v4"
 TYPED_RULE_COMPILATION_SCHEMA_V1 = "charting-loop/typed-rule-compilation/v1"
 TYPED_RULE_COMPILATION_SCHEMA = "charting-loop/typed-rule-compilation/v2"
 TYPED_RULE_COMPILATION_SCHEMA_V3 = "charting-loop/typed-rule-compilation/v3"
+TYPED_RULE_COMPILATION_SCHEMA_V4 = "charting-loop/typed-rule-compilation/v4"
 COMPILE_PROBE_MANIFEST_SCHEMA_V1 = "charting-loop/compile-probe-manifest/v1"
 COMPILE_PROBE_MANIFEST_SCHEMA = "charting-loop/compile-probe-manifest/v2"
 COMPILE_PROBE_MANIFEST_SCHEMA_V3 = "charting-loop/compile-probe-manifest/v3"
+COMPILE_PROBE_MANIFEST_SCHEMA_V4 = "charting-loop/compile-probe-manifest/v4"
 TASK_SOURCE_BUNDLE_SCHEMA = "charting-loop/task-source-bundle/v1"
 TASK_SOURCE_BUNDLE_SCHEMA_V2 = "charting-loop/task-source-bundle/v2"
+TASK_SOURCE_BUNDLE_SCHEMA_V3 = "charting-loop/authority-snapshot/v3"
 TYPED_RULE_SEMANTICS_SCHEMA = "charting-loop/typed-rule-semantics/v2"
 TYPED_RULE_SEMANTICS_SCHEMA_V3 = "charting-loop/typed-rule-semantics/v3"
+TYPED_RULE_SEMANTICS_SCHEMA_V4 = "charting-loop/typed-rule-semantics/v4"
 
 RULE_KINDS = frozenset(
     {
@@ -71,7 +76,23 @@ COMPILATION_STATUSES = frozenset(
     {"complete", "incomplete", "ambiguous", "unsupported"}
 )
 REQUIREMENT_LEVELS = frozenset({"required", "optional"})
-SOURCE_ROLES = frozenset({"instruction", "authoritative_specification"})
+SOURCE_ROLES = frozenset(
+    {
+        "instruction",
+        "authoritative_specification",
+        "task_world",
+        "reference_material",
+    }
+)
+AUTHORITY_PLANES = frozenset(
+    {"normative_rule", "public_task_fact", "supporting_input"}
+)
+BYTE_STATUSES = frozenset(
+    {"available", "unavailable", "malformed", "not_digest_bound"}
+)
+SEMANTIC_EXTRACTION_STATUSES = frozenset(
+    {"complete", "incomplete", "unsupported", "not_required"}
+)
 SOURCE_RETRIEVAL_STATUSES = frozenset(
     {"available", "unavailable", "malformed", "not_digest_bound"}
 )
@@ -94,6 +115,7 @@ SOURCE_SLICE_SEMANTIC_ROLES = frozenset(
         "witness_requirement",
         "evidence_requirement",
         "relationship",
+        "prohibition",
     }
 )
 DEPENDENCY_PROVENANCE_KINDS = frozenset({"direct", "derived"})
@@ -106,6 +128,13 @@ DEPENDENCY_DERIVATION_KINDS = frozenset(
         "other_declared",
         "transitive",
     }
+)
+CONDITION_KINDS = frozenset({"static", "temporal", "state_transition"})
+RELATIONSHIP_ALIGNMENT_MODES = frozenset(
+    {"keyed", "aggregate_to_members", "explicit_pairs", "all_to_all"}
+)
+ALIGNMENT_CELL_KEYS = frozenset(
+    {"subject_axis", "subject_id", "condition_id", "predicate", "expected_outcome"}
 )
 
 _IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]*$")
@@ -252,6 +281,234 @@ def validate_source_artifact(value: Any) -> dict[str, Any]:
     return _validate_source_artifact(value, successor=True)
 
 
+def _nullable_digest(value: Mapping[str, Any], field: str) -> str | None:
+    item = value.get(field)
+    if item is None:
+        return None
+    return _digest(value, field)
+
+
+def validate_authority_source_artifact(value: Any) -> dict[str, Any]:
+    """Validate one plane-typed AuthoritySnapshot source.
+
+    Byte custody and semantic extraction are deliberately separate.  A readable
+    blob can therefore remain semantically incomplete without being relabelled
+    as missing, and an extraction artifact cannot replace the frozen bytes.
+    """
+
+    if not isinstance(value, dict):
+        raise CorridorKitError("AuthoritySnapshot source must be an object")
+    _exact_keys(
+        value,
+        {
+            "source_id",
+            "source_ref",
+            "plane",
+            "role",
+            "byte_status",
+            "byte_digest",
+            "byte_size",
+            "media_type",
+            "content_encoding",
+            "content_utf8",
+            "semantic_extraction_status",
+            "extractor",
+            "extraction_artifact",
+        },
+        label="AuthoritySnapshot source",
+    )
+    source_id = _identifier(value, "source_id")
+    source_ref = _text(value, "source_ref")
+    plane = _text(value, "plane")
+    if plane not in AUTHORITY_PLANES:
+        raise CorridorKitError(f"unknown AuthoritySnapshot plane: {plane}")
+    role = _text(value, "role")
+    if role not in SOURCE_ROLES:
+        raise CorridorKitError(f"unknown AuthoritySnapshot source role: {role}")
+    if plane == "normative_rule" and role not in {
+        "instruction",
+        "authoritative_specification",
+    }:
+        raise CorridorKitError("normative Rule plane requires an authority-bearing role")
+    if plane == "public_task_fact" and role != "task_world":
+        raise CorridorKitError("public task Fact plane requires task_world role")
+    if plane == "supporting_input" and role != "reference_material":
+        raise CorridorKitError("supporting input plane requires reference_material role")
+
+    byte_status = _text(value, "byte_status")
+    if byte_status not in BYTE_STATUSES:
+        raise CorridorKitError(f"unknown AuthoritySnapshot byte_status: {byte_status}")
+    byte_digest = _nullable_digest(value, "byte_digest")
+    byte_size = value.get("byte_size")
+    media_type = value.get("media_type")
+    content_encoding = value.get("content_encoding")
+    content_utf8 = value.get("content_utf8")
+    if byte_status == "available":
+        if byte_digest is None:
+            raise CorridorKitError("available AuthoritySnapshot source requires byte_digest")
+        if (
+            not isinstance(byte_size, int)
+            or isinstance(byte_size, bool)
+            or byte_size < 0
+        ):
+            raise CorridorKitError("available AuthoritySnapshot source requires byte_size")
+        if not isinstance(media_type, str) or not media_type.strip():
+            raise CorridorKitError("available AuthoritySnapshot source requires media_type")
+        if content_encoding == "utf-8":
+            if not isinstance(content_utf8, str):
+                raise CorridorKitError("UTF-8 AuthoritySnapshot source requires content_utf8")
+            payload = content_utf8.encode("utf-8")
+            if len(payload) != byte_size or sha256_bytes(payload) != byte_digest:
+                raise CorridorKitError(
+                    f"AuthoritySnapshot byte identity does not match content: {source_id}"
+                )
+        elif content_encoding is not None or content_utf8 is not None:
+            raise CorridorKitError(
+                "non-UTF-8 AuthoritySnapshot source must not claim decoded content"
+            )
+    else:
+        if any(
+            item is not None
+            for item in (byte_digest, byte_size, media_type, content_encoding, content_utf8)
+        ):
+            raise CorridorKitError(
+                "unavailable AuthoritySnapshot source cannot claim byte identity"
+            )
+
+    extraction_status = _text(value, "semantic_extraction_status")
+    if extraction_status not in SEMANTIC_EXTRACTION_STATUSES:
+        raise CorridorKitError(
+            f"unknown semantic_extraction_status: {extraction_status}"
+        )
+    extractor = value.get("extractor")
+    extraction_artifact = value.get("extraction_artifact")
+    if extraction_status == "complete":
+        if byte_status != "available":
+            raise CorridorKitError("complete extraction requires available frozen bytes")
+        if not isinstance(extractor, dict):
+            raise CorridorKitError("complete extraction requires extractor identity")
+        _exact_keys(
+            extractor,
+            {"identity", "version", "digest"},
+            label="AuthoritySnapshot extractor",
+        )
+        normalized_extractor = {
+            "identity": _text(extractor, "identity"),
+            "version": _text(extractor, "version"),
+            "digest": _digest(extractor, "digest"),
+        }
+        if not isinstance(extraction_artifact, dict):
+            raise CorridorKitError("complete extraction requires extraction artifact")
+        _exact_keys(
+            extraction_artifact,
+            {
+                "ref",
+                "digest",
+                "source_byte_digest",
+                "content_encoding",
+                "content_utf8",
+                "byte_size",
+            },
+            label="AuthoritySnapshot extraction artifact",
+        )
+        artifact_encoding = extraction_artifact.get("content_encoding")
+        artifact_content = extraction_artifact.get("content_utf8")
+        artifact_size = extraction_artifact.get("byte_size")
+        if artifact_encoding != "utf-8" or not isinstance(artifact_content, str):
+            raise CorridorKitError(
+                "complete extraction artifact must freeze UTF-8 semantic bytes"
+            )
+        artifact_bytes = artifact_content.encode("utf-8")
+        if (
+            not isinstance(artifact_size, int)
+            or isinstance(artifact_size, bool)
+            or artifact_size != len(artifact_bytes)
+        ):
+            raise CorridorKitError(
+                "extraction artifact byte_size does not match frozen semantic bytes"
+            )
+        artifact_digest = _digest(extraction_artifact, "digest")
+        if artifact_digest != sha256_bytes(artifact_bytes):
+            raise CorridorKitError(
+                "extraction artifact digest does not match frozen semantic bytes"
+            )
+        if _digest(extraction_artifact, "source_byte_digest") != byte_digest:
+            raise CorridorKitError(
+                "extraction artifact does not bind its frozen source bytes"
+            )
+        normalized_artifact = {
+            "ref": _text(extraction_artifact, "ref"),
+            "digest": artifact_digest,
+            "source_byte_digest": byte_digest,
+            "content_encoding": "utf-8",
+            "content_utf8": artifact_content,
+            "byte_size": artifact_size,
+        }
+    else:
+        if extractor is not None or extraction_artifact is not None:
+            raise CorridorKitError(
+                "non-complete extraction cannot claim extractor or extraction artifact"
+            )
+        normalized_extractor = None
+        normalized_artifact = None
+        if plane == "normative_rule" and extraction_status == "not_required":
+            raise CorridorKitError(
+                "normative Rule source cannot waive semantic extraction"
+            )
+    return {
+        "source_id": source_id,
+        "source_ref": source_ref,
+        "plane": plane,
+        "role": role,
+        "byte_status": byte_status,
+        "byte_digest": byte_digest,
+        "byte_size": byte_size,
+        "media_type": media_type,
+        "content_encoding": content_encoding,
+        "content_utf8": content_utf8,
+        "semantic_extraction_status": extraction_status,
+        "extractor": normalized_extractor,
+        "extraction_artifact": normalized_artifact,
+    }
+
+
+def authority_snapshot_manifest(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the exact identity manifest covered by an AuthoritySnapshot digest."""
+
+    return {
+        "snapshot_id": value["snapshot_id"],
+        "snapshot_revision": value["snapshot_revision"],
+        "parent_snapshot_digest": value["parent_snapshot_digest"],
+        "sources": [
+            {
+                key: source[key]
+                for key in (
+                    "source_id",
+                    "source_ref",
+                    "plane",
+                    "role",
+                    "byte_status",
+                    "byte_digest",
+                    "byte_size",
+                    "media_type",
+                    "semantic_extraction_status",
+                )
+            }
+            | {
+                "extractor_digest": (
+                    source["extractor"]["digest"] if source["extractor"] else None
+                ),
+                "extraction_artifact_digest": (
+                    source["extraction_artifact"]["digest"]
+                    if source["extraction_artifact"]
+                    else None
+                ),
+            }
+            for source in value["sources"]
+        ],
+    }
+
+
 def _operators(
     value: Mapping[str, Any], field: str, *, nonempty: bool = True
 ) -> list[str]:
@@ -269,14 +526,32 @@ def validate_source_bundle(value: Any) -> dict[str, Any]:
 
     if not isinstance(value, dict):
         raise CorridorKitError("task source bundle must be an object")
+    bundle_schema = value.get("schema_version")
+    is_authority_snapshot = bundle_schema == TASK_SOURCE_BUNDLE_SCHEMA_V3
     _exact_keys(
         value,
-        {"schema_version", "closure_status", "sources"},
+        (
+            {
+                "schema_version",
+                "snapshot_id",
+                "snapshot_revision",
+                "parent_snapshot_digest",
+                "manifest_digest",
+                "freeze_receipt",
+                "closure_status",
+                "sources",
+            }
+            if is_authority_snapshot
+            else {"schema_version", "closure_status", "sources"}
+        ),
         label="task source bundle",
     )
-    bundle_schema = value.get("schema_version")
     successor = bundle_schema == TASK_SOURCE_BUNDLE_SCHEMA_V2
-    if not successor and bundle_schema != TASK_SOURCE_BUNDLE_SCHEMA:
+    if (
+        not successor
+        and not is_authority_snapshot
+        and bundle_schema != TASK_SOURCE_BUNDLE_SCHEMA
+    ):
         raise CorridorKitError("task source bundle has the wrong schema")
     closure_status = _text(value, "closure_status")
     if closure_status not in SOURCE_BUNDLE_CLOSURE_STATUSES:
@@ -288,7 +563,11 @@ def validate_source_bundle(value: Any) -> dict[str, Any]:
     source_ids: set[str] = set()
     source_refs: set[str] = set()
     for raw in raw_sources:
-        source = _validate_source_artifact(raw, successor=successor)
+        source = (
+            validate_authority_source_artifact(raw)
+            if is_authority_snapshot
+            else _validate_source_artifact(raw, successor=successor)
+        )
         source_id = source["source_id"]
         source_ref = source["source_ref"]
         if source_id in source_ids or source_ref in source_refs:
@@ -300,18 +579,73 @@ def validate_source_bundle(value: Any) -> dict[str, Any]:
         raise CorridorKitError("task source bundle must include the public instruction")
     derived_closure = (
         "complete"
-        if all(source["retrieval_status"] == "available" for source in sources)
+        if all(
+            source.get("retrieval_status", source.get("byte_status")) == "available"
+            and (
+                source.get("plane") != "normative_rule"
+                or source.get("semantic_extraction_status") == "complete"
+            )
+            for source in sources
+        )
         else "unresolved"
     )
     if closure_status != derived_closure:
         raise CorridorKitError(
             "task source bundle closure_status does not match retrieval statuses"
         )
-    return {
+    normalized = {
         "schema_version": bundle_schema,
         "closure_status": closure_status,
         "sources": sources,
     }
+    if is_authority_snapshot:
+        snapshot_id = _identifier(value, "snapshot_id")
+        revision = value.get("snapshot_revision")
+        if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
+            raise CorridorKitError("AuthoritySnapshot revision must be a positive integer")
+        parent_digest = value.get("parent_snapshot_digest")
+        if revision == 1:
+            if parent_digest is not None:
+                raise CorridorKitError("first AuthoritySnapshot cannot claim a parent")
+        else:
+            parent_digest = _digest(value, "parent_snapshot_digest")
+        receipt = value.get("freeze_receipt")
+        if not isinstance(receipt, dict):
+            raise CorridorKitError("AuthoritySnapshot requires a runner freeze receipt")
+        _exact_keys(receipt, {"actor_role", "ref", "digest"}, label="freeze receipt")
+        if receipt.get("actor_role") != "runner":
+            raise CorridorKitError("AuthoritySnapshot must be frozen by the runner")
+        normalized.update(
+            {
+                "snapshot_id": snapshot_id,
+                "snapshot_revision": revision,
+                "parent_snapshot_digest": parent_digest,
+                "freeze_receipt": {
+                    "actor_role": "runner",
+                    "ref": _text(receipt, "ref"),
+                    "digest": _digest(receipt, "digest"),
+                },
+            }
+        )
+        manifest_digest = _digest(value, "manifest_digest")
+        expected_manifest_digest = sha256_json(authority_snapshot_manifest(normalized))
+        if manifest_digest != expected_manifest_digest:
+            raise CorridorKitError(
+                "AuthoritySnapshot manifest_digest does not match exact source identities"
+            )
+        normalized["manifest_digest"] = manifest_digest
+        expected_receipt_digest = sha256_json(
+            {
+                "actor_role": "runner",
+                "ref": normalized["freeze_receipt"]["ref"],
+                "manifest_digest": manifest_digest,
+            }
+        )
+        if normalized["freeze_receipt"]["digest"] != expected_receipt_digest:
+            raise CorridorKitError(
+                "AuthoritySnapshot freeze receipt does not bind its manifest"
+            )
+    return normalized
 
 
 def validate_ir_revision(value: Any) -> dict[str, Any]:
@@ -474,9 +808,19 @@ def validate_source_clause_inventory_v3(
         for raw_slice in raw_slices:
             if not isinstance(raw_slice, dict):
                 raise CorridorKitError("source slice must be an object")
+            is_authority_snapshot = (
+                source_bundle.get("schema_version") == TASK_SOURCE_BUNDLE_SCHEMA_V3
+            )
             _exact_keys(
                 raw_slice,
-                {"slice_id", "source_id", "byte_start", "byte_end", "slice_digest"},
+                {
+                    "slice_id",
+                    "source_id",
+                    "byte_start",
+                    "byte_end",
+                    "slice_digest",
+                    *( ["representation"] if is_authority_snapshot else [] ),
+                },
                 label="source slice",
             )
             slice_id = _identifier(raw_slice, "slice_id")
@@ -489,7 +833,7 @@ def validate_source_clause_inventory_v3(
                 raise CorridorKitError(
                     f"source slice references unknown source: {slice_id}"
                 )
-            if source["retrieval_status"] != "available":
+            if source.get("retrieval_status", source.get("byte_status")) != "available":
                 raise CorridorKitError(
                     f"source slice references unresolved source: {slice_id}"
                 )
@@ -506,7 +850,28 @@ def validate_source_clause_inventory_v3(
                 raise CorridorKitError(
                     f"source slice requires a non-empty half-open byte range: {slice_id}"
                 )
-            content = source["content_utf8"]
+            representation = raw_slice.get("representation", "source_bytes")
+            if representation not in {"source_bytes", "extraction_artifact"}:
+                raise CorridorKitError(
+                    f"source slice has an unknown representation: {slice_id}"
+                )
+            if representation == "source_bytes":
+                content = source.get("content_utf8")
+                if not isinstance(content, str):
+                    raise CorridorKitError(
+                        f"source slice requires decoded source bytes: {slice_id}"
+                    )
+            else:
+                extraction_artifact = source.get("extraction_artifact")
+                if not isinstance(extraction_artifact, dict):
+                    raise CorridorKitError(
+                        f"source slice requires a frozen extraction artifact: {slice_id}"
+                    )
+                content = extraction_artifact.get("content_utf8")
+                if not isinstance(content, str):
+                    raise CorridorKitError(
+                        f"source slice extraction artifact lacks semantic bytes: {slice_id}"
+                    )
             content_bytes = content.encode("utf-8")
             if byte_end > len(content_bytes):
                 raise CorridorKitError(f"source slice is out of bounds: {slice_id}")
@@ -526,6 +891,11 @@ def validate_source_clause_inventory_v3(
                 {
                     "slice_id": slice_id,
                     "source_id": source_id,
+                    **(
+                        {"representation": representation}
+                        if is_authority_snapshot
+                        else {}
+                    ),
                     "byte_start": byte_start,
                     "byte_end": byte_end,
                     "slice_digest": slice_digest,
@@ -661,7 +1031,12 @@ def rule_source_provenance_identity(
                 "clause_order_key": clause["clause_order_key"],
                 "clause_digest": clause["clause_digest"],
                 "source_id": source_slice["source_id"],
-                "source_digest": source["source_digest"],
+                "source_digest": source.get("source_digest", source.get("byte_digest")),
+                **(
+                    {"representation": source_slice["representation"]}
+                    if "representation" in source_slice
+                    else {}
+                ),
                 "byte_start": source_slice["byte_start"],
                 "byte_end": source_slice["byte_end"],
                 "slice_digest": source_slice["slice_digest"],
@@ -675,15 +1050,166 @@ def rule_source_provenance_identity(
     }
 
 
+def _alignment_selector(value: Any, *, label: str) -> dict[str, str | None]:
+    if not isinstance(value, dict):
+        raise CorridorKitError(f"{label} must be an object")
+    _exact_keys(value, {"subject_id", "condition_id"}, label=label)
+    normalized: dict[str, str | None] = {}
+    for field in ("subject_id", "condition_id"):
+        item = value.get(field)
+        if item is not None and (not isinstance(item, str) or not item.strip()):
+            raise CorridorKitError(f"{label} {field} must be text or null")
+        normalized[field] = item
+    if all(item is None for item in normalized.values()):
+        raise CorridorKitError(f"{label} must constrain at least one cell field")
+    return normalized
+
+
+def _cardinality_bound(value: Any, *, label: str) -> dict[str, int | None]:
+    if not isinstance(value, dict):
+        raise CorridorKitError(f"{label} must be an object")
+    _exact_keys(value, {"minimum", "maximum"}, label=label)
+    minimum = value.get("minimum")
+    maximum = value.get("maximum")
+    if (
+        not isinstance(minimum, int)
+        or isinstance(minimum, bool)
+        or minimum < 0
+        or (
+            maximum is not None
+            and (
+                not isinstance(maximum, int)
+                or isinstance(maximum, bool)
+                or maximum < minimum
+            )
+        )
+    ):
+        raise CorridorKitError(f"{label} has invalid minimum/maximum")
+    return {"minimum": minimum, "maximum": maximum}
+
+
+def validate_relationship_alignment(value: Any) -> dict[str, Any]:
+    """Validate explicit checklist-cell alignment for one Rule relationship."""
+
+    if not isinstance(value, dict):
+        raise CorridorKitError("relationship alignment must be an object")
+    _exact_keys(
+        value,
+        {
+            "mode",
+            "source_endpoint",
+            "target_endpoint",
+            "key_pairs",
+            "source_scope",
+            "target_scope",
+            "source_cardinality",
+            "target_cardinality",
+            "membership_ref",
+            "explicit_pairs",
+            "rationale",
+        },
+        label="relationship alignment",
+    )
+    mode = _text(value, "mode")
+    if mode not in RELATIONSHIP_ALIGNMENT_MODES:
+        raise CorridorKitError(f"unknown relationship alignment mode: {mode}")
+    source_endpoint = _text(value, "source_endpoint")
+    target_endpoint = _text(value, "target_endpoint")
+    raw_keys = value.get("key_pairs")
+    if not isinstance(raw_keys, list):
+        raise CorridorKitError("relationship alignment key_pairs must be a list")
+    key_pairs: list[dict[str, str]] = []
+    for raw in raw_keys:
+        if not isinstance(raw, dict):
+            raise CorridorKitError("relationship alignment key pair must be an object")
+        _exact_keys(raw, {"source_key", "target_key"}, label="alignment key pair")
+        source_key = _text(raw, "source_key")
+        target_key = _text(raw, "target_key")
+        if source_key not in ALIGNMENT_CELL_KEYS or target_key not in ALIGNMENT_CELL_KEYS:
+            raise CorridorKitError("relationship alignment uses an unknown coverage-cell key")
+        key_pairs.append({"source_key": source_key, "target_key": target_key})
+    if len({(item["source_key"], item["target_key"]) for item in key_pairs}) != len(
+        key_pairs
+    ):
+        raise CorridorKitError("relationship alignment key_pairs contain duplicates")
+
+    def selector_list(field: str) -> list[dict[str, str | None]]:
+        raw_items = value.get(field)
+        if not isinstance(raw_items, list):
+            raise CorridorKitError(f"relationship alignment {field} must be a list")
+        return [
+            _alignment_selector(item, label=f"relationship alignment {field} selector")
+            for item in raw_items
+        ]
+
+    source_scope = selector_list("source_scope")
+    target_scope = selector_list("target_scope")
+    raw_pairs = value.get("explicit_pairs")
+    if not isinstance(raw_pairs, list):
+        raise CorridorKitError("relationship alignment explicit_pairs must be a list")
+    explicit_pairs: list[dict[str, Any]] = []
+    for raw in raw_pairs:
+        if not isinstance(raw, dict):
+            raise CorridorKitError("relationship alignment explicit pair must be an object")
+        _exact_keys(raw, {"source", "target"}, label="alignment explicit pair")
+        explicit_pairs.append(
+            {
+                "source": _alignment_selector(raw["source"], label="explicit source"),
+                "target": _alignment_selector(raw["target"], label="explicit target"),
+            }
+        )
+    membership_ref = value.get("membership_ref")
+    rationale = value.get("rationale")
+    if membership_ref is not None and (
+        not isinstance(membership_ref, str) or not membership_ref.strip()
+    ):
+        raise CorridorKitError("relationship alignment membership_ref must be text or null")
+    if rationale is not None and (not isinstance(rationale, str) or not rationale.strip()):
+        raise CorridorKitError("relationship alignment rationale must be text or null")
+    if mode == "keyed":
+        if not key_pairs or explicit_pairs or membership_ref is not None:
+            raise CorridorKitError("keyed alignment requires only one or more key_pairs")
+    elif mode == "aggregate_to_members":
+        if key_pairs or not explicit_pairs or membership_ref is None:
+            raise CorridorKitError(
+                "aggregate_to_members alignment requires membership_ref and explicit pairs"
+            )
+    elif mode == "explicit_pairs":
+        if key_pairs or not explicit_pairs or membership_ref is not None:
+            raise CorridorKitError("explicit_pairs alignment requires exact pairs only")
+    elif key_pairs or explicit_pairs or membership_ref is not None or rationale is None:
+        raise CorridorKitError(
+            "all_to_all alignment requires an explicit rationale and no implicit mapping"
+        )
+    return {
+        "mode": mode,
+        "source_endpoint": source_endpoint,
+        "target_endpoint": target_endpoint,
+        "key_pairs": key_pairs,
+        "source_scope": source_scope,
+        "target_scope": target_scope,
+        "source_cardinality": _cardinality_bound(
+            value.get("source_cardinality"), label="source cardinality"
+        ),
+        "target_cardinality": _cardinality_bound(
+            value.get("target_cardinality"), label="target cardinality"
+        ),
+        "membership_ref": membership_ref,
+        "explicit_pairs": explicit_pairs,
+        "rationale": rationale,
+    }
+
+
 def validate_rule_semantics(value: Any) -> dict[str, Any]:
     """Return one canonical Rule semantic object or raise without guessing."""
 
     if not isinstance(value, dict):
         raise CorridorKitError("typed Rule semantics must be an object")
     semantics_schema = value.get("schema_version")
+    is_v4 = semantics_schema == TYPED_RULE_SEMANTICS_SCHEMA_V4
     is_v3 = semantics_schema == TYPED_RULE_SEMANTICS_SCHEMA_V3
     is_v2 = semantics_schema == TYPED_RULE_SEMANTICS_SCHEMA
-    is_current = is_v2 or is_v3
+    is_current = is_v2 or is_v3 or is_v4
     expected_fields = {
         "rule_kind",
         "compilation_status",
@@ -697,6 +1223,8 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
         expected_fields.update(
             {"schema_version", "requirement_level", "applicability"}
         )
+        if is_v4:
+            expected_fields.add("guidance")
     elif semantics_schema is not None:
         raise CorridorKitError("typed Rule semantics has an unknown schema")
     _exact_keys(
@@ -807,12 +1335,22 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
             raise CorridorKitError("typed Rule condition must be an object")
         _exact_keys(
             raw,
-            {
-                "condition_id",
-                "predicate",
-                "expected_outcome",
-                "required_witness_operators",
-            },
+            (
+                {
+                    "condition_id",
+                    "condition_kind",
+                    "predicate",
+                    "expected_outcome",
+                    "required_witness_operators",
+                }
+                if is_v4
+                else {
+                    "condition_id",
+                    "predicate",
+                    "expected_outcome",
+                    "required_witness_operators",
+                }
+            ),
             label="typed Rule condition",
         )
         condition_id = _identifier(raw, "condition_id")
@@ -821,8 +1359,7 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
                 f"typed Rule condition is duplicated: {condition_id}"
             )
         condition_ids.add(condition_id)
-        conditions.append(
-            {
+        normalized_condition = {
                 "condition_id": condition_id,
                 "predicate": _text(raw, "predicate"),
                 "expected_outcome": _text(raw, "expected_outcome"),
@@ -832,13 +1369,31 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
                     nonempty=compilation_status == "complete",
                 ),
             }
-        )
+        if is_v4:
+            condition_kind = _text(raw, "condition_kind")
+            if condition_kind not in CONDITION_KINDS:
+                raise CorridorKitError(
+                    f"unknown typed Rule condition_kind: {condition_kind}"
+                )
+            normalized_condition["condition_kind"] = condition_kind
+        conditions.append(normalized_condition)
 
     if (
         compilation_status == "complete"
         and rule_kind in {"temporal_conditional", "state_transition", "precedence"}
     ):
-        for condition in conditions:
+        temporal_conditions = (
+            [
+                condition
+                for condition in conditions
+                if condition.get("condition_kind") in {"temporal", "state_transition"}
+            ]
+            if is_v4
+            else conditions
+        )
+        if is_v4 and not temporal_conditions:
+            raise CorridorKitError("temporal Rule requires at least one temporal condition")
+        for condition in temporal_conditions:
             if not set(condition["required_witness_operators"]).intersection(
                 TEMPORAL_OPERATORS
             ):
@@ -895,7 +1450,9 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
         _exact_keys(
             raw,
             (
-                {"relationship", "target_rule_id", "provenance"}
+                {"relationship", "target_rule_id", "provenance", "alignment"}
+                if is_v4
+                else {"relationship", "target_rule_id", "provenance"}
                 if is_v3
                 else {"relationship", "target_rule_id"}
             ),
@@ -917,7 +1474,7 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
             "relationship": relationship,
             "target_rule_id": target_rule_id,
         }
-        if is_v3:
+        if is_v3 or is_v4:
             raw_provenance = raw.get("provenance")
             if not isinstance(raw_provenance, dict):
                 raise CorridorKitError("successor dependency provenance must be an object")
@@ -980,7 +1537,38 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
                 "derivation_kind": derivation_kind,
                 "input_rule_provenance_digests": input_digests,
             }
+            if is_v4:
+                normalized_dependency["alignment"] = validate_relationship_alignment(
+                    raw.get("alignment")
+                )
         dependencies.append(normalized_dependency)
+
+    guidance: list[dict[str, Any]] = []
+    if is_v4:
+        raw_guidance = value.get("guidance")
+        if not isinstance(raw_guidance, list):
+            raise CorridorKitError("typed Guidance must be a list")
+        guidance_ids: set[str] = set()
+        for raw in raw_guidance:
+            if not isinstance(raw, dict):
+                raise CorridorKitError("typed Guidance item must be an object")
+            _exact_keys(
+                raw,
+                {"guidance_id", "trigger", "action", "source_slice_ids"},
+                label="typed Guidance item",
+            )
+            guidance_id = _identifier(raw, "guidance_id")
+            if guidance_id in guidance_ids:
+                raise CorridorKitError(f"typed Guidance ID is duplicated: {guidance_id}")
+            guidance_ids.add(guidance_id)
+            guidance.append(
+                {
+                    "guidance_id": guidance_id,
+                    "trigger": _text(raw, "trigger"),
+                    "action": _text(raw, "action"),
+                    "source_slice_ids": _text_list(raw, "source_slice_ids", nonempty=True),
+                }
+            )
 
     normalized = {
         "rule_kind": rule_kind,
@@ -1000,10 +1588,14 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
         },
         "dependencies": dependencies,
     }
+    if is_v4:
+        normalized["guidance"] = guidance
     if is_current:
         normalized = {
             "schema_version": (
-                TYPED_RULE_SEMANTICS_SCHEMA_V3
+                TYPED_RULE_SEMANTICS_SCHEMA_V4
+                if is_v4
+                else TYPED_RULE_SEMANTICS_SCHEMA_V3
                 if is_v3
                 else TYPED_RULE_SEMANTICS_SCHEMA
             ),
@@ -1039,6 +1631,11 @@ def project_rule_checklist_templates(
                 "condition_id": condition["condition_id"],
                 "predicate": condition["predicate"],
                 "expected_outcome": condition["expected_outcome"],
+                **(
+                    {"condition_kind": condition["condition_kind"]}
+                    if "condition_kind" in condition
+                    else {}
+                ),
             }
             cell_digest = sha256_json(coverage_cell)
             templates.append(
@@ -1090,6 +1687,7 @@ def project_rule_checklist_templates(
                         in {
                             TYPED_RULE_SEMANTICS_SCHEMA,
                             TYPED_RULE_SEMANTICS_SCHEMA_V3,
+                            TYPED_RULE_SEMANTICS_SCHEMA_V4,
                         }
                         else {}
                     ),
@@ -1111,6 +1709,198 @@ def _compiler_implementation_digest() -> str:
         )
 
 
+def _required_semantic_roles(semantics: Mapping[str, Any]) -> set[str]:
+    roles = {
+        "obligation",
+        "domain",
+        "quantifier",
+        "condition",
+        "outcome",
+        "evidence_requirement",
+        "witness_requirement",
+    }
+    if semantics.get("applicability", {}).get("mode") == "conditional":
+        roles.add("applicability")
+    if semantics.get("dependencies"):
+        roles.add("relationship")
+    if semantics.get("rule_kind") == "prohibition":
+        roles.add("prohibition")
+    return roles
+
+
+def _unaccounted_normative_ranges(
+    *, source_bundle: Mapping[str, Any], source_clauses: list[Mapping[str, Any]]
+) -> list[dict[str, Any]]:
+    """Return non-whitespace normative byte ranges absent from clause inventory."""
+
+    covered: dict[tuple[str, str], set[int]] = {}
+    for clause in source_clauses:
+        for source_slice in clause.get("source_slices", []):
+            representation = source_slice.get("representation", "source_bytes")
+            covered.setdefault(
+                (source_slice["source_id"], representation), set()
+            ).update(
+                range(source_slice["byte_start"], source_slice["byte_end"])
+            )
+    gaps: list[dict[str, Any]] = []
+    for source in source_bundle["sources"]:
+        if source.get("plane") != "normative_rule":
+            continue
+        if isinstance(source.get("content_utf8"), str):
+            representation = "source_bytes"
+            payload = source["content_utf8"].encode("utf-8")
+        elif isinstance(source.get("extraction_artifact"), dict):
+            representation = "extraction_artifact"
+            payload = source["extraction_artifact"]["content_utf8"].encode("utf-8")
+        else:
+            continue
+        missing = {
+            index
+            for index, byte in enumerate(payload)
+            if index
+            not in covered.get((source["source_id"], representation), set())
+            and not chr(byte).isspace()
+        }
+        while missing:
+            start = min(missing)
+            end = start + 1
+            missing.remove(start)
+            while end in missing:
+                missing.remove(end)
+                end += 1
+            gaps.append(
+                {
+                    "source_id": source["source_id"],
+                    "representation": representation,
+                    "byte_start": start,
+                    "byte_end": end,
+                }
+            )
+    return gaps
+
+
+def _cell_matches_selector(cell: Mapping[str, Any], selector: Mapping[str, Any]) -> bool:
+    coverage = cell["coverage_cell"]
+    return all(value is None or coverage.get(field) == value for field, value in selector.items())
+
+
+def _scoped_cells(
+    cells: list[dict[str, Any]], selectors: list[Mapping[str, Any]]
+) -> list[dict[str, Any]]:
+    if not selectors:
+        return cells
+    return [cell for cell in cells if any(_cell_matches_selector(cell, item) for item in selectors)]
+
+
+def _alignment_cardinality_issues(
+    *,
+    pairs: list[tuple[dict[str, Any], dict[str, Any]]],
+    source_cells: list[dict[str, Any]],
+    target_cells: list[dict[str, Any]],
+    alignment: Mapping[str, Any],
+) -> list[str]:
+    issues: list[str] = []
+    for endpoint, cells, index, bound in (
+        ("source", source_cells, 0, alignment["source_cardinality"]),
+        ("target", target_cells, 1, alignment["target_cardinality"]),
+    ):
+        for cell in cells:
+            count = sum(pair[index]["checklist_item_id"] == cell["checklist_item_id"] for pair in pairs)
+            maximum = bound["maximum"]
+            if count < bound["minimum"] or (maximum is not None and count > maximum):
+                issues.append(
+                    f"{endpoint}:{cell['checklist_item_id']}:projected={count}:"
+                    f"expected={bound['minimum']}..{maximum if maximum is not None else '*'}"
+                )
+    return issues
+
+
+def _project_aligned_dependency(
+    *,
+    dependency: Mapping[str, Any],
+    source_cells: list[dict[str, Any]],
+    target_cells: list[dict[str, Any]],
+) -> tuple[list[tuple[dict[str, Any], dict[str, Any]]], list[str]]:
+    alignment = dependency["relationship_alignment"]
+    source_scope = _scoped_cells(source_cells, alignment["source_scope"])
+    target_scope = _scoped_cells(target_cells, alignment["target_scope"])
+    pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    if alignment["mode"] == "keyed":
+        for source in source_scope:
+            for target in target_scope:
+                if all(
+                    source["coverage_cell"].get(key_pair["source_key"])
+                    == target["coverage_cell"].get(key_pair["target_key"])
+                    for key_pair in alignment["key_pairs"]
+                ):
+                    pairs.append((source, target))
+    elif alignment["mode"] in {"explicit_pairs", "aggregate_to_members"}:
+        for declared in alignment["explicit_pairs"]:
+            sources = [
+                cell
+                for cell in source_scope
+                if _cell_matches_selector(cell, declared["source"])
+            ]
+            targets = [
+                cell
+                for cell in target_scope
+                if _cell_matches_selector(cell, declared["target"])
+            ]
+            pairs.extend((source, target) for source in sources for target in targets)
+    else:
+        pairs = [(source, target) for source in source_scope for target in target_scope]
+    unique = {
+        (source["checklist_item_id"], target["checklist_item_id"]): (source, target)
+        for source, target in pairs
+    }
+    pairs = [unique[key] for key in sorted(unique)]
+    issues: list[str] = []
+    if not source_scope or not target_scope:
+        issues.append("alignment_scope_matches_no_coverage_cells")
+    if not pairs:
+        issues.append("alignment_projects_no_edges")
+    issues.extend(
+        _alignment_cardinality_issues(
+            pairs=pairs,
+            source_cells=source_scope,
+            target_cells=target_scope,
+            alignment=alignment,
+        )
+    )
+    return pairs, issues
+
+
+def project_relationship_alignment(
+    *,
+    alignment: Mapping[str, Any],
+    source_cells: list[dict[str, Any]],
+    target_cells: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Project and audit the exact checklist-edge set for one relationship.
+
+    Compiler, Graph validation, and Doctor share this function so a relation
+    cannot regain an implicit Cartesian product after compilation.
+    """
+
+    normalized_alignment = validate_relationship_alignment(dict(alignment))
+    pairs, issues = _project_aligned_dependency(
+        dependency={"relationship_alignment": normalized_alignment},
+        source_cells=source_cells,
+        target_cells=target_cells,
+    )
+    return {
+        "alignment": normalized_alignment,
+        "edge_pairs": [
+            {
+                "from_ref": source["checklist_item_id"],
+                "to_ref": target["checklist_item_id"],
+            }
+            for source, target in pairs
+        ],
+        "issues": issues,
+    }
+
+
 def compile_typed_rule_ir(
     value: Any,
     *,
@@ -1125,9 +1915,11 @@ def compile_typed_rule_ir(
     if not isinstance(value, dict):
         raise CorridorKitError("typed Rule IR must be an object")
     ir_schema = value.get("schema_version")
+    is_v4 = ir_schema == TYPED_RULE_IR_SCHEMA_V4
     is_v3 = ir_schema == TYPED_RULE_IR_SCHEMA_V3
     is_v2 = ir_schema == TYPED_RULE_IR_SCHEMA
-    is_source_bound = is_v2 or is_v3
+    is_byte_bound = is_v3 or is_v4
+    is_source_bound = is_v2 or is_byte_bound
     if not is_source_bound and ir_schema != TYPED_RULE_IR_SCHEMA_V1:
         raise CorridorKitError("typed Rule IR has the wrong schema")
     _exact_keys(
@@ -1159,10 +1951,13 @@ def compile_typed_rule_ir(
     revision: dict[str, Any] | None = None
     if is_source_bound:
         source_bundle = validate_source_bundle(value.get("source_bundle"))
-        if is_v3:
-            if source_bundle["schema_version"] != TASK_SOURCE_BUNDLE_SCHEMA_V2:
+        if is_byte_bound:
+            required_bundle_schema = (
+                TASK_SOURCE_BUNDLE_SCHEMA_V3 if is_v4 else TASK_SOURCE_BUNDLE_SCHEMA_V2
+            )
+            if source_bundle["schema_version"] != required_bundle_schema:
                 raise CorridorKitError(
-                    "successor typed Rule IR requires frozen task source bundle v2"
+                    "successor typed Rule IR requires its matching frozen AuthoritySnapshot"
                 )
             source_clauses = validate_source_clause_inventory_v3(
                 value.get("source_clause_inventory"), source_bundle=source_bundle
@@ -1180,7 +1975,11 @@ def compile_typed_rule_ir(
             if source["role"] == "instruction"
         )
         task_source_ref = instruction_source["source_ref"]
-        task_source_digest = instruction_source["source_digest"]
+        task_source_digest = instruction_source.get(
+            "source_digest", instruction_source.get("byte_digest")
+        )
+        if task_source_digest is None:
+            raise CorridorKitError("public instruction lacks a frozen byte digest")
     else:
         task_source_ref = _text(value, "task_source_ref")
         task_source_digest = _digest(value, "task_source_digest")
@@ -1202,7 +2001,7 @@ def compile_typed_rule_ir(
             clause["clause_id"]: clause["clause_order_key"]
             for clause in source_clauses
         }
-        if is_v3
+        if is_byte_bound
         else {}
     )
     for raw in raw_rules:
@@ -1228,7 +2027,7 @@ def compile_typed_rule_ir(
                         "source_slices",
                         "semantics",
                     }
-                    if is_v3
+                    if is_byte_bound
                     else {
                         "rule_id",
                         "statement",
@@ -1246,8 +2045,10 @@ def compile_typed_rule_ir(
         rule_ids.add(rule_id)
         statement = _text(raw, "statement")
         semantics = validate_rule_semantics(raw.get("semantics"))
+        if is_v4 and semantics.get("schema_version") != TYPED_RULE_SEMANTICS_SCHEMA_V4:
+            raise CorridorKitError("typed Rule IR v4 requires typed Rule semantics v4")
         semantics_digest = sha256_json(semantics)
-        if is_v3:
+        if is_byte_bound:
             assert source_bundle is not None
             source_clause_ids = _text_list(raw, "source_clause_ids", nonempty=True)
             unknown_clause_ids = sorted(
@@ -1275,8 +2076,21 @@ def compile_typed_rule_ir(
             normalized = {
                 "rule_id": rule_id,
                 "statement": statement,
-                "source_ref": f"source-bundle:{bundle_digest}",
+                "source_ref": (
+                    f"authority-snapshot:{bundle_digest}"
+                    if is_v4
+                    else f"source-bundle:{bundle_digest}"
+                ),
                 "source_digest": bundle_digest,
+                **(
+                    {
+                        "authority_snapshot_manifest_digest": source_bundle[
+                            "manifest_digest"
+                        ]
+                    }
+                    if is_v4
+                    else {}
+                ),
                 "source_clause_ids": source_clause_ids,
                 "source_slices": source_slices,
                 "rule_source_provenance_digest": rule_source_provenance_digest,
@@ -1318,14 +2132,21 @@ def compile_typed_rule_ir(
                     "to_rule_id": dependency["target_rule_id"],
                     "relationship": dependency["relationship"],
                     **(
-                        {"edge_provenance": dependency["provenance"]}
-                        if is_v3
+                        {
+                            "edge_provenance": dependency["provenance"],
+                            **(
+                                {"relationship_alignment": dependency["alignment"]}
+                                if is_v4
+                                else {}
+                            ),
+                        }
+                        if is_byte_bound
                         else {}
                     ),
                 }
             )
 
-    if is_v3:
+    if is_byte_bound:
         assert source_bundle is not None
         source_by_id = {
             source["source_id"]: source for source in source_bundle["sources"]
@@ -1355,7 +2176,8 @@ def compile_typed_rule_ir(
         missing_source_inventories = sorted(
             source["source_id"]
             for source in source_bundle["sources"]
-            if source["retrieval_status"] == "available"
+            if source.get("retrieval_status", source.get("byte_status")) == "available"
+            and (not is_v4 or source.get("plane") == "normative_rule")
             and source["source_id"] not in inventoried_source_ids
         )
         if missing_source_inventories:
@@ -1417,7 +2239,7 @@ def compile_typed_rule_ir(
             missing_roles = sorted(
                 set(clause["required_semantic_roles"]) - declared_roles
             )
-            if missing_roles:
+            if missing_roles and not is_v4:
                 raise CorridorKitError(
                     f"source clause semantic roles are not mapped: {clause['clause_id']}:{missing_roles}"
                 )
@@ -1518,6 +2340,77 @@ def compile_typed_rule_ir(
                     f"typed Rule requirement level does not match its source clauses: {rule['rule_id']}"
                 )
 
+    reverse_semantic_projection: list[dict[str, Any]] = []
+    semantic_delta: list[dict[str, Any]] = []
+    unaccounted_normative_ranges: list[dict[str, Any]] = []
+    mapping_matrix: list[dict[str, Any]] = []
+    if is_v4:
+        assert source_bundle is not None
+        slice_index = {
+            source_slice["slice_id"]: (clause, source_slice)
+            for clause in source_clauses
+            for source_slice in clause["source_slices"]
+        }
+        for rule in normalized_rules:
+            bound_roles = {item["semantic_role"] for item in rule["source_slices"]}
+            required_roles = _required_semantic_roles(rule["semantics"])
+            missing_roles = sorted(required_roles - bound_roles)
+            extra_roles = sorted(bound_roles - required_roles)
+            guidance_slice_ids = {
+                slice_id
+                for guidance in rule["semantics"]["guidance"]
+                for slice_id in guidance["source_slice_ids"]
+            }
+            unknown_guidance_slices = sorted(
+                guidance_slice_ids - {item["slice_id"] for item in rule["source_slices"]}
+            )
+            if missing_roles or unknown_guidance_slices:
+                semantic_delta.append(
+                    {
+                        "rule_id": rule["rule_id"],
+                        "missing_semantic_roles": missing_roles,
+                        "extra_semantic_roles": extra_roles,
+                        "unknown_guidance_slice_ids": unknown_guidance_slices,
+                    }
+                )
+            reverse_semantic_projection.append(
+                {
+                    "rule_id": rule["rule_id"],
+                    "candidate_revision_id": revision["revision_id"],
+                    "source_bindings": [
+                        {
+                            **binding,
+                            "clause_id": slice_index[binding["slice_id"]][0]["clause_id"],
+                            "source_id": slice_index[binding["slice_id"]][1]["source_id"],
+                            "byte_start": slice_index[binding["slice_id"]][1]["byte_start"],
+                            "byte_end": slice_index[binding["slice_id"]][1]["byte_end"],
+                            "slice_digest": slice_index[binding["slice_id"]][1]["slice_digest"],
+                        }
+                        for binding in rule["source_slices"]
+                    ],
+                    "required_semantic_roles": sorted(required_roles),
+                    "bound_semantic_roles": sorted(bound_roles),
+                    "projection_digest": sha256_json(
+                        {
+                            "rule_id": rule["rule_id"],
+                            "source_slices": rule["source_slices"],
+                            "semantics": rule["semantics"],
+                        }
+                    ),
+                }
+            )
+        mapping_matrix = [
+            {
+                "clause_id": clause["clause_id"],
+                "rule_ids": list(clause["rule_ids"]),
+                "mapping_status": clause["mapping_status"],
+            }
+            for clause in source_clauses
+        ]
+        unaccounted_normative_ranges = _unaccounted_normative_ranges(
+            source_bundle=source_bundle, source_clauses=source_clauses
+        )
+
     dangling = sorted(
         {
             item["to_rule_id"]
@@ -1532,7 +2425,7 @@ def compile_typed_rule_ir(
     for item in rule_dependency_templates:
         if item["from_rule_id"] == item["to_rule_id"]:
             raise CorridorKitError("typed Rule dependency cannot be self-referential")
-        if is_v3:
+        if is_byte_bound:
             item.update(
                 {
                     "source_rule_provenance_digest": rule_provenance_digest_by_id[
@@ -1575,14 +2468,37 @@ def compile_typed_rule_ir(
         "conflicts": "conflicts",
     }
     typed_dependency_templates: list[dict[str, Any]] = []
+    relationship_alignment_issues: list[dict[str, Any]] = []
     for dependency in rule_dependency_templates:
         graph_relationship = work_relationships.get(dependency["relationship"])
         if graph_relationship is None:
             continue
         source_cells = checklist_templates_by_rule[dependency["from_rule_id"]]
         target_cells = checklist_templates_by_rule[dependency["to_rule_id"]]
-        for source_cell in source_cells:
-            for target_cell in target_cells:
+        if is_v4:
+            aligned_pairs, issues = _project_aligned_dependency(
+                dependency=dependency,
+                source_cells=source_cells,
+                target_cells=target_cells,
+            )
+            if issues:
+                relationship_alignment_issues.append(
+                    {
+                        "from_rule_id": dependency["from_rule_id"],
+                        "to_rule_id": dependency["to_rule_id"],
+                        "relationship": dependency["relationship"],
+                        "issues": issues,
+                    }
+                )
+        else:
+            # Preserved only for legacy schemas.  New v4 candidates can never
+            # obtain checklist edges from an undeclared Cartesian product.
+            aligned_pairs = [
+                (source_cell, target_cell)
+                for source_cell in source_cells
+                for target_cell in target_cells
+            ]
+        for source_cell, target_cell in aligned_pairs:
                 identity = {
                     "from_ref": source_cell["checklist_item_id"],
                     "to_ref": target_cell["checklist_item_id"],
@@ -1598,8 +2514,17 @@ def compile_typed_rule_ir(
                                 "target_rule_provenance_digest"
                             ],
                             "edge_provenance": dependency["edge_provenance"],
+                            **(
+                                {
+                                    "relationship_alignment": dependency[
+                                        "relationship_alignment"
+                                    ]
+                                }
+                                if is_v4
+                                else {}
+                            ),
                         }
-                        if is_v3
+                        if is_byte_bound
                         else {}
                     ),
                 }
@@ -1614,7 +2539,11 @@ def compile_typed_rule_ir(
     normalized_ir = (
         {
             "schema_version": (
-                TYPED_RULE_IR_SCHEMA_V3 if is_v3 else TYPED_RULE_IR_SCHEMA
+                TYPED_RULE_IR_SCHEMA_V4
+                if is_v4
+                else TYPED_RULE_IR_SCHEMA_V3
+                if is_v3
+                else TYPED_RULE_IR_SCHEMA
             ),
             "source_bundle": source_bundle,
             "source_clause_inventory": source_clauses,
@@ -1639,7 +2568,9 @@ def compile_typed_rule_ir(
     implementation_digest = _compiler_implementation_digest()
     manifest = {
         "schema_version": (
-            COMPILE_PROBE_MANIFEST_SCHEMA_V3
+            COMPILE_PROBE_MANIFEST_SCHEMA_V4
+            if is_v4
+            else COMPILE_PROBE_MANIFEST_SCHEMA_V3
             if is_v3
             else COMPILE_PROBE_MANIFEST_SCHEMA
             if is_v2
@@ -1654,6 +2585,15 @@ def compile_typed_rule_ir(
                 "source_clause_inventory_digest": sha256_json(source_clauses),
                 "source_bundle_closure_status": source_bundle["closure_status"],
                 "revision": revision,
+                **(
+                    {
+                        "authority_snapshot_manifest_digest": source_bundle[
+                            "manifest_digest"
+                        ]
+                    }
+                    if is_v4
+                    else {}
+                ),
             }
             if is_source_bound
             else {"source_closure_assessed": False}
@@ -1717,6 +2657,13 @@ def compile_typed_rule_ir(
         if is_source_bound
         else rules_complete
     )
+    if is_v4:
+        compilation_complete = bool(
+            compilation_complete
+            and not semantic_delta
+            and not unaccounted_normative_ranges
+            and not relationship_alignment_issues
+        )
     rule_compile_issues = [
         {
             "rule_id": rule["rule_id"],
@@ -1739,9 +2686,38 @@ def compile_typed_rule_ir(
         if is_source_bound
         else []
     )
+    successor_issues = (
+        [
+            {
+                "status": "incomplete",
+                "issues": ["reverse_semantic_projection_mismatch"],
+                "semantic_delta": semantic_delta,
+            }
+        ]
+        if semantic_delta
+        else []
+    )
+    if unaccounted_normative_ranges:
+        successor_issues.append(
+            {
+                "status": "incomplete",
+                "issues": ["unaccounted_normative_bytes"],
+                "ranges": unaccounted_normative_ranges,
+            }
+        )
+    if relationship_alignment_issues:
+        successor_issues.append(
+            {
+                "status": "incomplete",
+                "issues": ["relationship_alignment_mismatch"],
+                "relationships": relationship_alignment_issues,
+            }
+        )
     report = {
         "schema_version": (
-            TYPED_RULE_COMPILATION_SCHEMA_V3
+            TYPED_RULE_COMPILATION_SCHEMA_V4
+            if is_v4
+            else TYPED_RULE_COMPILATION_SCHEMA_V3
             if is_v3
             else TYPED_RULE_COMPILATION_SCHEMA
             if is_v2
@@ -1749,7 +2725,11 @@ def compile_typed_rule_ir(
         ),
         "ok": True,
         "compilation_complete": compilation_complete,
-        "compile_issues": [*rule_compile_issues, *source_clause_issues],
+        "compile_issues": [
+            *rule_compile_issues,
+            *source_clause_issues,
+            *successor_issues,
+        ],
         "source_closure_assessed": is_source_bound,
         "source_closure": (
             {
@@ -1763,11 +2743,15 @@ def compile_typed_rule_ir(
                 ),
                 "source_slice_count": (
                     sum(len(clause["source_slices"]) for clause in source_clauses)
-                    if is_v3
+                    if is_byte_bound
                     else None
                 ),
                 "source_provenance_status": (
-                    "exact_byte_slices" if is_v3 else "legacy_clause_text"
+                    "authority_snapshot_with_exact_byte_slices"
+                    if is_v4
+                    else "exact_byte_slices"
+                    if is_v3
+                    else "legacy_clause_text"
                 ),
             }
             if is_source_bound
@@ -1783,16 +2767,37 @@ def compile_typed_rule_ir(
         ),
         "revision": revision,
         "typed_rule_ir_digest": ir_digest,
+        "candidate_revision_digest": (
+            sha256_json({"revision": revision, "typed_rule_ir_digest": ir_digest})
+            if is_v4
+            else None
+        ),
+        "authority_snapshot_digest": (
+            sha256_json(source_bundle) if is_v4 and source_bundle is not None else None
+        ),
+        "reverse_semantic_projection": reverse_semantic_projection,
+        "reverse_semantic_projection_digest": (
+            sha256_json(reverse_semantic_projection) if is_v4 else None
+        ),
+        "semantic_delta": semantic_delta,
+        "semantic_delta_digest": sha256_json(semantic_delta) if is_v4 else None,
+        "source_clause_rule_matrix": mapping_matrix,
+        "unaccounted_normative_ranges": unaccounted_normative_ranges,
+        "relationship_alignment_issues": relationship_alignment_issues,
         "compiler_implementation_digest": implementation_digest,
         "rule_count": len(rule_bodies),
         "coverage_cell_count": len(checklist_templates),
         "rule_dependency_count": len(rule_dependency_templates),
         "typed_dependency_count": len(typed_dependency_templates),
         "rule_bodies": rule_bodies,
-        "source_artifact_templates": (
-            source_bundle["sources"] if is_v3 and source_bundle is not None else []
+        "authority_snapshot_template": (
+            source_bundle if is_v4 and source_bundle is not None else None
         ),
-        "source_clause_templates": source_clauses if is_v3 else [],
+        "normalized_typed_rule_ir": normalized_ir if is_v4 else None,
+        "source_artifact_templates": (
+            source_bundle["sources"] if is_byte_bound and source_bundle is not None else []
+        ),
+        "source_clause_templates": source_clauses if is_byte_bound else [],
         "checklist_templates": checklist_templates,
         "rule_dependency_templates": rule_dependency_templates,
         "typed_dependency_templates": typed_dependency_templates,

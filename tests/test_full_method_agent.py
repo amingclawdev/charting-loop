@@ -119,6 +119,50 @@ def complete_assessment(
 
 
 class FullMethodContractTests(unittest.TestCase):
+    def test_verifier_alignment_is_posthoc_read_only_and_not_rule_authority(self) -> None:
+        pre_root = contract.pre_verifier_root_manifest(
+            frozen_artifacts={
+                "submission": "sha256:" + "2" * 64,
+                "graph": "sha256:" + "1" * 64,
+            },
+            runner_ref="runner:after-agent-return",
+        )
+        order_receipt = contract.verifier_order_receipt(
+            pre_verifier_root_digest=pre_root["root_digest"],
+            verifier_input_digest="sha256:" + "2" * 64,
+            verifier_output_digest="sha256:" + "3" * 64,
+            runner_ref="runner:official-verifier",
+        )
+        record = contract.verifier_alignment_record(
+            pre_verifier_manifest=pre_root,
+            verifier_identity="terminal-bench-official",
+            verifier_version="3.0",
+            verifier_input_digest="sha256:" + "2" * 64,
+            verifier_output_digest="sha256:" + "3" * 64,
+            order_receipt=order_receipt,
+            classification="compile_gap",
+            observations=["Official verifier exposed an uncovered requirement."],
+        )
+        self.assertTrue(record["read_only"])
+        self.assertFalse(record["rule_source"])
+        self.assertFalse(record["authorizes_rule_mutation"])
+        self.assertFalse(record["authorizes_task_mutation"])
+        self.assertFalse(record["blocking_gate"])
+        self.assertFalse(
+            record["analysis_isolation"]["importable_into_rule_graph"]
+        )
+        with self.assertRaisesRegex(ValueError, "frozen submission"):
+            contract.verifier_alignment_record(
+                pre_verifier_manifest=pre_root,
+                verifier_identity="terminal-bench-official",
+                verifier_version="3.0",
+                verifier_input_digest="sha256:" + "9" * 64,
+                verifier_output_digest="sha256:" + "3" * 64,
+                order_receipt=order_receipt,
+                classification="unresolved",
+                observations=[],
+            )
+
     def test_codex_runtime_binding_is_visible_to_a_fresh_shell(self) -> None:
         module = load_harbor_agent_with_stubs()
         with tempfile.TemporaryDirectory() as temp:
@@ -227,16 +271,17 @@ class FullMethodContractTests(unittest.TestCase):
             "4 tasks require GPU-capable execution",
             "QA follows its cooperative write boundary, never suppresses or replaces the Worker",
             "never short-circuits the benchmark grader",
-            "Do not ask Builder to construct a mandatory approval",
+            "Do not ask Worker or QA to construct a mandatory approval",
             "linear-unlock",
             "Rule remains the normative authority layer",
             "whole-chain",
             "leaderboard score is end-to-end performance",
-            "ACCEPTANCE.json",
-            "WORK_ITEMS.json",
-            "CAPABILITIES.json",
-            "hash-linked append-only Position timeline",
-            "Reminder delivery and use are observable process facts, not Gates",
+            "charting-loop/typed-rule-ir/v4",
+            "AuthoritySnapshot",
+            "SemanticDelta",
+            "RuleClosure",
+            "hash-linked append-only graph",
+            "There is no task-specific Builder phase",
             "restores the latest verified complete Worker snapshot by per-file atomic replacement",
             "charting-loop-method-v8",
             "namespace/provenance label, not a credential",
@@ -1630,18 +1675,24 @@ class FullMethodContractTests(unittest.TestCase):
         )
         for prompt in (treatment, control):
             self.assertIn("There is no Builder phase", prompt)
-            self.assertIn("charting-loop/typed-rule-ir/v3", prompt)
-            self.assertIn("source_bundle", prompt)
+            self.assertIn("charting-loop/typed-rule-ir/v4", prompt)
+            self.assertIn("AuthoritySnapshot", prompt)
+            self.assertIn("normative Rule plane", prompt)
+            self.assertIn("semantic-extraction status", prompt)
             self.assertIn("source_clause_inventory", prompt)
             self.assertIn("half-open UTF-8 byte slices", prompt)
             self.assertIn("direct provenance", prompt)
             self.assertIn("derived provenance", prompt)
-            self.assertIn("every public authoritative source", prompt)
+            self.assertIn("complete public task authority", prompt)
             self.assertIn("including", prompt)
             self.assertIn("applicability_status: not_applicable", prompt)
             self.assertIn("corridor_kit rules compile", prompt)
             self.assertIn("witness_bindings", prompt)
             self.assertIn("typed_dependency_template", prompt)
+            self.assertIn("implicit Cartesian product", prompt)
+            self.assertIn("reverse semantic projection", prompt)
+            self.assertIn("SemanticDelta", prompt)
+            self.assertIn("RuleClosure", prompt)
             self.assertIn("corridor_kit graph append", prompt)
             self.assertIn(contract.GRAPH_PATH, prompt)
             self.assertIn("You choose Direction", prompt)
@@ -1723,12 +1774,19 @@ class FullMethodContractTests(unittest.TestCase):
             compiler_config_digest=compiler_config_digest,
         )
         self.assertIn(method_text, prompt)
-        self.assertIn("charting-loop/typed-rule-ir/v3", prompt)
-        self.assertIn("source_bundle", prompt)
+        self.assertIn("charting-loop/typed-rule-ir/v4", prompt)
+        self.assertIn("AuthoritySnapshot", prompt)
+        self.assertIn("normative Rule\nplane", prompt)
+        self.assertIn("semantic-extraction status", prompt)
         self.assertIn("source_clause_inventory", prompt)
         self.assertIn("first_attempt", prompt)
         self.assertIn("open domain", prompt)
         self.assertIn("collective ordering", prompt)
+        self.assertIn("missing alignment emits no", prompt)
+        self.assertIn("reverse semantic\nprojection", prompt)
+        self.assertIn("SemanticDelta", prompt)
+        self.assertIn("semantic_repair", prompt)
+        self.assertIn("Typed Guidance is advisory", prompt)
         self.assertIn("corridor_kit rules compile", prompt)
         self.assertIn(compiler_config_digest, prompt)
         self.assertIn(contract.METHOD_CONTENT_SHA256, prompt)

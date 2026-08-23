@@ -65,6 +65,19 @@ METHOD_SCOPE_SHA256 = (
 )
 GRAPH_STUDY_SCHEMA = "charting-loop/method-guided-graph-study/v2"
 GRAPH_AUDIT_SCHEMA = "charting-loop/graph-path-audit/v2"
+VERIFIER_ALIGNMENT_SCHEMA = "charting-loop/verifier-alignment/v1"
+PRE_VERIFIER_ROOT_SCHEMA = "charting-loop/pre-verifier-root/v1"
+VERIFIER_ORDER_RECEIPT_SCHEMA = "charting-loop/verifier-order-receipt/v1"
+VERIFIER_ALIGNMENT_CLASSIFICATIONS = frozenset(
+    {
+        "aligned",
+        "compile_gap",
+        "execution_gap",
+        "verifier_undercoverage",
+        "evaluator_mismatch",
+        "unresolved",
+    }
+)
 NEUTRAL_GRAPH_INSTRUCTION = (
     "Use the supplied task-neutral graph utilities as optional note-taking tools. "
     "The official task remains the only task authority. Inspect live state, choose "
@@ -90,6 +103,142 @@ def canonical_json_bytes(value: Any) -> bytes:
 
 def sha256_bytes(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def pre_verifier_root_manifest(
+    *, frozen_artifacts: dict[str, str], runner_ref: str
+) -> dict[str, Any]:
+    """Freeze the runner-owned, pre-verifier analysis boundary."""
+
+    if not isinstance(frozen_artifacts, dict) or "submission" not in frozen_artifacts:
+        raise ValueError("pre-verifier root requires a submission artifact")
+    if any(
+        not isinstance(name, str)
+        or not name.strip()
+        or not isinstance(digest, str)
+        or SHA256_RE.fullmatch(digest) is None
+        for name, digest in frozen_artifacts.items()
+    ):
+        raise ValueError("pre-verifier artifacts must map names to sha256 digests")
+    if not isinstance(runner_ref, str) or not runner_ref.strip():
+        raise ValueError("runner_ref must be non-empty text")
+    manifest = {
+        "schema_version": PRE_VERIFIER_ROOT_SCHEMA,
+        "actor_role": "runner",
+        "runner_ref": runner_ref,
+        "frozen_artifacts": dict(sorted(frozen_artifacts.items())),
+    }
+    manifest["root_digest"] = sha256_bytes(canonical_json_bytes(manifest))
+    return manifest
+
+
+def verifier_order_receipt(
+    *,
+    pre_verifier_root_digest: str,
+    verifier_input_digest: str,
+    verifier_output_digest: str,
+    runner_ref: str,
+) -> dict[str, Any]:
+    """Bind the one legal runner order without making it a runtime Gate."""
+
+    for name, value in (
+        ("pre_verifier_root_digest", pre_verifier_root_digest),
+        ("verifier_input_digest", verifier_input_digest),
+        ("verifier_output_digest", verifier_output_digest),
+    ):
+        if not isinstance(value, str) or SHA256_RE.fullmatch(value) is None:
+            raise ValueError(f"{name} must be a sha256 digest")
+    if not isinstance(runner_ref, str) or not runner_ref.strip():
+        raise ValueError("runner_ref must be non-empty text")
+    receipt = {
+        "schema_version": VERIFIER_ORDER_RECEIPT_SCHEMA,
+        "actor_role": "runner",
+        "runner_ref": runner_ref,
+        "event_order": [
+            "pre_verifier_root_frozen",
+            "agent_returned",
+            "official_verifier_started",
+            "official_verifier_finished",
+            "posthoc_alignment_started",
+        ],
+        "pre_verifier_root_digest": pre_verifier_root_digest,
+        "verifier_input_digest": verifier_input_digest,
+        "verifier_output_digest": verifier_output_digest,
+    }
+    receipt["receipt_digest"] = sha256_bytes(canonical_json_bytes(receipt))
+    return receipt
+
+
+def verifier_alignment_record(
+    *,
+    pre_verifier_manifest: dict[str, Any],
+    verifier_identity: str,
+    verifier_version: str,
+    verifier_input_digest: str,
+    verifier_output_digest: str,
+    order_receipt: dict[str, Any],
+    classification: str,
+    observations: list[str],
+) -> dict[str, Any]:
+    """Record post-hoc verifier comparison without feeding it into Rule authority."""
+
+    if classification not in VERIFIER_ALIGNMENT_CLASSIFICATIONS:
+        raise ValueError("unknown verifier-alignment classification")
+    for name, value in (
+        ("verifier_input_digest", verifier_input_digest),
+        ("verifier_output_digest", verifier_output_digest),
+    ):
+        if not isinstance(value, str) or SHA256_RE.fullmatch(value) is None:
+            raise ValueError(f"{name} must be a sha256 digest")
+    for name, value in (
+        ("verifier_identity", verifier_identity),
+        ("verifier_version", verifier_version),
+    ):
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{name} must be non-empty text")
+    if not isinstance(observations, list) or any(
+        not isinstance(item, str) or not item.strip() for item in observations
+    ):
+        raise ValueError("verifier-alignment observations must be a text list")
+    expected_manifest = pre_verifier_root_manifest(
+        frozen_artifacts=pre_verifier_manifest.get("frozen_artifacts", {}),
+        runner_ref=pre_verifier_manifest.get("runner_ref", ""),
+    )
+    if pre_verifier_manifest != expected_manifest:
+        raise ValueError("pre_verifier_manifest is not a canonical runner root")
+    if expected_manifest["frozen_artifacts"]["submission"] != verifier_input_digest:
+        raise ValueError("verifier input differs from the frozen submission")
+    expected_receipt = verifier_order_receipt(
+        pre_verifier_root_digest=expected_manifest["root_digest"],
+        verifier_input_digest=verifier_input_digest,
+        verifier_output_digest=verifier_output_digest,
+        runner_ref=order_receipt.get("runner_ref", ""),
+    )
+    if order_receipt != expected_receipt:
+        raise ValueError("order_receipt does not prove the post-hoc runner order")
+    record = {
+        "schema_version": VERIFIER_ALIGNMENT_SCHEMA,
+        "pre_verifier_manifest": pre_verifier_manifest,
+        "verifier_identity": verifier_identity,
+        "verifier_version": verifier_version,
+        "verifier_input_digest": verifier_input_digest,
+        "verifier_output_digest": verifier_output_digest,
+        "order_receipt": order_receipt,
+        "classification": classification,
+        "observations": observations,
+        "read_only": True,
+        "rule_source": False,
+        "authorizes_rule_mutation": False,
+        "authorizes_task_mutation": False,
+        "blocking_gate": False,
+        "analysis_isolation": {
+            "namespace": "posthoc_verifier_alignment",
+            "importable_into_rule_graph": False,
+            "available_to_fresh_task_context": False,
+        },
+    }
+    record["record_digest"] = sha256_bytes(canonical_json_bytes(record))
+    return record
 
 
 def custody_provenance(source_kind: str, *, direct_byte_match: bool) -> dict[str, Any]:
@@ -1094,7 +1243,7 @@ def graph_compile_probe_prompt(
 {_task_block(task_instruction)}
 
 Read only the public task above, every public authoritative source that it names, the
-frozen Method below, and the documented `charting-loop/typed-rule-ir/v3` compiler
+frozen Method below, and the documented `charting-loop/typed-rule-ir/v4` compiler
 interface. Do not read any historical task
 Graph, verifier output, prior result, or prior task transcript. Do not solve or mutate
 the task and do not choose a Direction.
@@ -1102,25 +1251,32 @@ the task and do not choose a Direction.
 {_frozen_method_block(method_text)}
 
 Emit exactly one first-attempt Typed Rule IR JSON object. Before authoring any Rule,
-build `source_bundle`: enumerate the public instruction plus every named public
-authoritative specification, freeze each available source's exact UTF-8 bytes and
-digest, retain an explicit
-retrieval failure for each unavailable/malformed/undigested source, and declare source
-closure `complete` only when all enumerated sources are available and digest-bound.
+prepare the plane-typed AuthoritySnapshot for the runner to validate and freeze:
+enumerate the normative Rule
+plane, public task-world Fact material, and supporting inputs. Bind byte status, media
+type, size and digest separately from semantic-extraction status, extractor identity,
+and extraction-artifact digest. Readable bytes are not proof of successful extraction.
+Declare source closure `complete` only when every normative source is byte-bound and
+semantically extracted. Bind the exact source manifest and runner freeze receipt.
 Independently enumerate every normative source clause in `source_clause_inventory`,
 including nested, trailing, exception, and optional clauses. Give every clause a
 unique stable `clause_order_key`; array position is display-only and never authority.
-Reconstruct each clause from stable ordered half-open UTF-8 byte slices; disjoint and
-cross-source slices are allowed. Mark each clause
+Reconstruct each clause from stable ordered half-open UTF-8 byte slices. Each slice
+explicitly names either original source bytes or the digest-bound UTF-8 extraction
+artifact; disjoint and cross-source slices are allowed. Mark each clause
 `required` or `optional`; bind mapped clauses to exact Rule IDs, and retain every
 unmapped, ambiguous, or unsupported clause as an explicit issue. Set `revision_kind`
 to `first_attempt`, with no parent and no QA witness.
 
-Every Rule must retain its source-clause and slice bindings, labeling each slice's
+Every immutable RuleCandidate must retain its source-clause and slice bindings, labeling each slice's
 semantic role. Its source-provenance digest must resolve through the clause identity,
 order key, exact source digest, byte bounds, and slice digest. Every dependency must
 declare either direct relationship slices or a
-declared derivation over both current endpoint Rule provenance digests. Bounds and
+declared derivation over both current endpoint Rule provenance digests. Every
+relationship must also declare endpoint semantics and an explicit alignment mode:
+composable keyed joins, aggregate-to-member mapping, exact pairs, or source-backed
+all-to-all. Include scope and per-endpoint cardinality; missing alignment emits no
+v4 checklist edge. Bounds and
 digests establish source identity, not semantic correctness. Every Rule must retain
 its Rule kind, applicability predicate,
 quantifier, and source-defined subject domain. Treat an open domain introduced by
@@ -1129,11 +1285,15 @@ the output you plan to produce. A collective ordering requirement such as "X fir
 is not automatically a separate per-subject first requirement. Represent each true
 conditional branch and expected outcome separately. Use `per_subject` projection only
 when the source requires each subject independently. Temporal, transition, or coupled
-Rules must retain their causal/ordering predicate and require an operator such as
+Rules must type each condition as static, temporal, or state-transition; temporal
+conditions retain their causal/ordering predicate and require an operator such as
 `ordered_before`, `ordered_after`, `duration`, or `state_transition`; a timeless
 set/union witness is not equivalent. Declare Rule dependencies with their semantic
 relationship instead of relying on list order. Preserve ambiguity as an explicit
-compile failure rather than weakening a Rule.
+compile failure rather than weakening a Rule. Compare the compiler's reverse semantic
+projection with the source slices. If SemanticDelta is non-empty, write a new immutable
+`semantic_repair` revision and repeat; otherwise preserve an honest incomplete terminal
+state. Typed Guidance is advisory and never becomes Rule authority.
 
 Bind `method_digest` to `{METHOD_CONTENT_SHA256}` and `compiler_config_digest` to
 `{compiler_config_digest}`. The caller will run:
@@ -1172,34 +1332,50 @@ The frozen Study profile is `{STUDY_PROFILE_PATH}` with digest
 `{study_profile_digest}`. The append-only execution graph is `{GRAPH_PATH}`.
 
 Use the graph while doing the task, not as a separate construction project. First
-compile the complete public task authority into `charting-loop/typed-rule-ir/v3`.
+compile the complete public task authority into `charting-loop/typed-rule-ir/v4`.
 Write the immutable first attempt to `{TYPED_RULE_IR_PATH}` and run
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit rules compile {TYPED_RULE_IR_PATH} > {TYPED_RULE_REPORT_PATH}`.
-In `source_bundle` v2, enumerate the instruction and every public authoritative source
-it names. Freeze each available source's exact UTF-8 bytes and content digest; an
-unavailable source remains explicit and cannot carry invented bytes. Independently
+In the AuthoritySnapshot, enumerate the normative Rule plane, public task-world Fact
+material, and supporting inputs. Propose byte status, media type, size and digest
+separately from semantic-extraction status and extractor/artifact identity; an
+unavailable source remains explicit and cannot carry invented bytes. The runner must
+validate and append the complete snapshot as `authority_snapshot` before its exact
+`task_source_artifact` records. A complete extraction artifact freezes its derived
+UTF-8 bytes, digest, size, extractor, and source-byte digest; a source slice names
+`source_bytes` or `extraction_artifact`. Independently
 write `source_clause_inventory` with every normative clause—including trailing,
 nested, exception, and optional clauses—before mapping clauses to Rules. Give every
 clause a unique stable `clause_order_key`; array position is display-only and never
 authority. Every clause uses stable, ordered, half-open UTF-8 byte slices; every Rule binds one or more of
 those slices to explicit semantic roles (obligation, applicability, domain, condition,
-outcome, quantifier, witness/evidence requirement, or relationship). Multiple
+outcome, quantifier, prohibition, witness/evidence requirement, or relationship). Multiple
 disjoint and cross-source slices are allowed. A Rule provenance digest resolves these
 bindings through the clause/order identity and exact source bytes. Do not report closed source coverage
 while a named source is unavailable, malformed, or not digest-bound.
 
 For each semantic Rule dependency, declare either direct provenance from relationship
 slices or derived provenance from the exact current endpoint Rule provenance digests.
-Never infer an edge merely from list order. Record the returned
-`source_artifact_templates` first as `task_source_artifact`, then
+Also declare endpoint semantics, scope, cardinality and an explicit keyed,
+aggregate-to-members, exact-pairs, or source-backed all-to-all alignment. Never infer
+an edge from list order or an implicit Cartesian product. After the runner-owned
+`authority_snapshot`, record the returned `source_artifact_templates` as
+`task_source_artifact`, then
 `source_clause_templates` as `source_clause`, then `rule_bodies` as `rule_proposal`
-records and bind each current Rule to
-its public source with `rule_ratification`. Materialize every returned checklist
+records. Treat them as immutable RuleCandidates, not authority. Read the compiler's
+reverse semantic projection and SemanticDelta back against exact source slices; if the
+delta is non-empty, append a separate semantic-repair candidate revision and recompile.
+The runner replays the IR and freezes the complete compiler output plus current Rule
+record IDs as `rule_candidate_report`. QA appends a digest-bound
+`rule_qa_assessment` against that existing report. Only a later authorized
+runner/operator `rule_ratification` receipt may establish RuleClosure, and only when
+the referenced report reproduces exactly, compilation is complete, all
+SemanticDelta/coverage/alignment sets are empty, and that exact QA assessment passes.
+Materialize every returned checklist
 template with that current `source_rule_record_id`; do not merge subject/condition
 coverage cells. Add `rule_dependency` edges using the returned semantic relationship,
 edge provenance, and endpoint provenance digests. Then materialize every returned
 `typed_dependency_template` with both current endpoint Rule record IDs so dependency
-order is executable rather than implicit. A Rule revision makes dependent projections
+order is executable rather than implicit. A Rule revision makes ratification and dependent projections
 stale until they are recomputed; changed source bytes require a new source identity.
 Propose evidence as `fact_proposal`; for a typed checklist bind
 `witness_bindings` to its checklist ID, Rule-semantics digest, and exact operators.
@@ -1224,10 +1400,11 @@ Rule authorizes a `dependency_resolution`. `requires` points from dependant to
 prerequisite; `produces_fact_for` and `precondition_for` point from prerequisite to
 dependant.
 
-At meaningful state changes, append a whole-state `position_checkpoint` that binds
-the current Rule records, admitted Fact receipts, task/world identity, scope, role
+After RuleClosure exists, freeze the Direction datum, then append a whole-state
+`position_checkpoint` that binds the current Rule records and RuleClosure digests,
+admitted Fact receipts, task/world identity, scope, role
 assignments, and known artifact revisions. Then write one or more
-`direction_proposal` records against that exact Position. You choose Direction; the
+`direction_proposal` records against that exact Position and the same RuleClosure. You choose Direction; the
 Kernel only checks identity and reference closure. A later QA reviews the path but
 does not authoritatively choose Direction for you.
 
@@ -1308,8 +1485,12 @@ Re-run the same read-only Doctor over those exact frozen bytes:
 
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph doctor {graph_path}`
 
-Audit the entire path: official-source Rule coverage and dependencies, authority
-receipts, evidence-bound Facts, whole-state Position checkpoints, whether each
+Audit the entire path: runner-owned AuthoritySnapshot manifest/receipt equality,
+source versus extraction-representation bytes,
+official-source Rule coverage and dependencies, immutable candidate lineage, reverse
+semantic projection and SemanticDelta, frozen `rule_candidate_report`, the matching
+`rule_qa_assessment`, authorized RuleClosure receipts, evidence-bound
+Facts, whole-state Position checkpoints, whether each
 Direction is projected from its claimed Position, and whether the latest official
 outputs agree with the evidence. Inspect the exact frozen Worker snapshot identified
 below and the frozen graph copy. Verify the Worker snapshot before inspecting its
@@ -1335,12 +1516,19 @@ or coupled witness semantics. For successor IR, also verify each stable clause-o
 key independently of array position, reconstruct each clause from its ordered frozen
 byte slices, check slice-to-semantic-role coverage and resolved Rule provenance, and verify that
 every dependency is directly source-backed or derived from the current endpoint Rule
-provenance identities. Bounds and digests prove source identity, not semantic
+provenance identities. Verify that relationship alignment names endpoint semantics,
+scope and cardinality and uses keyed joins, aggregate membership, exact pairs, or an
+explicit source-backed all-to-all rationale; reject implicit Cartesian projection.
+Bounds and digests prove source identity, not semantic
 correctness; independently judge whether each selected slice and role actually
 expresses the claimed Rule or relationship. Audit the immutable first-attempt revision as written;
 do not overwrite it. If compilation drift is concrete, emit a replayable source-clause
 witness so the same Worker can author a separate `semantic_repair` IR bound to the
-first IR digest and this QA witness.
+first IR digest and this QA witness. QA does not ratify Rules. Append this assessment
+as a digest-bound `rule_qa_assessment` against the existing frozen candidate report.
+A runner/operator receipt must verify that report, its zero-delta complete compilation,
+AuthoritySnapshot, reverse projection, and this passing assessment before RuleClosure
+can be used by Position or effective Direction.
 Treat the Doctor as deterministic audit material: inspect checklist partition
 coverage, typed Rule coverage cells, witness-operator/semantics alignment, dependency
 order, ready/blocked frontier, invalidation closure, and exact Position-bound

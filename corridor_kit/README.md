@@ -54,33 +54,44 @@ evidence requirement, and pass/fail/unknown decision rule. An incomplete, ambigu
 or unsupported compilation remains explicit rather than becoming a weaker Rule.
 
 Before a formal experiment, a fresh diagnostic session may compile the public task
-into `charting-loop/typed-rule-ir/v3`. It sees only the frozen Method, a closed public
-task-source bundle, and the compiler interface. The successor source bundle freezes
-the exact UTF-8 bytes and digest of every available named authority. A separate
-source-clause inventory enumerates every normative clause, including nested,
-trailing, exception, and optional clauses, with a unique stable clause-order key and
-ordered half-open byte slices before mapping clauses to Rules. Array position is
-display-only, never clause authority. Rule bindings may use multiple disjoint or
-cross-source slices and label their semantic role. Their provenance digest resolves
-the clause/order identity, source digest, byte bounds, and slice digest so changed
-source bytes cannot retain the old Rule provenance. Dependency edges are either directly bound to
-relationship slices or derived from the current endpoint Rule provenance digests.
-Source closure remains unresolved while any named authority is unavailable,
-malformed, not digest-bound, unmapped, or semantically ambiguous.
+into `charting-loop/typed-rule-ir/v4`. It sees only the frozen Method, a runner-frozen
+AuthoritySnapshot, and the compiler interface. AuthoritySnapshot separates three
+planes—normative Rule sources, public task-world Fact material, and supporting
+inputs—and keeps exact byte custody separate from semantic extraction status and
+extractor/artifact identity. A complete extraction freezes derived UTF-8 bytes, size,
+digest and source-byte binding; every slice names `source_bytes` or
+`extraction_artifact`. Readable bytes are not proof of successful extraction.
 
-The resulting probe manifest binds the source-bundle, clause-inventory, Method,
-compiler-config, compiler-implementation, and IR digests, and records that solutions,
-tests, historical Graphs, verifier output, results, transcripts, hidden evaluator
-material, and task-specific hints were forbidden inputs. The immutable first-attempt
-IR is retained. If independent source QA finds semantic drift, a separate
-`semantic_repair` IR must bind its exact parent digest and the reproduced QA witness;
-it never overwrites the first attempt. The probe is reviewed for compiler readiness
-but is not injected into the scored Worker. A same-task probe after verifier-informed
-compiler changes is regression evidence, not fresh efficacy or transfer.
+A separate source-clause inventory enumerates every normative clause, including
+nested, trailing, exception, prohibition, and optional clauses, with a stable
+clause-order key and ordered half-open byte slices before mapping clauses to Rules.
+Array position is display-only. RuleCandidates may bind multiple disjoint or
+cross-source slices and label obligation, domain, applicability, quantifier,
+condition, outcome, prohibition, witness, and relationship roles. Their provenance
+digest resolves the clause/order identity and exact source bytes.
 
-The v1 and v2 compilers remain readable for historical custody. Their absent
-successor byte-slice and edge provenance remains explicitly legacy/unassessed; it is
-not backfilled or reinterpreted. New integrated runs use v3.
+Every relationship declares endpoint semantics, scope, per-endpoint cardinality and
+an explicit keyed, aggregate-to-members, exact-pairs, or source-backed all-to-all
+alignment. V4 never projects an edge from list order or an undeclared Cartesian
+product. The compiler reverse-projects each candidate to its source slices and emits
+SemanticDelta for missing roles, unmapped normative ranges, clause-to-Rule gaps, and
+relationship alignment errors. Non-empty delta is incomplete, not a weaker PASS.
+
+The resulting manifest binds AuthoritySnapshot, clause inventory, Method,
+compiler/config and implementation, candidate revision and input policy. The immutable
+first attempt is retained. A `semantic_repair` revision binds its parent digest and a
+reproduced QA witness; it never overwrites history. The runner freezes
+`authority_snapshot`, then an exactly reproducible `rule_candidate_report`; QA appends
+`rule_qa_assessment` against that report but cannot ratify. Only a runner/operator
+receipt that revalidates the current candidate, complete zero-issue/zero-delta report,
+AuthoritySnapshot, reverse projection, and passing QA assessment establishes
+RuleClosure. The
+probe is not injected into the scored Worker; a same-task probe after verifier-informed
+changes is regression evidence, not fresh efficacy or transfer.
+
+The v1 through v3 compilers remain readable for historical custody. Missing v4
+semantics remain explicitly legacy/unassessed and are never backfilled. New integrated
+runs use v4.
 
 Typed Rule IR makes the semantic compilation boundary explicit. Each Rule declares a
 required/optional level, applicability predicate, kind, quantifier, source-defined
@@ -88,11 +99,11 @@ subject domain, condition branches and outcomes, semantic dependencies, and the
 witness operators required to distinguish those outcomes. An open domain introduced
 by language such as "including" cannot be closed by enumerating only produced output;
 a collective ordering Rule cannot silently become a per-subject ordering Rule. The
-compiler deterministically projects the complete subject-by-condition product into
-checklist templates. `per_subject` projection therefore cannot be replaced by one
-aggregate check, and a temporal Rule cannot compile without a temporal operator.
-Natural-language interpretation remains the agent's responsibility; the SDK makes its
-result inspectable and replayable rather than pretending to infer task truth.
+compiler projects only cells authorized by each Rule and its declared alignment.
+`per_subject` projection cannot become one aggregate check, and a temporal condition
+cannot compile without a temporal operator. Natural-language interpretation remains
+the agent's responsibility; the SDK makes its result inspectable and replayable rather
+than pretending to infer task truth.
 
 At Position assessment time, applicable checklist cells use pass/fail/unknown. A
 conditional optional cell may be `not_applicable` only with unknown status and an
@@ -177,7 +188,16 @@ python3 -m corridor_kit rules compile /tmp/charting-loop/TYPED-RULE-IR.json \
   --output /tmp/charting-loop/TYPED-RULE-COMPILATION.json
 python3 -m corridor_kit graph init /tmp/charting-loop/GRAPH.jsonl
 python3 -m corridor_kit graph append /tmp/charting-loop/GRAPH.jsonl \
-  --type acceptance_checklist_item --actor worker --body-file /tmp/item.json
+  --type authority_snapshot --actor runner --body-file /tmp/authority-snapshot.json
+python3 -m corridor_kit graph append /tmp/charting-loop/GRAPH.jsonl \
+  --type task_source_artifact --actor runner --body-file /tmp/source.json
+python3 -m corridor_kit graph append /tmp/charting-loop/GRAPH.jsonl \
+  --type source_clause --actor worker --body-file /tmp/clause.json
+python3 -m corridor_kit graph append /tmp/charting-loop/GRAPH.jsonl \
+  --type rule_proposal --actor worker --body-file /tmp/rule-candidate.json
+# The runner freezes a reproducible rule_candidate_report; QA appends its assessment.
+# Only a passing, same-candidate QA record permits an exact rule_ratification.
+# Only then may Position and Direction bind the resulting RuleClosure digest.
 python3 -m corridor_kit graph replay /tmp/charting-loop/GRAPH.jsonl
 python3 -m corridor_kit graph doctor /tmp/charting-loop/GRAPH.jsonl
 ```
@@ -185,11 +205,13 @@ python3 -m corridor_kit graph doctor /tmp/charting-loop/GRAPH.jsonl
 The Doctor is deterministic and read-only. It recomputes chain integrity, hard-edge
 topological order, checklist/Position alignment, Direction freshness, invalidation
 closure, declared behavioral-partition and typed coverage-cell completeness, and
-witness operator/Rule-semantics alignment. For v3 it also recomputes UTF-8 slice
-bounds and digests from frozen source artifacts, clause/role closure, direct/derived
-edge provenance, endpoint direction, and stale Rule-revision bindings. These are
-mechanical checks only: Doctor does not decide whether selected prose expresses the
-right semantics or whether a derivation is logically true. Its report binds the exact graph
+witness operator/Rule-semantics alignment. For v4 it also recomputes AuthoritySnapshot
+manifest/receipt and byte/extraction separation, representation-specific UTF-8 slice
+bounds and digests, clause/role closure, exact relationship edge sets/cardinality,
+candidate-report/QA/RuleClosure bindings, and whether
+Position and Direction bind the same current closure. These are mechanical checks
+only: Doctor does not decide whether selected prose expresses the right semantics or
+whether a derivation is logically true. Its report binds the exact graph
 bytes, graph identity, Doctor code, Position, Direction, and acceptance root. Its only
 classifications are `structurally_invalid`, `structurally_valid_but_incomplete`, and
 `acceptance_assessed_complete`. None is task truth, official PASS, delivery or mutation
@@ -401,7 +423,7 @@ Claw and does not present that implementation as the method's required architect
 
 ## Freezing and integration
 
-The Fact-checkpoint release sets `KIT_VERSION` to `0.6.0`. `KIT_VERSION` identifies
+The Rule-compilation release sets `KIT_VERSION` to `0.7.0`. `KIT_VERSION` identifies
 the API, while the exact Git commit plus
 `python3 -m corridor_kit manifest corridor_kit` tree digest identifies the bytes.
 A source-tree manifest excludes interpreter-created `__pycache__`, `.pyc`, and `.pyo`
@@ -409,13 +431,14 @@ files under a declared, digest-bound policy. The runner removes those derived ca
 before freezing and then uses the same manifest implementation for freeze, verification,
 and private custody, so every retained task-authored byte has one identity at every intake.
 A benchmark harness should verify those two identities, upload the package read-only,
-and tell Builder where it is. Changing any kit byte creates a new kit revision; do not
+and tell the assigned role where it is. Changing any kit byte creates a new kit revision; do not
 learn domain rules from one benchmark and silently add them to the shared revision.
 
-The Harbor adapter uploads the frozen kit before Builder starts, exposes only these
-documented commands, and records its version and tree digest in trial metadata. The
-Builder compiles task-specific rows and adapters; Worker and QA query the same frozen
-rows, capability identities, and runner timeline. Fresh Worker and QA prompts also
+The Harbor adapter uploads the frozen kit before the task clock starts, exposes only
+these documented commands, and records its version and tree digest in trial metadata.
+In the integrated profile, Worker compiles task-specific RuleCandidates in the shared
+graph; Worker and QA read the same AuthoritySnapshot, graph, and frozen submissions.
+Fresh Worker and QA prompts also
 receive the exact frozen Method v8 bytes, version, and digest: the official task remains
 Rule authority and the Method remains procedural self-diagnosis guidance. A partial or
 uncompiled Corridor stays advisory; it cannot abort Worker, QA, or external grading,

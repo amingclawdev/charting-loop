@@ -1,24 +1,22 @@
 # Terminal-Bench 3.0 frozen-capability Corridor protocol — v4
 
-Status: prospective engineering/performance protocol. The exact method identity and
-SDK tree identity are resolved from the frozen catalog and run metadata before any
-paid Builder call. A leaderboard score is end-to-end performance, not a causal
-estimate or proof that the method caused an improvement.
+Status: prospective engineering/performance protocol. The exact method, agent, SDK,
+prompt, task and total-clock identities are frozen before a scored run. A leaderboard
+score is end-to-end performance, not a causal estimate or proof that the method caused
+an improvement.
 
 ## Question
 
-How does one method-instantiated agent perform when each fresh task receives:
+How does one method-instantiated agent perform when each fresh task receives a frozen,
+task-neutral Graph Kernel and the Worker and independent QA both receive the exact
+Method as diagnostic guidance? The Worker compiles the public authority into the
+shared graph while doing the task; QA independently audits both that compilation and
+the frozen output before any bounded repair.
 
-1. a Builder that sees the exact official task and a frozen task-neutral Corridor SDK;
-2. a newly compiled, frozen task-specific Corridor;
-3. a Worker that reads its acceptance ledger, work rows, selected capabilities, and
-   runner timeline; and
-4. an independent QA session that reads the same frozen Corridor and runtime view,
-   while independently re-reading the public task sources?
-
-This is not a treatment/control experiment. A later matched task-level comparison is
-needed to estimate a Corridor artifact effect, and a null/placebo Builder is needed to
-distinguish method attribution from the general benefit of building a tool first.
+The leaderboard profile is not a treatment/control experiment. A separately frozen
+matched method/neutral profile may estimate an arm difference on the same task, but a
+single task or post-feedback rerun is still descriptive rather than a general causal
+result.
 
 ## Frozen identities
 
@@ -26,16 +24,16 @@ distinguish method attribution from the general benefit of building a tool first
 - Dataset content hash:
   `sha256:a32a61879ea94eb9dc16fa1fbeb398759f0c07ca633d9d1f6aec760207036da3`.
 - Population: 74 scored tasks in 7 domains; 4 tasks require GPU-capable execution.
-- Agent: `benchmark_agents.harbor_agent:ChartingLoopFullMethodAgent`.
+- Agent: `benchmark_agents.harbor_agent:ChartingLoopGraphKernelMethodAgent`.
 - Method: `charting-loop-method-v8` at
   `3c3813444a7d43d0a56837e9cb960be86ce26d06`.
 - Method digest:
   `sha256:85b5a7a8700312ec1e35b80df6e224221d44a48904247a8d6d32cfe940459446`.
 - Scope-datum digest:
   `sha256:bd70498b2f75e039d88c80ae0c5b0a11fba15d12517820c27e8bccb28da987af`.
-- Agent: version `0.9.0`.
-- SDK: `corridor_kit` version `0.4.0`, resolved by `KIT_VERSION` plus the canonical
-  source-tree digest recorded in each trial before Builder starts.
+- Agent: graph version `1.1.0`.
+- SDK: `corridor_kit` version `0.7.0`, resolved by `KIT_VERSION` plus the canonical
+  source-tree digest recorded before each trial starts.
 
 A branch tip, `@latest`, mutable SDK directory, or post-task module update is not an
 identity. Any byte change creates a new condition.
@@ -44,10 +42,9 @@ identity. Any byte change creates a new condition.
 
 | Role | Receives | May write | Cannot claim |
 |---|---|---|---|
-| Runner | frozen identities, one task deadline, task environment, role outputs | freeze manifests, Position timeline, run metadata, restoration of the latest complete Worker snapshot | task correctness |
-| Builder | method, official goal and public task world, frozen SDK | Builder scratch and task Corridor before freeze | final task execution or evaluator PASS |
-| Worker | official task, live state, frozen Corridor, frozen SDK, runner timeline | official task state | that row/reminder status proves acceptance |
-| Independent QA | official task, post-Worker state, same Corridor/SDK/timeline | QA assessment only | mutation authority or grading authority |
+| Runner | frozen identities, one task deadline, task environment, role outputs | AuthoritySnapshot receipt, graph/submission custody, authorized RuleClosure receipts, run metadata | task correctness or Rule semantics |
+| Worker | official task, live state, frozen Method/SDK, shared graph | official task state and immutable Rule/Fact/Position/Direction proposals | that graph structure proves acceptance or that a proposal is Rule authority |
+| Independent QA | official task, post-Worker state, same Method/SDK/graph | QA assessment only | mutation, Rule-ratification, or grading authority |
 | Harbor grader | returned official task state | official score | method causality |
 
 Rule remains the normative authority layer. A work row is an execution projection; a
@@ -57,18 +54,17 @@ permission to mutate.
 
 ## Frozen reusable capability boundary
 
-The runner hashes and uploads the exact SDK read-only before the scored task is
-exposed to Builder. The reusable layer may contain generic JSON/hash/manifest
+The runner hashes and uploads the exact SDK read-only before the scored task starts.
+The reusable layer may contain generic JSON/hash/manifest
 mechanics, acceptance/work/capability validation, Position timeline projections,
-shell-free capture, and task-neutral domain operations. The initial binary pack is
-limited to read-only ELF inventory, changed-byte range comparison, and shell-free
-replay binding.
+shell-free capture, task-neutral domain operations, an append-only graph, the typed
+Rule compiler, reverse semantic projection, and a deterministic read-only Doctor.
 
 It must not contain a benchmark task ID, fixed task offset, opcode recipe, verifier or
 oracle material, candidate answer, task fixture, prior-task Fact, or post-outcome
-repair. The Builder selects applicable capabilities by stable ID/version/digest and
-builds task-specific adapters inside the current Corridor. A module learned from this
-task's score, verifier output, or transcript cannot be added to the frozen condition.
+repair. Task-specific Rules and evidence are authored in the trial graph, never baked
+into the reusable SDK. A module learned from this task's score, verifier output, or
+transcript cannot be added to the frozen condition.
 
 A same-task rerun after modifying the SDK is an engineering regression run. It is not
 a fresh task sample, transfer result, or clean leaderboard attempt.
@@ -76,91 +72,97 @@ a fresh task sample, transfer result, or clean leaderboard attempt.
 ## Independent compile probe before a formal experiment
 
 Compiler development may run one fresh diagnostic session before a formal scored
-experiment. That session sees exactly the frozen Method, a closed public task-source
-bundle, and the task-neutral Typed Rule compiler interface. It must not receive a
+experiment. That session sees exactly the frozen Method, a runner-frozen
+`AuthoritySnapshot`, and the task-neutral Typed Rule compiler interface. It must not receive a
 solution, task tests, historical task Graph, official verifier output, prior result,
 prior task transcript, hidden evaluator material, or task-specific hint. It emits
-`charting-loop/typed-rule-ir/v3`; the deterministic compiler then freezes the source
-bundle, source-clause inventory, Method, compiler/config and implementation, and IR
-digests plus the input policy in one compile-probe manifest.
+`charting-loop/typed-rule-ir/v4`; the deterministic compiler binds the
+AuthoritySnapshot, source-clause inventory, Method, compiler/config and implementation,
+candidate revision and input policy in one compile-probe manifest.
 
-The source bundle must enumerate the instruction and every named public authoritative
-specification with exact retrieval status, UTF-8 bytes, and digest. The independent
-clause inventory must enumerate every normative clause—including nested, trailing,
-exception, and optional clauses—with a unique stable clause-order key and stable,
-ordered, half-open UTF-8 byte slices before mapping clauses to Rules. Array position
-is display-only, not clause authority. Rules may bind multiple disjoint or cross-source
-slices, must label their semantic roles, and must digest the resolved clause/order,
-source digest, byte bounds, and slice digest. A dependency must bind either direct relationship
-slices or a declared derivation over the current endpoint Rule provenance digests.
-Source closure is unresolved while any named source is unavailable, malformed, or
-not digest-bound. Required/optional classification, applicability predicates, and
-unmapped/ambiguous clauses are explicit.
-The immutable first attempt has no parent or QA witness. A later semantic-repair IR is
-a separate artifact that binds the exact parent IR digest and at least one reproduced
-independent-QA witness; it never overwrites the first attempt.
+The AuthoritySnapshot has three separate planes: normative Rule sources, public
+task-world Fact material, and supporting inputs. Exact byte custody (retrieval status,
+media type, size, digest and runner freeze receipt) is distinct from semantic
+extraction (status, extractor, source-byte binding, and the extraction artifact's
+frozen UTF-8 bytes/size/digest). Every clause slice names `source_bytes` or
+`extraction_artifact`. Readable bytes do not
+prove that a PDF, archive or binary was semantically extracted. Source closure remains
+unresolved while any normative source is unavailable, malformed, not byte-bound, not
+successfully extracted, unmapped or semantically ambiguous.
 
-The probe checks whether public requirements were compiled into source-bound Rule
-kinds, explicit applicability and source-defined quantified domains, condition
-branches/outcomes, typed dependencies, and compatible witness operators. Open domains
-such as "including" cannot be closed from produced output, collective ordering cannot
-be rewritten as per-subject ordering, and temporal/coupled predicates cannot be
-replaced by timeless membership. It does not solve the task, choose Direction,
-establish task truth/PASS, block the run, or become a hidden evaluator. For the
-integrated no-Builder profile its output is reviewed but not injected into the scored
-Worker, which performs its own in-clock compilation. If task interpretation, compiler
-configuration, or compiler bytes change after same-task verifier feedback, every later
-same-task probe/run is labeled regression/validation rather than fresh efficacy or
-transfer evidence.
+The clause inventory enumerates every normative clause—including nested, trailing,
+exception and optional clauses—with a stable clause-order key and ordered half-open
+UTF-8 byte slices before mapping clauses to Rules. Array position is display-only.
+Each RuleCandidate binds the exact source slices to semantic roles such as obligation,
+domain, applicability, quantifier, condition, outcome, prohibition, witness and
+relationship. It declares Rule kind, source-defined domain, applicability, condition
+type, expected outcome, witness operators and typed Guidance. Guidance is advisory;
+it cannot become Rule authority.
 
-Historical `typed-rule-ir/v1` and `v2` remain readable for custody, but absent v3
-byte-slice and edge provenance is reported as legacy/unassessed rather than backfilled.
-New integrated runs use v3. Six known tasks used to develop or
-repair this interface are same-task regression fixtures only; passing them cannot be
-reported as fresh efficacy, transfer, or benchmark evidence.
+Every dependency declares endpoint semantics, scope, per-endpoint cardinality and one
+explicit alignment: keyed join, aggregate-to-members, exact pairs, or source-backed
+all-to-all. Missing alignment emits no v4 checklist edge; list order and an undeclared
+Cartesian product create no dependency authority. Temporal and state-transition
+conditions retain temporal/state witness operators, while static conditions do not
+gain artificial time semantics.
 
-## Builder outputs and freeze
+The compiler then reverse-projects every candidate back to its exact source slices and
+emits `SemanticDelta`: missing semantic roles, uncovered normative byte ranges,
+clause-to-Rule mapping gaps, and relationship alignment/cardinality errors. A non-empty
+delta cannot be called complete. Repair creates a new immutable `semantic_repair`
+candidate bound to its parent and reproduced QA witness; it never overwrites the first
+attempt. Independent QA re-reads the public authority rather than trusting the
+candidate. The runner persists the exact snapshot root and a reproducible
+`rule_candidate_report` containing the IR, compiler report and current Rule record
+IDs. QA persists `rule_qa_assessment` against that existing report. QA does not
+ratify a Rule. Only a runner/operator `rule_ratification` that revalidates the same
+candidate, a complete zero-issue/zero-delta report, the AuthoritySnapshot, reverse
+projection, and a passing QA record establishes an authorized `RuleClosure`.
 
-The Builder must first establish the complete public task acceptance surface, then
-compile executable decomposition:
+The probe does not solve the task, choose Direction, establish task truth/PASS, block
+the run, or become a hidden evaluator. Its output is reviewed but not injected into a
+later fresh scored Worker. Historical `typed-rule-ir/v1` through `v3` remain readable
+for custody; their missing v4 semantics stay legacy/unassessed and are never
+backfilled. Known development tasks are same-task regression fixtures only.
 
-- `ACCEPTANCE.json` maps every public normative clause to a stable acceptance ID,
-  source, scope, Rule, definition state, typed relations, and explicit positive,
-  negative, boundary, state, temporal, and coupled verification obligations;
-- `WORK_ITEMS.json` binds every acceptance ID to bounded, acyclic rows with scope,
-  dependencies, done-when conditions, selected capability IDs, and reminders; and
-- `CAPABILITIES.json` declares only selected operations with exact version, digest,
-  entrypoint, input/output contracts, applicability signals, and side effects.
+## In-clock graph construction
 
-All three files are strictly validated. Incomplete, invalid, or missing surfaces are
-recorded as construction evidence but do not stop Worker or the official grader. The
-runner closes the complete task Corridor byte set, rejects symlinks and special files,
-records relative paths/sizes/digests/executable modes, computes one tree digest, makes
-the tree root-owned and read-only, and verifies it before every downstream phase.
+There is no task-specific Builder phase in this profile. The Worker uses the frozen
+task-neutral kernel while doing the task:
+
+1. snapshot public authority and author immutable RuleCandidates;
+2. run deterministic compile and reverse projection;
+3. preserve an honest incomplete state or write a new semantic-repair revision;
+4. freeze a complete scorable task output early;
+5. let independent QA audit the same graph, source bytes and output; and
+6. after an authorized RuleClosure receipt, create Position checkpoints and effective
+   Direction proposals bound to the exact closure.
+
+Graph incompleteness never stops task execution or external grading. The graph is an
+inspectable navigation aid, not a pre-mutation Gate. The Worker and QA both receive the
+frozen Method as procedural self-diagnosis guidance; the official task sources remain
+task Rule authority.
 
 ## Position checkpoint, Direction, Guide, and reminders
 
-The runner initializes a hash-linked append-only Position timeline outside the frozen
-Corridor before Builder. Each event binds its predecessor and exact content digest.
-After Corridor freeze, the runtime deterministically projects row states and one
-current row from frozen work definitions plus the visible timeline prefix. That
-projection is content-addressed as a PositionRef checkpoint. Direction is then
-projected from the PositionRef, the transitive frozen Rule closure named by the
-current row's acceptance IDs, and applicable frozen capabilities. Entrance and Guide
-are derived from Direction; neither is an additional authority plane. Worker and QA
-receive the same acceptance ledger, timeline path, and Guide:
+The runner initializes a hash-linked append-only graph before Worker starts. Each
+record binds its predecessor and exact content digest. After an authorized RuleClosure
+exists, the Worker may append a whole-state PositionRef checkpoint over the current
+RuleClosure digests, admitted Facts, checklist assessments, task/world identity,
+scope, roles, artifact revisions and parent Position. Direction is projected from that
+exact Position and closure. Entrance and Guide are derived from Direction; neither is
+an additional authority plane. Worker and QA receive the same graph:
 
 ```text
-PositionRef(frozen work rows, Position prefix)
-Direction(PositionRef, frozen Rule closure, frozen capabilities)
-Guide(Direction) -> Entrance + current row + bounded capabilities + reminders
+PositionRef(RuleClosure digests, admitted Facts, checklist/frontier, world)
+Direction(PositionRef, same RuleClosure digests) -> ready | blocked | unresolved
+Guide(Direction) -> Entrance | typed refusal
 ```
 
-The projection reports inconsistencies such as multiple active rows or unknown row
-references. It does not rewrite history, synthesize missing done-when evidence, or
-block execution. Reminder delivery and use are observable process facts, not Gates.
-Missing timeline evidence is reported as evidence loss and never suppresses Harbor
-grading.
+The projection reports stale closure, missing checklist coverage, dependency-order
+violations, invalidation gaps and a Direction bound to the wrong Position. It does not
+rewrite history, synthesize evidence, or block execution. Missing graph evidence is
+reported as incomplete and never suppresses Harbor grading.
 
 A read-only counterfactual may substitute an explicitly identified hypothetical
 Position and/or Rule closure input, hold the other inputs fixed, and project the
@@ -171,7 +173,7 @@ is diagnostic evidence, not a Gate or mutation path.
 
 ## One task deadline and monotonic submission custody
 
-The official task time limit is one end-to-end deadline. Builder, Worker, QA, repair,
+The official task time limit is one end-to-end deadline. Worker, QA, repair,
 and closure are logical handoffs inside that same clock, not separately budgeted
 stages. A small finalization reserve may be held inside the total so the runner can
 stop the active process, verify custody, restore the last complete Worker submission,
@@ -197,43 +199,55 @@ permits work after the task deadline.
 
 ## Per-task sequence
 
-1. The doctor verifies clean committed source, exact dataset/method/agent identities,
+1. The preflight doctor verifies clean committed source, exact dataset/method/agent identities,
    Modal and Codex readiness, sufficient operator-attested spend headroom, and the
    unused job identity.
 2. The runner derives the one official task deadline, reserves only bounded
-   finalization time inside it, hashes and uploads the frozen SDK, verifies the remote
-   tree digest, initializes the Position timeline, and creates the agent-owned
-   submission store.
-3. A fresh Builder receives method, task goal, public environment, and SDK. It builds
-   only the current task Corridor and does not execute the final task.
-4. The runner freezes the Corridor, records acceptance/work/capability status, and
-   projects the initial PositionRef, Direction, Entrance, current row, and reminders.
-5. A fresh Worker reads the Corridor and runtime Guide, executes the official task,
-   independently verifies all mutations against the acceptance ledger, and freezes
-   its first complete official task state plus every verified improvement.
-6. If time remains, a distinct QA session reads and may execute the same frozen Corridor and
-   capabilities, reads the same timeline/Guide, independently re-reads public sources,
-   writes one result for every expected acceptance ID, and freezes that assessment
-   separately from Worker state.
-7. QA `pass`, `blocked`, and `not_assessed` are advisory. A `fail` triggers the one
-   frozen repair allowance only when it contains a concrete acceptance-ID witness with
+   finalization time inside it, hashes and uploads the frozen SDK and Method, verifies
+   their remote identities, initializes the graph and submission store, and freezes
+   the initial AuthoritySnapshot receipt.
+3. The runner freezes `authority_snapshot` and its exact source artifacts. A fresh
+   Worker reads the task, Method and kernel; compiles that AuthoritySnapshot to
+   an immutable RuleCandidate, repairs any SemanticDelta without overwriting history,
+   executes the task, and freezes its first complete scorable state plus each verified
+   improvement.
+4. A distinct QA session reads the same task, Method, graph and frozen Worker output;
+   independently reconstructs the clauses, reverse projection and dependency
+   alignment; and freezes its assessment separately from Worker state.
+5. The runner replays and freezes `rule_candidate_report`; QA writes a content-bound
+   assessment of that report. A runner/operator may ratify only the exact candidate
+   revision whose complete zero-delta report, AuthoritySnapshot, reverse projection,
+   and passing QA assessment all match,
+   establishing RuleClosure. QA cannot self-ratify.
+6. Worker records a Position and Direction only against that exact RuleClosure; the
+   read-only Doctor recomputes graph integrity, dependency order, checklist/frontier
+   alignment and Direction freshness before the next freeze.
+7. QA `pass`, `blocked`, and `not_assessed` are advisory. A `fail` triggers bounded
+   repair only when it contains a concrete acceptance-ID witness with
    constraint, observation, and safe replay.
-8. If time remains, the same Worker may perform one bounded repair and freezes a new
+8. If time remains, the same Worker may perform repair and freezes a new
    Worker version only after the repaired official state is complete; the same QA may
    then recheck the whole ledger, not only the prior witness.
 9. Before returning unconditionally to Harbor, the runner verifies the exact latest
    binding, prevalidates the complete restore set, and restores the latest verified
-   complete Worker snapshot by per-file atomic replacement. QA follows its cooperative
+   complete Worker snapshot by per-file atomic replacement after verifying its exact
+   identity. This is the latest complete Worker snapshot; QA never substitutes one.
+   QA follows its cooperative
    write boundary, never suppresses or replaces the Worker submission, and never
    short-circuits the benchmark grader.
+10. Only after the agent returns, the runner freezes a pre-verifier manifest whose
+    `submission` digest is the official verifier input, runs the verifier, and creates
+    a digest-bound order receipt. Verifier alignment is generated only in an isolated
+    post-hoc namespace; it is read-only, cannot enter Rule/Fact authority, cannot be
+    supplied to a fresh task context, and never gates official grading.
 
-Every Builder, Worker, QA, repair, and closure model call belongs to the scored agent
+Every Worker, QA, repair, and closure model call belongs to the scored agent
 cost. Complete role trajectories and runtime identities are retained once in the
 ATIF-v1.7 root.
 
 ## Experimental no-Gate rule
 
-Do not ask Builder to construct a mandatory approval, workflow, or pre-mutation Gate.
+Do not ask Worker or QA to construct a mandatory approval, workflow, or pre-mutation Gate.
 Doing so expands the intervention from task charting to construction and maintenance
 of a governance system, and can stop U → C before the domain structure converges.
 
@@ -246,17 +260,16 @@ rule and is not this benchmark procedure.
 
 ## Interpretation and contamination
 
-Report aggregate score, every task outcome, Builder construction status, work/capability
-validation status, total deadline, remaining time at each handoff, submission and
-fallback status, QA outcome, repair count, SDK digest, cost, and infrastructure
-errors. Do not hide null, negative, blocked, or invalid cases.
+Report aggregate score, every task outcome, Rule-compilation/closure status,
+AuthoritySnapshot and SDK digests, total deadline, remaining time at each handoff,
+submission/fallback status, QA outcome, repair count, cost, and infrastructure errors.
+Do not hide null, negative, blocked, incomplete, or invalid cases.
 
 The strongest accurate description is:
 
-> End-to-end Terminal-Bench 3.0 performance of an agent that used a pre-task-frozen
-> reusable SDK to build one fresh task-conditioned Corridor whose Worker and
-> independent QA shared the same frozen work rows, capabilities, and advisory runtime
-> timeline.
+> End-to-end Terminal-Bench 3.0 performance of an agent whose Worker and independent
+> QA shared one pre-task-frozen Method and task-neutral Graph Kernel, compiled the
+> current public authority in-clock, and retained incomplete compilation honestly.
 
-It does not show that Charting Loop outperforms any other Builder method. For that,
-run a prospective matched no-Corridor task comparison and then a null/placebo Builder.
+It does not show that Charting Loop outperforms a neutral prompt. That requires a
+prospectively frozen matched method/neutral comparison over enough independent tasks.
