@@ -1455,7 +1455,32 @@ class FullMethodContractTests(unittest.TestCase):
 
         bytecode_export = "export PYTHONDONTWRITEBYTECODE=1;"
         self.assertIn(bytecode_export, command)
-        self.assertLess(command.index(bytecode_export), command.index("setsid sh -c"))
+        foreground_launch = "exec setsid -w bash -o pipefail -c"
+        self.assertIn(foreground_launch, command)
+        self.assertLess(command.index(bytecode_export), command.index(foreground_launch))
+        self.assertIn("command -v bash", command)
+        self.assertIn('"$$" "$$"', command)
+        self.assertNotIn("phase_pid=$!", command)
+        self.assertNotIn('wait "$phase_pid"', command)
+
+    def test_paid_prompt_is_staged_out_of_the_remote_exec_argv(self) -> None:
+        adapter = load_harbor_agent_with_stubs()
+        prompt = "A long prompt with spaces and 'quotes'."
+        rendered = (
+            "if true; then :; fi; codex exec "
+            "--dangerously-bypass-approvals-and-sandbox --json -- "
+            f"{adapter.shlex.quote(prompt)} "
+            "2>&1 </dev/null | tee /logs/agent/codex-worker.txt"
+        )
+
+        staged, decoded = adapter._PhaseCodex._prompt_file_command(
+            rendered, "/tmp/codex-secrets/worker-prompt.txt"
+        )
+
+        self.assertEqual(prompt, decoded)
+        self.assertNotIn(prompt, staged)
+        self.assertIn("-- - 2>&1 </tmp/codex-secrets/worker-prompt.txt", staged)
+        self.assertTrue(staged.endswith("| tee /logs/agent/codex-worker.txt"))
 
     def test_phase_cancellation_cleans_up_and_unproven_quiescence_fails_closed(
         self,
@@ -1574,7 +1599,7 @@ class FullMethodContractTests(unittest.TestCase):
             'decision["repair_required"]',
             "subagent_trajectories",
             "CHARTING_LOOP_PHASE_TOKEN",
-            "setsid sh -c",
+            "exec setsid -w bash -o pipefail -c",
             "Phase process quiescence could not be proven",
             "regular_tree_manifest(self._sdk_source)",
             "Corridor SDK upload digest mismatch",

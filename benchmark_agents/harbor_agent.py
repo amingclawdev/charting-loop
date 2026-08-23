@@ -451,17 +451,41 @@ class _PhaseCodex(Codex):
             f'"phase":{json.dumps(phase)},"token_hash":{json.dumps(token_hash)},'
             '"pid":%s,"pgid":%s,"state":"running"}\\n'
         )
+        session_command = (
+            f"printf {shlex.quote(identity)} \"$$\" \"$$\" "
+            f"> {shlex.quote(identity_path)}; "
+            f"exec bash -o pipefail -c {shlex.quote(command)}"
+        )
         return (
             "command -v setsid >/dev/null 2>&1 || "
             "{ echo 'setsid is required for phase isolation' >&2; exit 125; }; "
+            "command -v bash >/dev/null 2>&1 || "
+            "{ echo 'bash is required for phase status propagation' >&2; exit 125; }; "
             f"rm -f {shlex.quote(identity_path)}; "
             f"export {PHASE_TOKEN_ENV}={shlex.quote(token)}; "
             f"{PHASE_NO_BYTECODE_EXPORT}; "
-            f"setsid sh -c {shlex.quote(command)} & phase_pid=$!; "
-            f"printf {shlex.quote(identity)} \"$phase_pid\" \"$phase_pid\" "
-            f"> {shlex.quote(identity_path)}; "
-            'wait "$phase_pid"; phase_status=$?; exit "$phase_status"'
+            f"exec setsid -w bash -o pipefail -c "
+            f"{shlex.quote(session_command)}"
         )
+
+    @staticmethod
+    def _prompt_file_command(command: str, prompt_path: str) -> tuple[str, str]:
+        """Move Harbor's rendered Codex prompt out of the remote exec argv."""
+
+        output_marker = " 2>&1 </dev/null | tee "
+        invocation, marker, output_path = command.rpartition(output_marker)
+        if not marker or not output_path.strip():
+            raise RuntimeError("Paid Codex command output boundary was not recognized")
+        prefix, prompt_marker, escaped_prompt = invocation.rpartition("-- ")
+        if not prompt_marker:
+            raise RuntimeError("Paid Codex command prompt boundary was not recognized")
+        prompt_tokens = shlex.split(escaped_prompt)
+        if len(prompt_tokens) != 1 or not prompt_tokens[0]:
+            raise RuntimeError("Paid Codex command must contain one non-empty prompt")
+        staged_command = (
+            f"{prefix}-- - 2>&1 <{shlex.quote(prompt_path)} | tee {output_path}"
+        )
+        return staged_command, prompt_tokens[0]
 
     async def ensure_phase_quiescent(
         self,
@@ -507,7 +531,34 @@ class _PhaseCodex(Codex):
         timeout_sec: int | None = None,
     ) -> Any:
         paid_command = self._is_paid_codex_command(command)
-        owned_command = self._owned_command(command) if paid_command else command
+        if paid_command:
+            token = getattr(self, "_phase_token", "")
+            if not token:
+                raise RuntimeError("Phase identity was not initialized before prompt staging")
+            remote_prompt_path = f"/tmp/codex-secrets/phase-prompt-{token}.txt"
+            command, prompt_text = self._prompt_file_command(
+                command, remote_prompt_path
+            )
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as prompt_file:
+                prompt_file.write(prompt_text)
+                prompt_file.flush()
+                await environment.upload_file(
+                    Path(prompt_file.name), remote_prompt_path
+                )
+            owner = getattr(environment, "default_user", None)
+            owner_command = (
+                f"chown {shlex.quote(str(owner))} {shlex.quote(remote_prompt_path)}; "
+                if owner is not None
+                else ""
+            )
+            await self.exec_as_root(
+                environment,
+                command=owner_command
+                + f"chmod 0400 {shlex.quote(remote_prompt_path)}",
+            )
+            owned_command = self._owned_command(command)
+        else:
+            owned_command = command
         try:
             return await super().exec_as_agent(
                 environment,
