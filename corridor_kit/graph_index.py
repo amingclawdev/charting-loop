@@ -106,9 +106,11 @@ class GraphIndex:
     _dependants: Mapping[str, frozenset[str]]
     _conflicts: Mapping[str, frozenset[str]]
     _invalidates: Mapping[str, frozenset[str]]
+    _historical_dependants: Mapping[str, frozenset[str]]
     _topology_nodes: frozenset[str]
     _projection: Mapping[str, Any]
     _rule_history: Mapping[str, tuple[Mapping[str, Any], ...]]
+    _rule_closure_history: Mapping[str, tuple[Mapping[str, Any], ...]]
 
     @classmethod
     def build(
@@ -153,6 +155,7 @@ class GraphIndex:
             add("direction", ref, body)
 
         edges: list[Mapping[str, Any]] = []
+        historical_dependants: dict[str, set[str]] = {}
         ratified_rules = set(projection.get("ratified_rules", set()))
         current_rule_records = projection.get("rule_records", {})
         provenance_digests = projection.get("rule_source_provenance_digests", {})
@@ -187,11 +190,54 @@ class GraphIndex:
                 )
             )
         for index, body in enumerate(projection.get("rule_dependencies", []), start=1):
+            historical_edge = canonical_dependency_edge(
+                edge_id=str(body.get("dependency_id") or f"rule-dependency:{index}"),
+                relationship=str(body["relationship"]),
+                from_ref=str(body["from_rule_id"]),
+                to_ref=str(body["to_rule_id"]),
+                source="rule_dependency",
+            )
+            if historical_edge["topological"]:
+                historical_dependants.setdefault(
+                    str(historical_edge["prerequisite_ref"]), set()
+                ).add(str(historical_edge["dependant_ref"]))
             if (
                 body.get("from_rule_id") not in ratified_rules
                 or body.get("to_rule_id") not in ratified_rules
             ):
                 continue
+            source_rule_id = str(body["from_rule_id"])
+            target_rule_id = str(body["to_rule_id"])
+            source_provenance = provenance_digests.get(source_rule_id)
+            target_provenance = provenance_digests.get(target_rule_id)
+            if source_provenance is not None:
+                if (
+                    body.get("source_rule_provenance_digest") != source_provenance
+                    or body.get("target_rule_provenance_digest") != target_provenance
+                ):
+                    continue
+                expected_dependency = next(
+                    (
+                        item
+                        for item in projection.get("rule_semantics", {})
+                        .get(source_rule_id, {})
+                        .get("dependencies", [])
+                        if item.get("relationship") == body.get("relationship")
+                        and item.get("target_rule_id") == target_rule_id
+                    ),
+                    None,
+                )
+                if (
+                    expected_dependency is None
+                    or body.get("edge_provenance")
+                    != expected_dependency.get("provenance")
+                    or (
+                        "alignment" in expected_dependency
+                        and body.get("relationship_alignment")
+                        != expected_dependency.get("alignment")
+                    )
+                ):
+                    continue
             edge_id = str(body.get("dependency_id") or f"rule-dependency:{index}")
             edges.append(
                 MappingProxyType(
@@ -235,6 +281,18 @@ class GraphIndex:
                 invalidates[source].add(target)
 
         histories: dict[str, list[Mapping[str, Any]]] = {}
+        checklist_ids_by_rule_record: dict[str, list[str]] = {}
+        for record in records:
+            if record.get("record_type") != "acceptance_checklist_item":
+                continue
+            body = record.get("body", {})
+            rule_record_id = body.get("source_rule_record_id")
+            checklist_item_id = body.get("checklist_item_id")
+            if isinstance(rule_record_id, str) and isinstance(checklist_item_id, str):
+                checklist_ids_by_rule_record.setdefault(rule_record_id, []).append(
+                    checklist_item_id
+                )
+        closure_histories: dict[str, list[Mapping[str, Any]]] = {}
         for record in records:
             if record.get("record_type") not in {
                 "rule_proposal",
@@ -255,6 +313,25 @@ class GraphIndex:
                         }
                     )
                 )
+                if record["record_type"] == "rule_ratification":
+                    rule_record_id = body.get("rule_record_id")
+                    closure_contents = {
+                        "ratification_record_id": record["record_id"],
+                        "ratification_body": dict(body),
+                        "checklist_item_ids": sorted(
+                            checklist_ids_by_rule_record.get(str(rule_record_id), [])
+                        ),
+                    }
+                    closure_histories.setdefault(rule_id, []).append(
+                        MappingProxyType(
+                            {
+                                **closure_contents,
+                                "closure_projection_digest": sha256_json(
+                                    closure_contents
+                                ),
+                            }
+                        )
+                    )
 
         return cls(
             graph_digest=graph_digest,
@@ -274,10 +351,19 @@ class GraphIndex:
             _invalidates=MappingProxyType(
                 {key: frozenset(value) for key, value in invalidates.items()}
             ),
+            _historical_dependants=MappingProxyType(
+                {
+                    key: frozenset(value)
+                    for key, value in historical_dependants.items()
+                }
+            ),
             _topology_nodes=frozenset(topology_nodes),
             _projection=MappingProxyType(dict(projection)),
             _rule_history=MappingProxyType(
                 {key: tuple(value) for key, value in histories.items()}
+            ),
+            _rule_closure_history=MappingProxyType(
+                {key: tuple(value) for key, value in closure_histories.items()}
             ),
         )
 
@@ -459,6 +545,44 @@ class GraphIndex:
             "rule_closure_digest": digest,
             "checklist_item_ids": checklist_ids,
         }
+        closure_history = list(self._rule_closure_history.get(rule_id, ()))
+        current_ratification = next(
+            (
+                item
+                for item in reversed(closure_history)
+                if ratified
+                and item["ratification_body"].get("rule_record_id")
+                == closure_identity["rule_record_id"]
+            ),
+            None,
+        )
+        previous_ratification = next(
+            (
+                item
+                for item in reversed(closure_history)
+                if current_ratification is None
+                or item["ratification_record_id"]
+                != current_ratification["ratification_record_id"]
+            ),
+            None,
+        )
+        current_contents = _copy(current_ratification) if current_ratification else None
+        previous_contents = (
+            _copy(previous_ratification) if previous_ratification else None
+        )
+        current_items = set(
+            current_contents.get("checklist_item_ids", []) if current_contents else []
+        )
+        previous_items = set(
+            previous_contents.get("checklist_item_ids", [])
+            if previous_contents
+            else []
+        )
+        previous_body = (
+            previous_contents.get("ratification_body", {})
+            if previous_contents
+            else {}
+        )
         return self._envelope(
             rule_id=rule_id,
             status=status,
@@ -471,6 +595,32 @@ class GraphIndex:
             closure_identity=closure_identity,
             closure_identity_digest=sha256_json(closure_identity),
             history=[_copy(item) for item in history],
+            closure_contents=current_contents,
+            closure_history=[_copy(item) for item in closure_history],
+            closure_diff={
+                "previous_closure_contents": previous_contents,
+                "current_closure_contents": current_contents,
+                "rule_record_changed": (
+                    previous_body.get("rule_record_id")
+                    != closure_identity["rule_record_id"]
+                    if previous_contents
+                    else None
+                ),
+                "closure_digest_changed": (
+                    previous_body.get("rule_closure_digest") != digest
+                    if previous_contents
+                    else None
+                ),
+                "added_checklist_item_ids": sorted(current_items - previous_items),
+                "removed_checklist_item_ids": sorted(previous_items - current_items),
+            },
+            invalidation_impact={
+                "invalidated": invalidated,
+                "reason": invalidation_reason,
+                "affected_dependant_refs": _stable_closure(
+                    rule_id, self._historical_dependants
+                ),
+            },
         )
 
     def query(

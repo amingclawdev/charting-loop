@@ -2906,6 +2906,29 @@ class TypedRuleCompilerTests(unittest.TestCase):
             self.assertTrue(stale["source_provenance"]["stale_dependency_provenance_ids"])
             self.assertEqual("unresolved", stale["source_provenance"]["status"])
 
+            revised_record_id = replay_graph(path)["records"][-1]["record_id"]
+            append_graph_record(
+                path,
+                record_type="rule_ratification",
+                actor="runner",
+                body={
+                    "rule_id": revised["rule_id"],
+                    "rule_record_id": revised_record_id,
+                    "authority_ref": revised["source_ref"],
+                    "authority_digest": revised["source_digest"],
+                    "receipt_ref": "source-compile:R-EXIST:revision-2",
+                },
+            )
+            index = load_graph_index(path)
+            old_dependency = report["rule_dependency_templates"][0]
+            indexed_edges = [
+                *index.neighbors(old_dependency["from_rule_id"])["inbound"],
+                *index.neighbors(old_dependency["from_rule_id"])["outbound"],
+            ]
+            self.assertFalse(
+                any(edge["source"] == "rule_dependency" for edge in indexed_edges)
+            )
+
     def test_compiler_projects_every_subject_condition_cell_and_freezes_probe(self) -> None:
         report = compile_typed_rule_ir(self._ir())
         self.assertEqual(6, report["coverage_cell_count"])
@@ -4570,6 +4593,31 @@ class GraphKernelTests(unittest.TestCase):
                     partitions=[item_id.lower()],
                     required_partitions=[item_id.lower()],
                 )
+            position = self._append(
+                path,
+                "position_checkpoint",
+                {
+                    "position_id": "P-INDEX",
+                    "previous_position_ref": None,
+                    "task_identity": {"task_ref": "terminal-bench/index"},
+                    "scope": {"working_set": ["/workspace"]},
+                    "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                    "rule_record_ids": [rule["record_id"]],
+                    "fact_receipt_ids": [],
+                    "artifact_record_ids": [],
+                },
+            )
+            self._append(
+                path,
+                "fact_proposal",
+                {
+                    "fact_id": "F-READY",
+                    "statement": "The prerequisite evidence is available.",
+                    "evidence_ref": "probe:index-ready",
+                    "evidence_digest": "sha256:" + "9" * 64,
+                    "position_ref": position["record_id"],
+                },
+            )
             for dependency in (
                 {
                     "dependency_id": "DEP-REQUIRES",
@@ -4586,6 +4634,15 @@ class GraphKernelTests(unittest.TestCase):
                     "from_ref": "C-SECOND",
                     "to_ref": "C-THIRD",
                     "relationship": "precondition_for",
+                    "source_rule_id": "R-INDEX",
+                    "source_rule_record_id": rule["record_id"],
+                },
+                {
+                    "dependency_id": "DEP-PRODUCES-FACT",
+                    "dependency_kind": "evidence",
+                    "from_ref": "F-READY",
+                    "to_ref": "C-THIRD",
+                    "relationship": "produces_fact_for",
                     "source_rule_id": "R-INDEX",
                     "source_rule_record_id": rule["record_id"],
                 },
@@ -4621,7 +4678,7 @@ class GraphKernelTests(unittest.TestCase):
                 topology["topological_order"].index("C-THIRD"),
             )
             self.assertEqual(
-                ["C-FIRST", "C-SECOND"],
+                ["C-FIRST", "C-SECOND", "F-READY"],
                 index.prerequisite_closure("C-THIRD")["prerequisite_refs"],
             )
             self.assertEqual(
@@ -4633,8 +4690,31 @@ class GraphKernelTests(unittest.TestCase):
             self.assertEqual(["C-THIRD"], impact["invalidated_refs"])
             self.assertEqual(["C-THIRD"], impact["conflict_refs"])
             self.assertEqual(
+                ["F-READY", "C-THIRD"],
+                index.path("F-READY", "C-THIRD")["path"],
+            )
+            self.assertLess(
+                topology["topological_order"].index("F-READY"),
+                topology["topological_order"].index("C-THIRD"),
+            )
+            self.assertEqual(
                 topology["topological_order"],
                 graph_doctor(path)["hard_dependency_topological_order"],
+            )
+            replay = replay_graph(path)
+            self.assertEqual(
+                topology["topological_order"],
+                replay["graph_index"]["topological_order"],
+            )
+            self.assertEqual(
+                index.frontier()["ready_item_ids"],
+                replay["graph_index"]["frontier"]["ready_item_ids"],
+            )
+            self.assertEqual(
+                index.rule_closure("R-INDEX")["closure_identity"],
+                replay["graph_index"]["rule_closures"]["R-INDEX"][
+                    "closure_identity"
+                ],
             )
             closure = index.rule_closure("R-INDEX")
             self.assertEqual("legacy_ratified", closure["status"])
@@ -4666,6 +4746,90 @@ class GraphKernelTests(unittest.TestCase):
                 ["C-FIRST", "C-SECOND", "C-THIRD"],
                 json.loads(completed.stdout)["path"],
             )
+
+    def test_rule_closure_diff_and_revision_invalidation_impact(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            base = self._ratified_rule(
+                path, "R-BASE", "Establish the prerequisite.", "a"
+            )
+            dependant = self._ratified_rule(
+                path, "R-DEPENDANT", "Consume the prerequisite.", "b"
+            )
+            self._checklist(
+                path,
+                item_id="C-BASE-V1",
+                rule_id="R-BASE",
+                rule_record_id=base["record_id"],
+                partitions=["base-v1"],
+                required_partitions=["base-v1"],
+            )
+            self._append(
+                path,
+                "rule_dependency",
+                {
+                    "from_rule_id": "R-DEPENDANT",
+                    "to_rule_id": "R-BASE",
+                    "relationship": "requires",
+                },
+            )
+            revised = self._append(
+                path,
+                "rule_revision",
+                {
+                    "rule_id": "R-BASE",
+                    "statement": "Establish the revised prerequisite.",
+                    "source_ref": "official-task:R-BASE",
+                    "source_digest": "sha256:" + "a" * 64,
+                    "supersedes_record_id": base["record_id"],
+                },
+            )
+            invalidated = load_graph_index(path).rule_closure("R-BASE")
+            self.assertEqual("invalidated", invalidated["status"])
+            self.assertTrue(invalidated["invalidation_impact"]["invalidated"])
+            self.assertEqual(
+                ["R-DEPENDANT"],
+                invalidated["invalidation_impact"]["affected_dependant_refs"],
+            )
+            self.assertIsNone(invalidated["closure_contents"])
+            self.assertIsNotNone(
+                invalidated["closure_diff"]["previous_closure_contents"]
+            )
+
+            self._append(
+                path,
+                "rule_ratification",
+                {
+                    "rule_id": "R-BASE",
+                    "rule_record_id": revised["record_id"],
+                    "authority_ref": "official-task",
+                    "authority_digest": "sha256:" + "a" * 64,
+                    "receipt_ref": "receipt:R-BASE:v2",
+                },
+                actor="runner",
+            )
+            self._checklist(
+                path,
+                item_id="C-BASE-V2",
+                rule_id="R-BASE",
+                rule_record_id=revised["record_id"],
+                partitions=["base-v2"],
+                required_partitions=["base-v2"],
+            )
+            current = load_graph_index(path).rule_closure("R-BASE")
+            self.assertEqual("legacy_ratified", current["status"])
+            self.assertTrue(current["closure_diff"]["rule_record_changed"])
+            self.assertEqual(
+                ["C-BASE-V2"],
+                current["closure_diff"]["added_checklist_item_ids"],
+            )
+            self.assertEqual(
+                ["C-BASE-V1"],
+                current["closure_diff"]["removed_checklist_item_ids"],
+            )
+            self.assertEqual(2, len(current["closure_history"]))
+            self.assertFalse(current["authorizes_mutation"])
 
     def test_graph_build_session_validates_and_writes_once_with_zero_write_failures(self) -> None:
         import corridor_kit.graph as graph_module

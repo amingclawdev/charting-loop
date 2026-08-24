@@ -1861,12 +1861,10 @@ def graph_doctor(path: Path) -> dict[str, Any]:
         return report
 
     projection = _graph_projection(records)
-    graph_index = GraphIndex.build(
-        projection=projection,
+    graph_index = _index_validated_graph(
         records=records,
-        graph_digest=sha256_json(records),
         graph_bytes_digest=graph_bytes_digest or sha256_bytes(b""),
-        head_record_id=validation["head_record_id"],
+        validation=validation,
     )
     checklist_items: dict[str, dict[str, Any]] = projection["checklist_items"]
     dependencies: dict[str, dict[str, Any]] = projection["dependencies"]
@@ -2394,10 +2392,36 @@ def graph_doctor(path: Path) -> dict[str, Any]:
     return report
 
 
+def _index_validated_graph(
+    *,
+    records: list[dict[str, Any]],
+    validation: Mapping[str, Any],
+    graph_bytes_digest: str,
+) -> GraphIndex:
+    """Build the one shared advisory projection for already validated bytes."""
+
+    return GraphIndex.build(
+        projection=_graph_projection(records),
+        records=records,
+        graph_digest=sha256_json(records),
+        graph_bytes_digest=graph_bytes_digest,
+        head_record_id=validation.get("head_record_id"),
+    )
+
+
 def replay_graph(path: Path) -> dict[str, Any]:
-    records = load_graph(path)
+    records = _read_graph_records(path)
     report = validate_graph_records(records)
-    report["graph_digest"] = sha256_json(records)
+    encoded = path.read_bytes()
+    graph_index = _index_validated_graph(
+        records=records,
+        validation=report,
+        graph_bytes_digest=sha256_bytes(encoded),
+    )
+    topology = graph_index.topology()
+    frontier = graph_index.frontier()
+    report["graph_digest"] = graph_index.graph_digest
+    report["graph_bytes_digest"] = graph_index.graph_bytes_digest
     report["latest_position_ref"] = next(
         (record["record_id"] for record in reversed(records) if record["record_type"] == "position_checkpoint"),
         None,
@@ -2407,6 +2431,27 @@ def replay_graph(path: Path) -> dict[str, Any]:
         None,
     )
     report["records"] = records
+    report["graph_index"] = {
+        "graph_digest": graph_index.graph_digest,
+        "graph_bytes_digest": graph_index.graph_bytes_digest,
+        "head_record_id": graph_index.head_record_id,
+        "topological_order": topology["topological_order"],
+        "frontier": {
+            "latest_position_ref": frontier["latest_position_ref"],
+            "ready_item_ids": frontier["ready_item_ids"],
+            "blocked_item_ids": frontier["blocked_item_ids"],
+            "unresolved_checklist_item_ids": frontier[
+                "unresolved_checklist_item_ids"
+            ],
+        },
+        "rule_closures": {
+            rule_id: graph_index.rule_closure(rule_id)
+            for rule_id in sorted(_graph_projection(records)["rule_records"])
+        },
+        "advisory_only": True,
+        "authorizes_mutation": False,
+        "blocking_gate": False,
+    }
     return report
 
 
@@ -2512,14 +2557,13 @@ class GraphBuildSession:
 def load_graph_index(path: Path) -> GraphIndex:
     """Load one validated graph into a digest-bound immutable advisory index."""
 
-    records = load_graph(path)
+    records = _read_graph_records(path)
+    validation = validate_graph_records(records)
     encoded = path.read_bytes()
-    return GraphIndex.build(
-        projection=_graph_projection(records),
+    return _index_validated_graph(
         records=records,
-        graph_digest=sha256_json(records),
         graph_bytes_digest=sha256_bytes(encoded),
-        head_record_id=(records[-1]["record_id"] if records else None),
+        validation=validation,
     )
 
 
