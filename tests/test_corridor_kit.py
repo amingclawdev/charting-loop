@@ -3178,6 +3178,10 @@ class TypedRuleCompilerTests(unittest.TestCase):
             )
             active = index.active_context()
             self.assertNotIn(stale_edge_id, active["semantic_edge_ids"])
+            self.assertNotIn(
+                stale_edge_id,
+                active["compact_hard_constraint_ids"]["semantic_edge_ids"],
+            )
             self.assertIn(stale_edge_id, active["stale_semantic_edge_ids"])
             self.assertIn(stale_edge_id, active["unresolved_mismatch_ids"])
             self.assertNotIn(
