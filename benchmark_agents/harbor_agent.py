@@ -2664,6 +2664,63 @@ Path(__MANIFEST_PATH__).chmod(0o444)
             (root / f"typed-rule-report-{iteration:04d}.json").as_posix(),
         )
 
+    @staticmethod
+    def _rule_compile_candidate_metadata(
+        candidate: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Project transient candidate state into bounded immutable metadata."""
+
+        scalar_fields = (
+            "ok",
+            "iteration",
+            "status",
+            "graph_path",
+            "graph_digest",
+            "head_record_id",
+            "record_count",
+            "candidate_report_record_id",
+            "candidate_report_digest",
+            "candidate_report_schema",
+            "typed_rule_ir_path",
+            "typed_rule_ir_size",
+            "typed_rule_ir_sha256",
+            "typed_rule_report_path",
+            "compile_report_size",
+            "compile_report_sha256",
+            "custody_compressed_size",
+            "custody_uncompressed_size",
+        )
+        projected = {
+            field: candidate[field]
+            for field in scalar_fields
+            if isinstance(candidate.get(field), (bool, int, str))
+        }
+        for prefix in ("candidate", "doctor"):
+            source = candidate.get(prefix)
+            if not isinstance(source, dict):
+                continue
+            for field in (
+                "ok",
+                "structurally_valid",
+                "classification",
+                "graph_digest",
+                "head_record_id",
+                "record_count",
+                "candidate_report_record_id",
+                "candidate_report_digest",
+            ):
+                value = source.get(field)
+                if isinstance(value, (bool, int, str)):
+                    projected[f"{prefix}_{field}"] = value
+        error = candidate.get("error")
+        if isinstance(error, str):
+            error_bytes = error.encode("utf-8")
+            projected["error_size"] = len(error_bytes)
+            projected["error_sha256"] = (
+                "sha256:" + hashlib.sha256(error_bytes).hexdigest()
+            )
+        return projected
+
     async def _freeze_rule_compile_candidate(
         self,
         environment: BaseEnvironment,
@@ -2730,7 +2787,6 @@ Path(__MANIFEST_PATH__).chmod(0o444)
             return {
                 "ok": False,
                 "iteration": iteration,
-                "ir_path": ir_path,
                 "graph_path": graph_path,
                 "status": "compile_candidate_identity_invalid",
                 "candidate": candidate,
@@ -3151,7 +3207,9 @@ Path(__MANIFEST_PATH__).chmod(0o444)
                 iteration=compile_iteration,
                 ir_path=ir_path,
             )
-            metadata.setdefault("compile_candidates", []).append(compile_candidate)
+            metadata.setdefault("compile_candidates", []).append(
+                self._rule_compile_candidate_metadata(compile_candidate)
+            )
             if compile_candidate.get("ok") is not True:
                 metadata["phase_events"].append("compile_candidate_build_failed")
                 break

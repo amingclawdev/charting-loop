@@ -234,6 +234,113 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertEqual(0o444, stat.S_IMODE(frozen_ir.stat().st_mode))
             self.assertEqual(0o444, stat.S_IMODE(frozen_report.stat().st_mode))
             self.assertFalse(any('"compile_report":' in stdout for stdout in outputs))
+            metadata = agent._rule_compile_candidate_metadata(result)
+            self.assertEqual(result["graph_digest"], metadata["graph_digest"])
+            self.assertNotIn("doctor", metadata)
+            self.assertNotIn("compile_report", metadata)
+            self.assertNotIn(ir_path.as_posix(), json.dumps(metadata, sort_keys=True))
+
+    def test_compile_candidate_identity_failure_never_exposes_worker_path(self) -> None:
+        from tests.test_corridor_kit import TypedRuleCompilerTests
+
+        adapter = load_harbor_agent_with_stubs()
+        agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
+
+        async def exec_root(self, environment, *, command):
+            completed = subprocess.run(
+                command,
+                shell=True,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            return types.SimpleNamespace(
+                return_code=completed.returncode,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            )
+
+        async def mismatched_doctor(self, environment, *, graph_path):
+            return {
+                "structurally_valid": True,
+                "classification": "structurally_valid_but_incomplete",
+                "graph_digest": "sha256:" + "0" * 64,
+                "task_payload": "must-not-enter-phase-metadata" * 1000,
+            }
+
+        agent.exec_as_root = types.MethodType(exec_root, agent)
+        agent._graph_doctor_report = types.MethodType(mismatched_doctor, agent)
+        with tempfile.TemporaryDirectory() as directory:
+            runtime_root = Path(directory) / "runtime"
+            ir_path = Path(directory) / "mutable-worker-ir.json"
+            ir_path.write_text(
+                json.dumps(TypedRuleCompilerTests._v4_ir()), encoding="utf-8"
+            )
+            with (
+                mock.patch.object(adapter, "RUNTIME_ROOT", runtime_root.as_posix()),
+                mock.patch.object(adapter, "SDK_ROOT", REPOSITORY_ROOT.as_posix()),
+            ):
+                result = asyncio.run(
+                    agent._freeze_rule_compile_candidate(
+                        object(), iteration=1, ir_path=ir_path.as_posix()
+                    )
+                )
+            metadata = agent._rule_compile_candidate_metadata(result)
+
+        self.assertFalse(result["ok"])
+        self.assertEqual("compile_candidate_identity_invalid", result["status"])
+        self.assertNotIn("ir_path", result)
+        self.assertEqual(result["graph_path"], metadata["graph_path"])
+        self.assertEqual(
+            result["candidate"]["graph_digest"],
+            metadata["candidate_graph_digest"],
+        )
+        self.assertEqual(
+            result["doctor"]["graph_digest"],
+            metadata["doctor_graph_digest"],
+        )
+        serialized = json.dumps(metadata, sort_keys=True)
+        self.assertNotIn(ir_path.as_posix(), serialized)
+        self.assertNotIn("task_payload", serialized)
+        self.assertNotIn("candidate", metadata)
+        self.assertNotIn("doctor", metadata)
+
+    def test_compile_candidate_build_failure_metadata_hashes_raw_error(self) -> None:
+        adapter = load_harbor_agent_with_stubs()
+        agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
+
+        with tempfile.TemporaryDirectory() as directory:
+            runtime_root = Path(directory) / "runtime"
+            ir_path = Path(directory) / "mutable-worker-ir.json"
+            raw_error = f"failed to read {ir_path}: " + "compiler-payload" * 1000
+
+            async def exec_root(self, environment, *, command):
+                return types.SimpleNamespace(
+                    return_code=7,
+                    stdout="",
+                    stderr=raw_error,
+                )
+
+            agent.exec_as_root = types.MethodType(exec_root, agent)
+            with mock.patch.object(adapter, "RUNTIME_ROOT", runtime_root.as_posix()):
+                result = asyncio.run(
+                    agent._freeze_rule_compile_candidate(
+                        object(), iteration=2, ir_path=ir_path.as_posix()
+                    )
+                )
+            metadata = agent._rule_compile_candidate_metadata(result)
+
+        self.assertFalse(result["ok"])
+        self.assertEqual("compile_candidate_build_failed", metadata["status"])
+        self.assertEqual(len(result["error"].encode("utf-8")), metadata["error_size"])
+        self.assertEqual(
+            "sha256:" + hashlib.sha256(result["error"].encode("utf-8")).hexdigest(),
+            metadata["error_sha256"],
+        )
+        serialized = json.dumps(metadata, sort_keys=True)
+        self.assertNotIn(ir_path.as_posix(), serialized)
+        self.assertNotIn("compiler-payload", serialized)
+        self.assertNotIn("error", metadata)
 
     def test_root_json_writer_reports_transport_failure_and_cleans_staging(self) -> None:
         adapter = load_harbor_agent_with_stubs()
