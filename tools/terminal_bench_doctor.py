@@ -25,9 +25,11 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-REPO_IMPORT_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_IMPORT_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_IMPORT_ROOT))
+# Direct script execution starts with ``tools/`` on sys.path, so bootstrap the
+# repository root before importing the in-tree Corridor Kit authority.
+_REPO_IMPORT_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_IMPORT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_IMPORT_ROOT))
 
 from corridor_kit import KIT_VERSION
 

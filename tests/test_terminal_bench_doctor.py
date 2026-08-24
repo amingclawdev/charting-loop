@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from decimal import Decimal
@@ -457,6 +459,27 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         self.assertFalse(immutable["passed"])
         self.assertEqual(immutable["details"]["corridor_sdk_version"], "0.7.0")
         self.assertIn(f"Corridor SDK v{KIT_VERSION}", immutable["repair"])
+
+    def test_absolute_cli_bootstraps_current_kit_without_pythonpath(self) -> None:
+        env = dict(os.environ)
+        env.pop("PYTHONPATH", None)
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(REPO_ROOT / "tools" / "terminal_bench_doctor.py"),
+                "--help",
+            ],
+            cwd=self.root,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("Fail-closed, non-paid preflight", completed.stdout)
 
     def test_method_and_neutral_arms_only_change_the_agent_profile(self) -> None:
         method_report, method_runner = self.run_fake(
