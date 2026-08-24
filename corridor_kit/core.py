@@ -21,11 +21,12 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
-KIT_VERSION = "0.7.0"
+KIT_VERSION = "0.7.1"
 MANIFEST_SCHEMA = "charting-loop/corridor-kit-tree-manifest/v1"
 WORLD_INVENTORY_SCHEMA = "charting-loop/corridor-kit-world-inventory/v1"
 CAPTURE_SCHEMA = "charting-loop/corridor-kit-command-capture/v1"
 MAX_JSON_BYTES = 5 * 1024 * 1024
+MAX_RULE_CANDIDATE_DECODE_BYTES = 16 * 1024 * 1024
 MAX_MANIFEST_FILE_BYTES = 256 * 1024 * 1024
 TREE_EXCLUSION_POLICY = ("**/__pycache__/**", "**/*.pyc", "**/*.pyo")
 

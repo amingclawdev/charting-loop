@@ -6,12 +6,16 @@ but deliberately does not decide task truth, correctness, completion, or PASS.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
+import zlib
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from .core import (
     MAX_JSON_BYTES,
+    MAX_RULE_CANDIDATE_DECODE_BYTES,
     CorridorKitError,
     atomic_write_bytes,
     canonical_json_bytes,
@@ -40,7 +44,15 @@ from .compiler import (
 from .graph_index import GraphIndex
 
 RULE_RATIFICATION_SCHEMA_V2 = "charting-loop/rule-ratification/v2"
-RULE_CANDIDATE_REPORT_SCHEMA = "charting-loop/rule-candidate-report/v1"
+RULE_CANDIDATE_REPORT_SCHEMA_V1 = "charting-loop/rule-candidate-report/v1"
+RULE_CANDIDATE_REPORT_SCHEMA = "charting-loop/rule-candidate-report/v2"
+RULE_CANDIDATE_ENVELOPE_SCHEMA = (
+    "charting-loop/rule-candidate-custody-envelope/v1"
+)
+RULE_CANDIDATE_CANONICALIZATION = "json-sort-keys-compact-utf8"
+RULE_CANDIDATE_COMPRESSION = "zlib"
+RULE_CANDIDATE_COMPRESSION_LEVEL = 9
+RULE_CANDIDATE_ENCODING = "base64-rfc4648"
 RULE_QA_ASSESSMENT_SCHEMA = "charting-loop/rule-qa-assessment/v1"
 EXECUTION_TEST_CONTRACT_SCHEMA = "charting-loop/execution-test-contract/v1"
 EXECUTION_TEST_QA_ASSESSMENT_SCHEMA = (
@@ -134,6 +146,219 @@ def _strict_object(raw: str, *, line_number: int) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise CorridorKitError(f"graph line {line_number} must be a JSON object")
     return value
+
+
+def _candidate_size(value: Mapping[str, Any], field: str) -> int:
+    size = value.get(field)
+    if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+        raise CorridorKitError(
+            f"Rule candidate custody field {field} must be a non-negative integer"
+        )
+    return size
+
+
+def _build_rule_candidate_envelope(
+    typed_rule_ir: Mapping[str, Any], compile_report: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Encode exact candidate documents into one deterministic bounded envelope."""
+
+    typed_rule_ir_value = dict(typed_rule_ir)
+    compile_report_value = dict(compile_report)
+    typed_rule_ir_bytes = canonical_json_bytes(typed_rule_ir_value)
+    compile_report_bytes = canonical_json_bytes(compile_report_value)
+    payload_bytes = canonical_json_bytes(
+        {
+            "compile_report": compile_report_value,
+            "typed_rule_ir": typed_rule_ir_value,
+        }
+    )
+    if len(payload_bytes) > MAX_RULE_CANDIDATE_DECODE_BYTES:
+        raise CorridorKitError(
+            "Rule candidate custody payload exceeds "
+            f"{MAX_RULE_CANDIDATE_DECODE_BYTES} decoded bytes"
+        )
+    compressed = zlib.compress(payload_bytes, level=RULE_CANDIDATE_COMPRESSION_LEVEL)
+    return {
+        "schema_version": RULE_CANDIDATE_ENVELOPE_SCHEMA,
+        "canonicalization": RULE_CANDIDATE_CANONICALIZATION,
+        "compression": RULE_CANDIDATE_COMPRESSION,
+        "compression_level": RULE_CANDIDATE_COMPRESSION_LEVEL,
+        "encoding": RULE_CANDIDATE_ENCODING,
+        "max_uncompressed_bytes": MAX_RULE_CANDIDATE_DECODE_BYTES,
+        "payload_base64": base64.b64encode(compressed).decode("ascii"),
+        "compressed_size": len(compressed),
+        "compressed_sha256": sha256_bytes(compressed),
+        "uncompressed_size": len(payload_bytes),
+        "uncompressed_sha256": sha256_bytes(payload_bytes),
+        "typed_rule_ir_size": len(typed_rule_ir_bytes),
+        "typed_rule_ir_sha256": sha256_bytes(typed_rule_ir_bytes),
+        "compile_report_size": len(compile_report_bytes),
+        "compile_report_sha256": sha256_bytes(compile_report_bytes),
+    }
+
+
+def _decode_rule_candidate_envelope(
+    envelope: Any,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Strictly decode a v2 candidate envelope without unbounded inflation."""
+
+    if not isinstance(envelope, dict):
+        raise CorridorKitError("Rule candidate custody envelope must be an object")
+    expected_fields = {
+        "schema_version",
+        "canonicalization",
+        "compression",
+        "compression_level",
+        "encoding",
+        "max_uncompressed_bytes",
+        "payload_base64",
+        "compressed_size",
+        "compressed_sha256",
+        "uncompressed_size",
+        "uncompressed_sha256",
+        "typed_rule_ir_size",
+        "typed_rule_ir_sha256",
+        "compile_report_size",
+        "compile_report_sha256",
+    }
+    if set(envelope) != expected_fields:
+        raise CorridorKitError(
+            "Rule candidate custody envelope has unknown or missing fields"
+        )
+    if envelope.get("schema_version") != RULE_CANDIDATE_ENVELOPE_SCHEMA:
+        raise CorridorKitError("Rule candidate custody envelope has the wrong schema")
+    if envelope.get("canonicalization") != RULE_CANDIDATE_CANONICALIZATION:
+        raise CorridorKitError(
+            "Rule candidate custody envelope has unknown canonicalization"
+        )
+    if envelope.get("compression") != RULE_CANDIDATE_COMPRESSION:
+        raise CorridorKitError("Rule candidate custody envelope has unknown compression")
+    if envelope.get("compression_level") != RULE_CANDIDATE_COMPRESSION_LEVEL:
+        raise CorridorKitError(
+            "Rule candidate custody envelope has the wrong compression level"
+        )
+    if envelope.get("encoding") != RULE_CANDIDATE_ENCODING:
+        raise CorridorKitError("Rule candidate custody envelope has unknown encoding")
+    if envelope.get("max_uncompressed_bytes") != MAX_RULE_CANDIDATE_DECODE_BYTES:
+        raise CorridorKitError("Rule candidate custody envelope has the wrong decode cap")
+
+    payload_base64 = envelope.get("payload_base64")
+    if not isinstance(payload_base64, str) or not payload_base64:
+        raise CorridorKitError("Rule candidate custody payload_base64 must be text")
+    try:
+        encoded = payload_base64.encode("ascii")
+        compressed = base64.b64decode(encoded, validate=True)
+    except (UnicodeEncodeError, binascii.Error, ValueError) as exc:
+        raise CorridorKitError("Rule candidate custody base64 is malformed") from exc
+    if base64.b64encode(compressed) != encoded:
+        raise CorridorKitError("Rule candidate custody base64 is not canonical")
+    if len(compressed) != _candidate_size(envelope, "compressed_size"):
+        raise CorridorKitError("Rule candidate custody compressed size does not match")
+    if envelope.get("compressed_sha256") != sha256_bytes(compressed):
+        raise CorridorKitError("Rule candidate custody compressed digest does not match")
+
+    inflater = zlib.decompressobj()
+    try:
+        payload_bytes = inflater.decompress(
+            compressed, MAX_RULE_CANDIDATE_DECODE_BYTES + 1
+        )
+    except zlib.error as exc:
+        raise CorridorKitError("Rule candidate custody zlib payload is invalid") from exc
+    if (
+        len(payload_bytes) > MAX_RULE_CANDIDATE_DECODE_BYTES
+        or inflater.unconsumed_tail
+    ):
+        raise CorridorKitError("Rule candidate custody payload exceeds the decode cap")
+    if not inflater.eof:
+        raise CorridorKitError("Rule candidate custody zlib payload is truncated")
+    if inflater.unused_data:
+        raise CorridorKitError("Rule candidate custody zlib payload has trailing data")
+    try:
+        payload_bytes += inflater.flush(
+            MAX_RULE_CANDIDATE_DECODE_BYTES - len(payload_bytes) + 1
+        )
+    except zlib.error as exc:
+        raise CorridorKitError("Rule candidate custody zlib flush failed") from exc
+    if len(payload_bytes) > MAX_RULE_CANDIDATE_DECODE_BYTES:
+        raise CorridorKitError("Rule candidate custody payload exceeds the decode cap")
+    if len(payload_bytes) != _candidate_size(envelope, "uncompressed_size"):
+        raise CorridorKitError("Rule candidate custody decoded size does not match")
+    if envelope.get("uncompressed_sha256") != sha256_bytes(payload_bytes):
+        raise CorridorKitError("Rule candidate custody decoded digest does not match")
+
+    try:
+        payload_text = payload_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise CorridorKitError("Rule candidate custody payload is not UTF-8") from exc
+    payload = _strict_object(payload_text, line_number=0)
+    if set(payload) != {"compile_report", "typed_rule_ir"}:
+        raise CorridorKitError("Rule candidate custody payload has unknown fields")
+    if canonical_json_bytes(payload) != payload_bytes:
+        raise CorridorKitError("Rule candidate custody JSON is not canonical")
+    typed_rule_ir = payload.get("typed_rule_ir")
+    compile_report = payload.get("compile_report")
+    if not isinstance(typed_rule_ir, dict) or not isinstance(compile_report, dict):
+        raise CorridorKitError("Rule candidate custody documents must be objects")
+    typed_rule_ir_bytes = canonical_json_bytes(typed_rule_ir)
+    compile_report_bytes = canonical_json_bytes(compile_report)
+    if (
+        len(typed_rule_ir_bytes) != _candidate_size(envelope, "typed_rule_ir_size")
+        or envelope.get("typed_rule_ir_sha256")
+        != sha256_bytes(typed_rule_ir_bytes)
+    ):
+        raise CorridorKitError("Rule candidate custody typed Rule IR identity differs")
+    if (
+        len(compile_report_bytes) != _candidate_size(envelope, "compile_report_size")
+        or envelope.get("compile_report_sha256")
+        != sha256_bytes(compile_report_bytes)
+    ):
+        raise CorridorKitError("Rule candidate custody compile report identity differs")
+    return typed_rule_ir, compile_report, {
+        "typed_rule_ir_bytes": typed_rule_ir_bytes,
+        "compile_report_bytes": compile_report_bytes,
+        "payload_bytes": payload_bytes,
+    }
+
+
+def _rule_candidate_documents(
+    body: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    schema = body.get("schema_version")
+    if schema == RULE_CANDIDATE_REPORT_SCHEMA_V1:
+        expected_fields = {
+            "schema_version",
+            "authority_snapshot_record_id",
+            "typed_rule_ir",
+            "compile_report",
+            "rule_record_ids",
+            "candidate_report_digest",
+        }
+        if set(body) != expected_fields:
+            raise CorridorKitError(
+                "legacy Rule candidate report has unknown or missing fields"
+            )
+        typed_rule_ir = body.get("typed_rule_ir")
+        compile_report = body.get("compile_report")
+        if not isinstance(typed_rule_ir, dict) or not isinstance(compile_report, dict):
+            raise CorridorKitError("legacy Rule candidate documents must be objects")
+        return typed_rule_ir, compile_report
+    if schema == RULE_CANDIDATE_REPORT_SCHEMA:
+        expected_fields = {
+            "schema_version",
+            "authority_snapshot_record_id",
+            "custody_envelope",
+            "rule_record_ids",
+            "candidate_report_digest",
+        }
+        if set(body) != expected_fields:
+            raise CorridorKitError(
+                "Rule candidate report has unknown or missing fields"
+            )
+        typed_rule_ir, compile_report, _ = _decode_rule_candidate_envelope(
+            body.get("custody_envelope")
+        )
+        return typed_rule_ir, compile_report
+    raise CorridorKitError("Rule candidate report has the wrong schema")
 
 
 def _text(body: Mapping[str, Any], field: str) -> str:
@@ -943,25 +1168,15 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         elif record_type == "rule_candidate_report":
             if actor != "runner":
                 raise CorridorKitError("Rule candidate report must be frozen by the runner")
-            if set(body) != {
-                "schema_version",
-                "authority_snapshot_record_id",
-                "typed_rule_ir",
-                "compile_report",
-                "rule_record_ids",
-                "candidate_report_digest",
-            }:
-                raise CorridorKitError("Rule candidate report has unknown or missing fields")
-            if body.get("schema_version") != RULE_CANDIDATE_REPORT_SCHEMA:
-                raise CorridorKitError("Rule candidate report has the wrong schema")
+            typed_rule_ir, stored_report = _rule_candidate_documents(body)
             if authority_snapshot_record_id is None or body.get(
                 "authority_snapshot_record_id"
             ) != authority_snapshot_record_id:
                 raise CorridorKitError(
                     "Rule candidate report does not bind the runner AuthoritySnapshot"
                 )
-            expected_report = compile_typed_rule_ir(body.get("typed_rule_ir"))
-            if body.get("compile_report") != expected_report:
+            expected_report = compile_typed_rule_ir(typed_rule_ir)
+            if stored_report != expected_report:
                 raise CorridorKitError(
                     "Rule candidate report does not reproduce from its typed Rule IR"
                 )
@@ -996,6 +1211,8 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 raise CorridorKitError("Rule candidate report digest does not match")
             candidate_reports[expected_record] = {
                 **normalized_candidate,
+                "typed_rule_ir": typed_rule_ir,
+                "compile_report": stored_report,
                 "candidate_report_digest": candidate_digest,
             }
         elif record_type == "rule_qa_assessment":
@@ -3552,8 +3769,54 @@ def query_graph(
     )
 
 
+def read_rule_candidate_payload(
+    path: Path,
+    *,
+    candidate_report_record_id: str,
+    candidate_report_digest: str,
+) -> dict[str, Any]:
+    """Return exact canonical candidate documents from validated graph custody."""
+
+    records = _read_graph_records(path)
+    validate_graph_records(records)
+    candidate = next(
+        (
+            record
+            for record in records
+            if record["record_type"] == "rule_candidate_report"
+            and record["record_id"] == candidate_report_record_id
+        ),
+        None,
+    )
+    if (
+        candidate is None
+        or candidate["body"].get("candidate_report_digest")
+        != candidate_report_digest
+    ):
+        raise CorridorKitError("Rule candidate payload identity does not match")
+    typed_rule_ir, compile_report = _rule_candidate_documents(candidate["body"])
+    typed_rule_ir_bytes = canonical_json_bytes(typed_rule_ir)
+    compile_report_bytes = canonical_json_bytes(compile_report)
+    return {
+        "schema_version": candidate["body"]["schema_version"],
+        "candidate_report_record_id": candidate_report_record_id,
+        "candidate_report_digest": candidate_report_digest,
+        "typed_rule_ir": typed_rule_ir,
+        "typed_rule_ir_bytes": typed_rule_ir_bytes,
+        "typed_rule_ir_size": len(typed_rule_ir_bytes),
+        "typed_rule_ir_sha256": sha256_bytes(typed_rule_ir_bytes),
+        "compile_report": compile_report,
+        "compile_report_bytes": compile_report_bytes,
+        "compile_report_size": len(compile_report_bytes),
+        "compile_report_sha256": sha256_bytes(compile_report_bytes),
+    }
+
+
 def freeze_rule_candidate(
-    path: Path, *, typed_rule_ir: Mapping[str, Any]
+    path: Path,
+    *,
+    typed_rule_ir: Mapping[str, Any],
+    include_compile_report: bool = True,
 ) -> dict[str, Any]:
     """Freeze one compiler candidate into an otherwise empty graph.
 
@@ -3586,8 +3849,7 @@ def freeze_rule_candidate(
     candidate_body = {
         "schema_version": RULE_CANDIDATE_REPORT_SCHEMA,
         "authority_snapshot_record_id": snapshot["record_id"],
-        "typed_rule_ir": dict(typed_rule_ir),
-        "compile_report": report,
+        "custody_envelope": _build_rule_candidate_envelope(typed_rule_ir, report),
         "rule_record_ids": rule_record_ids,
     }
     candidate = session.append(
@@ -3599,15 +3861,36 @@ def freeze_rule_candidate(
         },
     )["record"]
     final_report = session.commit()
-    return {
+    result = {
         "ok": True,
         "candidate_report_record_id": candidate["record_id"],
         "candidate_report_digest": candidate["body"]["candidate_report_digest"],
-        "compile_report": report,
+        "candidate_report_schema": RULE_CANDIDATE_REPORT_SCHEMA,
+        "typed_rule_ir_size": candidate_body["custody_envelope"][
+            "typed_rule_ir_size"
+        ],
+        "typed_rule_ir_sha256": candidate_body["custody_envelope"][
+            "typed_rule_ir_sha256"
+        ],
+        "compile_report_size": candidate_body["custody_envelope"][
+            "compile_report_size"
+        ],
+        "compile_report_sha256": candidate_body["custody_envelope"][
+            "compile_report_sha256"
+        ],
+        "custody_compressed_size": candidate_body["custody_envelope"][
+            "compressed_size"
+        ],
+        "custody_uncompressed_size": candidate_body["custody_envelope"][
+            "uncompressed_size"
+        ],
         "graph_digest": final_report["graph_digest"],
         "head_record_id": candidate["record_id"],
         "record_count": len(final_report["records"]),
     }
+    if include_compile_report:
+        result["compile_report"] = report
+    return result
 
 
 def ratify_rule_candidate(
@@ -3639,6 +3922,7 @@ def ratify_rule_candidate(
     )
     if candidate is None or candidate["body"]["candidate_report_digest"] != candidate_report_digest:
         raise CorridorKitError("Rule QA does not bind the frozen candidate report")
+    _, candidate_compile_report = _rule_candidate_documents(candidate["body"])
     finding_list = list(findings)
     assessment_body = {
         "schema_version": RULE_QA_ASSESSMENT_SCHEMA,
@@ -3654,7 +3938,7 @@ def ratify_rule_candidate(
         body=assessment_body,
     )["record"]
     if outcome == "pass":
-        report = candidate["body"]["compile_report"]
+        report = candidate_compile_report
         rule_record_ids = candidate["body"]["rule_record_ids"]
         for rule_body in report["rule_bodies"]:
             rule_id = rule_body["rule_id"]

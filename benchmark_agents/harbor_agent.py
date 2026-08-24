@@ -2679,11 +2679,18 @@ Path(__MANIFEST_PATH__).chmod(0o444)
             / f"candidate-{iteration:04d}"
         )
         graph_path = (candidate_root / "GRAPH.jsonl").as_posix()
+        candidate_ir_path = (candidate_root / "TYPED-RULE-IR.json").as_posix()
+        candidate_report_path = (candidate_root / "TYPED-RULE-COMPILE.json").as_posix()
         build_program = (
             "import json; from pathlib import Path; "
-            "from corridor_kit.graph import freeze_rule_candidate; "
+            "from corridor_kit.graph import freeze_rule_candidate,read_rule_candidate_payload; "
             f"p=Path({graph_path!r}); ir=json.loads(Path({ir_path!r}).read_text(encoding='utf-8')); "
-            "print(json.dumps(freeze_rule_candidate(p,typed_rule_ir=ir),sort_keys=True))"
+            "r=freeze_rule_candidate(p,typed_rule_ir=ir,include_compile_report=False); "
+            "d=read_rule_candidate_payload(p,candidate_report_record_id=r['candidate_report_record_id'],candidate_report_digest=r['candidate_report_digest']); "
+            f"Path({candidate_ir_path!r}).write_bytes(d['typed_rule_ir_bytes']); "
+            f"Path({candidate_report_path!r}).write_bytes(d['compile_report_bytes']); "
+            f"r.update({{'typed_rule_ir_path':{candidate_ir_path!r},'typed_rule_report_path':{candidate_report_path!r}}}); "
+            "print(json.dumps(r,sort_keys=True))"
         )
         command = (
             f"test -f {shlex.quote(ir_path)} && "
@@ -2700,7 +2707,6 @@ Path(__MANIFEST_PATH__).chmod(0o444)
             return {
                 "ok": False,
                 "iteration": iteration,
-                "ir_path": ir_path,
                 "graph_path": graph_path,
                 "status": "compile_candidate_build_failed",
                 "error": (built.stderr or built.stdout or "no output")[-4000:],
@@ -2711,7 +2717,6 @@ Path(__MANIFEST_PATH__).chmod(0o444)
             return {
                 "ok": False,
                 "iteration": iteration,
-                "ir_path": ir_path,
                 "graph_path": graph_path,
                 "status": "compile_candidate_result_unreadable",
                 "error": (built.stdout or "")[-4000:],
@@ -2741,7 +2746,6 @@ Path(__MANIFEST_PATH__).chmod(0o444)
         return {
             "ok": True,
             "iteration": iteration,
-            "ir_path": ir_path,
             "graph_path": graph_path,
             **candidate,
             "doctor": doctor,
@@ -3173,6 +3177,24 @@ Path(__MANIFEST_PATH__).chmod(0o444)
                     remaining_seconds=_remaining_seconds(execution_deadline),
                     method_text=method_text,
                     graph_path=str(compile_candidate["graph_path"]),
+                    typed_rule_ir_path=str(
+                        compile_candidate["typed_rule_ir_path"]
+                    ),
+                    typed_rule_ir_digest=str(
+                        compile_candidate["typed_rule_ir_sha256"]
+                    ),
+                    typed_rule_ir_size=int(
+                        compile_candidate["typed_rule_ir_size"]
+                    ),
+                    typed_rule_report_path=str(
+                        compile_candidate["typed_rule_report_path"]
+                    ),
+                    typed_rule_report_digest=str(
+                        compile_candidate["compile_report_sha256"]
+                    ),
+                    typed_rule_report_size=int(
+                        compile_candidate["compile_report_size"]
+                    ),
                     qa_output_path=compile_qa_path,
                     audit_iteration=compile_iteration,
                 )

@@ -516,7 +516,7 @@ class PublicReleaseTests(unittest.TestCase):
         for marker in (
             "method-guided-graph-kernel-experiment-v1.2",
             "task-specific Builder",
-            "corridor_kit` v0.7.0",
+            "corridor_kit` v0.7.1",
             "Graph Agent v1.1.0",
             "ChartingLoopGraphKernelMethodAgent",
             "ChartingLoopGraphKernelNeutralAgent",
@@ -535,6 +535,9 @@ class PublicReleaseTests(unittest.TestCase):
             "QA is advisory",
             "latest valid Worker freeze",
             "Harbor then runs the official verifier",
+            "without raising the graph's 5 MiB safety limit",
+            "digest-bound, read-only IR and report views",
+            "does not change the frozen Method, task authority, Gate policy, or scoring semantics",
             "## Historical Builder-first full-method runbook",
         ):
             self.assertIn(marker, words)

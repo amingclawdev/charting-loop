@@ -475,7 +475,7 @@ Claw and does not present that implementation as the method's required architect
 
 ## Freezing and integration
 
-The Rule-compilation release sets `KIT_VERSION` to `0.7.0`. `KIT_VERSION` identifies
+The bounded Rule-candidate custody release sets `KIT_VERSION` to `0.7.1`. `KIT_VERSION` identifies
 the API, while the exact Git commit plus
 `python3 -m corridor_kit manifest corridor_kit` tree digest identifies the bytes.
 A source-tree manifest excludes interpreter-created `__pycache__`, `.pyc`, and `.pyo`
@@ -485,6 +485,16 @@ and private custody, so every retained task-authored byte has one identity at ev
 A benchmark harness should verify those two identities, upload the package read-only,
 and tell the assigned role where it is. Changing any kit byte creates a new kit revision; do not
 learn domain rules from one benchmark and silently add them to the shared revision.
+
+Candidate graphs keep the existing 5 MiB graph limit. Candidate schema v2 stores the
+exact canonical Rule IR and compile report in one deterministic zlib-9/RFC 4648 base64
+custody envelope, with compressed and uncompressed sizes plus per-document digests.
+Decoding fails closed above 16 MiB and rejects malformed, trailing, duplicate-key, or
+non-canonical payloads. Historical v1 candidates remain replayable. For compile QA, the
+adapter materializes only exact digest-bound, read-only decoded views below the immutable
+candidate root; it never substitutes mutable Worker output. This is a representation and
+custody change only: it does not change Method, Gate, task Rule authority, or acceptance
+semantics, and it does not raise the graph limit.
 
 The Harbor adapter uploads the frozen kit before the task clock starts, exposes only
 these documented commands, and records its version and tree digest in trial metadata.

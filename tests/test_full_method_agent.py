@@ -175,6 +175,66 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertTrue(all(len(command.encode("utf-8")) < 4_096 for command in commands))
         self.assertTrue(all(sentinel not in command for command in commands))
 
+    def test_compile_candidate_exposes_only_candidate_root_digest_bound_views(self) -> None:
+        from tests.test_corridor_kit import TypedRuleCompilerTests
+
+        adapter = load_harbor_agent_with_stubs()
+        agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
+        outputs: list[str] = []
+
+        async def exec_root(self, environment, *, command):
+            completed = subprocess.run(
+                command,
+                shell=True,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            outputs.append(completed.stdout)
+            return types.SimpleNamespace(
+                return_code=completed.returncode,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            )
+
+        agent.exec_as_root = types.MethodType(exec_root, agent)
+        with tempfile.TemporaryDirectory() as directory:
+            runtime_root = Path(directory) / "runtime"
+            ir_path = Path(directory) / "worker-ir.json"
+            ir_path.write_text(
+                json.dumps(TypedRuleCompilerTests._v4_ir()), encoding="utf-8"
+            )
+            with (
+                mock.patch.object(adapter, "RUNTIME_ROOT", runtime_root.as_posix()),
+                mock.patch.object(adapter, "SDK_ROOT", REPOSITORY_ROOT.as_posix()),
+            ):
+                result = asyncio.run(
+                    agent._freeze_rule_compile_candidate(
+                        object(), iteration=1, ir_path=ir_path.as_posix()
+                    )
+                )
+            self.assertTrue(result["ok"], result)
+            self.assertNotIn("compile_report", result)
+            self.assertNotIn("ir_path", result)
+            candidate_root = runtime_root / "compile-candidates" / "candidate-0001"
+            frozen_ir = candidate_root / "TYPED-RULE-IR.json"
+            frozen_report = candidate_root / "TYPED-RULE-COMPILE.json"
+            self.assertEqual(frozen_ir.as_posix(), result["typed_rule_ir_path"])
+            self.assertEqual(
+                frozen_report.as_posix(), result["typed_rule_report_path"]
+            )
+            self.assertEqual(
+                result["typed_rule_ir_sha256"],
+                "sha256:" + hashlib.sha256(frozen_ir.read_bytes()).hexdigest(),
+            )
+            self.assertEqual(
+                result["compile_report_sha256"],
+                "sha256:" + hashlib.sha256(frozen_report.read_bytes()).hexdigest(),
+            )
+            self.assertEqual(0o444, stat.S_IMODE(frozen_ir.stat().st_mode))
+            self.assertEqual(0o444, stat.S_IMODE(frozen_report.stat().st_mode))
+            self.assertFalse(any('"compile_report":' in stdout for stdout in outputs))
+
     def test_root_json_writer_reports_transport_failure_and_cleans_staging(self) -> None:
         adapter = load_harbor_agent_with_stubs()
         agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
@@ -1852,6 +1912,12 @@ class FullMethodContractTests(unittest.TestCase):
             remaining_seconds=300,
             method_text=method_text,
             graph_path="/audit/compile/GRAPH.jsonl",
+            typed_rule_ir_path="/audit/compile/TYPED-RULE-IR.json",
+            typed_rule_ir_digest="sha256:" + "c" * 64,
+            typed_rule_ir_size=1234,
+            typed_rule_report_path="/audit/compile/TYPED-RULE-COMPILE.json",
+            typed_rule_report_digest="sha256:" + "d" * 64,
+            typed_rule_report_size=5678,
             qa_output_path="/audit/compile-qa.json",
             audit_iteration=1,
         )
@@ -1859,6 +1925,9 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("independent compilation QA", compile_qa)
         self.assertIn("must not mutate", compile_qa)
         self.assertIn("must not ratify", compile_qa)
+        self.assertIn("/audit/compile/TYPED-RULE-IR.json", compile_qa)
+        self.assertIn("/audit/compile/TYPED-RULE-COMPILE.json", compile_qa)
+        self.assertIn("do not read or trust mutable Worker output paths", compile_qa)
         self.assertIn(contract.RULE_COMPILE_AUDIT_SCHEMA, compile_qa)
         execution_plan = contract.graph_execution_test_plan_prompt(
             "Repair the public task.",
@@ -2481,6 +2550,12 @@ class FullMethodContractTests(unittest.TestCase):
                 "graph_digest": "sha256:" + str(iteration) * 64,
                 "candidate_report_record_id": "sha256:" + chr(96 + iteration) * 64,
                 "candidate_report_digest": "sha256:" + chr(98 + iteration) * 64,
+                "typed_rule_ir_path": f"/audit/compile-{iteration}/TYPED-RULE-IR.json",
+                "typed_rule_ir_sha256": "sha256:" + "e" * 64,
+                "typed_rule_ir_size": 1234,
+                "typed_rule_report_path": f"/audit/compile-{iteration}/TYPED-RULE-COMPILE.json",
+                "compile_report_sha256": "sha256:" + "f" * 64,
+                "compile_report_size": 5678,
             }
 
         async def read_compile(

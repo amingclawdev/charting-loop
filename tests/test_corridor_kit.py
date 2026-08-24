@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import base64
 import subprocess
 import struct
 import sys
 import tempfile
 import unittest
+import zlib
 from pathlib import Path
 from unittest import mock
 
@@ -63,11 +65,20 @@ from corridor_kit.domain.binary import (
     elf_inventory,
 )
 from corridor_kit.runtime import load_position_timeline, project_position
-from corridor_kit.core import MAX_JSON_BYTES, load_json
+from corridor_kit.core import (
+    MAX_JSON_BYTES,
+    MAX_RULE_CANDIDATE_DECODE_BYTES,
+    canonical_json_bytes,
+    load_json,
+)
 from corridor_kit.acceptance import qa_assessment_decision
 from corridor_kit.runtime import validate_qa_assessment_path
 from corridor_kit.scaffold import validate_method_capsule
-from corridor_kit.graph import freeze_rule_candidate, ratify_rule_candidate
+from corridor_kit.graph import (
+    freeze_rule_candidate,
+    ratify_rule_candidate,
+    read_rule_candidate_payload,
+)
 
 
 def valid_ledger() -> dict[str, object]:
@@ -2147,6 +2158,245 @@ class TypedRuleCompilerTests(unittest.TestCase):
             self.assertEqual([rule_id], source_trace["rule_ids"])
             self.assertTrue(source_trace["source_clause_ids"])
             self.assertTrue(source_trace["source_ids"])
+
+    def test_v2_candidate_custody_round_trips_exact_documents(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            ir = self._v4_ir()
+            candidate = freeze_rule_candidate(path, typed_rule_ir=ir)
+            payload = read_rule_candidate_payload(
+                path,
+                candidate_report_record_id=candidate["candidate_report_record_id"],
+                candidate_report_digest=candidate["candidate_report_digest"],
+            )
+            self.assertEqual(
+                "charting-loop/rule-candidate-report/v2",
+                candidate["candidate_report_schema"],
+            )
+            self.assertEqual(ir, payload["typed_rule_ir"])
+            self.assertEqual(candidate["compile_report"], payload["compile_report"])
+            self.assertEqual(
+                candidate["typed_rule_ir_sha256"], payload["typed_rule_ir_sha256"]
+            )
+            self.assertEqual(
+                candidate["compile_report_sha256"],
+                payload["compile_report_sha256"],
+            )
+            self.assertLess(
+                candidate["custody_compressed_size"],
+                candidate["custody_uncompressed_size"],
+            )
+
+    def test_v2_candidate_custody_rejects_malformed_or_ambiguous_envelopes(self) -> None:
+        import corridor_kit.graph as graph_module
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.jsonl"
+            initialize_graph(source)
+            candidate = freeze_rule_candidate(source, typed_rule_ir=self._v4_ir())
+            payload = read_rule_candidate_payload(
+                source,
+                candidate_report_record_id=candidate["candidate_report_record_id"],
+                candidate_report_digest=candidate["candidate_report_digest"],
+            )
+            original_records = [
+                json.loads(line) for line in source.read_text(encoding="utf-8").splitlines()
+            ]
+
+            def replace_payload(envelope: dict, decoded: bytes) -> None:
+                compressed = zlib.compress(decoded, level=9)
+                envelope["payload_base64"] = base64.b64encode(compressed).decode("ascii")
+                envelope["compressed_size"] = len(compressed)
+                envelope["compressed_sha256"] = sha256_bytes(compressed)
+                envelope["uncompressed_size"] = len(decoded)
+                envelope["uncompressed_sha256"] = sha256_bytes(decoded)
+
+            def write_mutation(name: str, mutate) -> Path:
+                records = json.loads(json.dumps(original_records))
+                body = records[-1]["body"]
+                mutate(body, body["custody_envelope"])
+                body["candidate_report_digest"] = sha256_json(
+                    {key: value for key, value in body.items() if key != "candidate_report_digest"}
+                )
+                record = records[-1]
+                record["content_id"] = graph_module._content_id(
+                    record["record_type"], record["actor"], body
+                )
+                identity = graph_module._identity_payload(
+                    sequence=record["sequence"],
+                    record_type=record["record_type"],
+                    actor=record["actor"],
+                    body=body,
+                    previous=record["previous_record_id"],
+                )
+                record["record_id"] = graph_module._record_id(identity)
+                target = root / f"{name}.jsonl"
+                target.write_bytes(
+                    b"".join(canonical_json_bytes(item) + b"\n" for item in records)
+                )
+                return target
+
+            report_bytes = payload["compile_report_bytes"]
+            ir_bytes = payload["typed_rule_ir_bytes"]
+            duplicate = (
+                b'{"compile_report":'
+                + report_bytes
+                + b',"typed_rule_ir":'
+                + ir_bytes
+                + b',"typed_rule_ir":'
+                + ir_bytes
+                + b"}"
+            )
+            noncanonical = (
+                b'{"typed_rule_ir":'
+                + ir_bytes
+                + b',"compile_report":'
+                + report_bytes
+                + b"}"
+            )
+            mismatched_report = json.loads(report_bytes)
+            mismatched_report["candidate_revision_digest"] = "sha256:" + "0" * 64
+            mismatch_payload = canonical_json_bytes(
+                {
+                    "compile_report": mismatched_report,
+                    "typed_rule_ir": payload["typed_rule_ir"],
+                }
+            )
+
+            mutations = {
+                "unknown-schema": lambda body, env: body.__setitem__(
+                    "schema_version", "charting-loop/rule-candidate-report/v999"
+                ),
+                "unknown-codec": lambda body, env: env.__setitem__("compression", "brotli"),
+                "unknown-canonicalization": lambda body, env: env.__setitem__(
+                    "canonicalization", "json-pretty"
+                ),
+                "unknown-encoding": lambda body, env: env.__setitem__(
+                    "encoding", "base85"
+                ),
+                "malformed-base64": lambda body, env: env.__setitem__("payload_base64", "***"),
+                "size-mismatch": lambda body, env: env.__setitem__(
+                    "compressed_size", env["compressed_size"] + 1
+                ),
+                "truncated": lambda body, env: (
+                    lambda compressed: (
+                        env.__setitem__(
+                            "payload_base64",
+                            base64.b64encode(compressed[:-1]).decode("ascii"),
+                        ),
+                        env.__setitem__("compressed_size", len(compressed) - 1),
+                        env.__setitem__(
+                            "compressed_sha256", sha256_bytes(compressed[:-1])
+                        ),
+                    )
+                )(base64.b64decode(env["payload_base64"])),
+                "trailing": lambda body, env: (
+                    lambda compressed: (
+                        env.__setitem__(
+                            "payload_base64",
+                            base64.b64encode(compressed + b"x").decode("ascii"),
+                        ),
+                        env.__setitem__("compressed_size", len(compressed) + 1),
+                        env.__setitem__(
+                            "compressed_sha256", sha256_bytes(compressed + b"x")
+                        ),
+                    )
+                )(base64.b64decode(env["payload_base64"])),
+                "over-cap": lambda body, env: replace_payload(
+                    env, b"x" * (MAX_RULE_CANDIDATE_DECODE_BYTES + 1)
+                ),
+                "duplicate-key": lambda body, env: replace_payload(env, duplicate),
+                "noncanonical-json": lambda body, env: replace_payload(env, noncanonical),
+                "compiler-replay-mismatch": lambda body, env: (
+                    replace_payload(env, mismatch_payload),
+                    env.__setitem__(
+                        "compile_report_size",
+                        len(canonical_json_bytes(mismatched_report)),
+                    ),
+                    env.__setitem__(
+                        "compile_report_sha256",
+                        sha256_bytes(canonical_json_bytes(mismatched_report)),
+                    ),
+                ),
+            }
+            for name, mutate in mutations.items():
+                with self.subTest(name=name):
+                    target = write_mutation(name, mutate)
+                    with self.assertRaises(CorridorKitError):
+                        replay_graph(target)
+
+    def test_cl134_shaped_candidate_fits_without_raising_graph_limit(self) -> None:
+        import corridor_kit.graph as graph_module
+
+        ir = self._v4_ir()
+        source_slice_id = ir["rules"][0]["source_slices"][0]["slice_id"]
+        ir["rules"][0]["semantics"]["guidance"] = [
+            {
+                "guidance_id": f"GUIDANCE-CL134-{index:05d}",
+                "trigger": "before assessing this Rule",
+                "action": "re-read the same bound source slice before acting",
+                "source_slice_ids": [source_slice_id],
+            }
+            for index in range(10_000)
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            candidate = freeze_rule_candidate(
+                path, typed_rule_ir=ir, include_compile_report=False
+            )
+            payload = read_rule_candidate_payload(
+                path,
+                candidate_report_record_id=candidate["candidate_report_record_id"],
+                candidate_report_digest=candidate["candidate_report_digest"],
+            )
+            records = graph_module._read_graph_records(path)
+            v2_size = path.stat().st_size
+            v2_body = records[-1]["body"]
+            legacy_body = {
+                "schema_version": "charting-loop/rule-candidate-report/v1",
+                "authority_snapshot_record_id": v2_body[
+                    "authority_snapshot_record_id"
+                ],
+                "typed_rule_ir": payload["typed_rule_ir"],
+                "compile_report": payload["compile_report"],
+                "rule_record_ids": v2_body["rule_record_ids"],
+            }
+            legacy_body["candidate_report_digest"] = sha256_json(legacy_body)
+            legacy_record = records[-1]
+            legacy_record["body"] = legacy_body
+            legacy_record["content_id"] = graph_module._content_id(
+                legacy_record["record_type"], legacy_record["actor"], legacy_body
+            )
+            legacy_record["record_id"] = graph_module._record_id(
+                graph_module._identity_payload(
+                    sequence=legacy_record["sequence"],
+                    record_type=legacy_record["record_type"],
+                    actor=legacy_record["actor"],
+                    body=legacy_body,
+                    previous=legacy_record["previous_record_id"],
+                )
+            )
+            legacy_size = len(
+                b"".join(canonical_json_bytes(record) + b"\n" for record in records)
+            )
+            self.assertGreater(legacy_size, MAX_JSON_BYTES)
+            self.assertLessEqual(v2_size, MAX_JSON_BYTES)
+            self.assertTrue(graph_doctor(path)["structurally_valid"])
+
+            result = ratify_rule_candidate(
+                path,
+                candidate_report_record_id=candidate["candidate_report_record_id"],
+                candidate_report_digest=candidate["candidate_report_digest"],
+                outcome="pass",
+                findings=[],
+                ratifier_ref="runner:test-cl134-shaped-envelope",
+            )
+            self.assertTrue(result["rule_closure_established"])
+            self.assertLessEqual(path.stat().st_size, MAX_JSON_BYTES)
+            self.assertTrue(graph_doctor(path)["structurally_valid"])
 
     def test_nonpassing_compile_qa_never_materializes_rule_closure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -1486,6 +1486,12 @@ def graph_compile_qa_prompt(
     remaining_seconds: int,
     method_text: str | None,
     graph_path: str,
+    typed_rule_ir_path: str,
+    typed_rule_ir_digest: str,
+    typed_rule_ir_size: int,
+    typed_rule_report_path: str,
+    typed_rule_report_digest: str,
+    typed_rule_report_size: int,
     qa_output_path: str,
     audit_iteration: int,
 ) -> str:
@@ -1500,6 +1506,12 @@ def graph_compile_qa_prompt(
 
 This is stage 2 of one in-clock lifecycle. The Worker has not implemented the task.
 Audit the sealed candidate graph `{graph_path}` with graph digest `{graph_digest}`.
+The candidate-root read-only typed Rule IR is `{typed_rule_ir_path}`
+({typed_rule_ir_digest}, {typed_rule_ir_size} bytes). The candidate-root read-only
+compiler report is `{typed_rule_report_path}` ({typed_rule_report_digest},
+{typed_rule_report_size} bytes). Hash both files before reading them and reject any
+identity mismatch. These canonical views are decoded from this exact frozen candidate;
+do not read or trust mutable Worker output paths.
 Replay it and run the read-only Doctor. Independently re-read every public authority
 source. Do not trust the Worker's inventory, semantic roles, dependency edges,
 quantifiers, applicability predicates, or checklist projections merely because the

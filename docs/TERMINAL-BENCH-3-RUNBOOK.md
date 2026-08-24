@@ -6,12 +6,18 @@ The current prospective study is
 `method-guided-graph-kernel-experiment-v1.2`, specified in
 [`INTEGRATED-GRAPH-EXPERIMENT-PROTOCOL-V1.2.md`](INTEGRATED-GRAPH-EXPERIMENT-PROTOCOL-V1.2.md).
 It does **not** run a task-specific Builder. Both arms receive the same task-neutral
-`corridor_kit` v0.7.0 Graph Kernel and Graph Agent v1.1.0. The Method arm gives Worker
+`corridor_kit` v0.7.1 Graph Kernel and Graph Agent v1.1.0. The Method arm gives Worker
 and QA the exact frozen `charting-loop-method-v8`; the neutral arm gives both roles a
 frozen neutral instruction. The Kernel stores Rules, Rule authority and dependencies,
 admitted Facts, whole-state Position checkpoints, and Direction proposals/snapshots.
 It validates structure and provenance only: it does not choose Direction, establish
 task truth or PASS, authorize mutation, repair output, or act as a Gate.
+
+Rule-candidate custody in kit v0.7.1 uses a deterministic bounded envelope so large
+compile reports can remain exact without raising the graph's 5 MiB safety limit. Compile
+QA receives digest-bound, read-only IR and report views materialized beneath the immutable
+candidate root. This changes storage and QA custody only; it does not change the frozen
+Method, task authority, Gate policy, or scoring semantics.
 
 Run two matched profiles on each of two same-task adaptive regression probes:
 
