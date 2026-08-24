@@ -1281,17 +1281,52 @@ class ChartingLoopFullMethodAgent(Codex):
     async def _write_root_json(
         self, environment: BaseEnvironment, *, path: str, value: dict[str, Any]
     ) -> None:
-        encoded = json.dumps(value, sort_keys=True, separators=(",", ":"))
+        encoded = json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
+        transfer_id = uuid.uuid4().hex
+        remote_source = f"/tmp/charting-loop-root-json-{transfer_id}.json"
+        remote_target = f"{path}.tmp-{transfer_id}"
         program = (
-            "import json; from pathlib import Path; "
-            f"p=Path({path!r}); v=json.loads({encoded!r}); "
-            "p.write_text(json.dumps(v,sort_keys=True,separators=(',',':'))+'\\n',encoding='utf-8'); "
-            "p.chmod(0o400)"
+            "import json, os; from pathlib import Path; "
+            f"source=Path({remote_source!r}); target=Path({path!r}); "
+            f"temporary=Path({remote_target!r}); "
+            "data=source.read_bytes(); value=json.loads(data.decode('utf-8')); "
+            "canonical=(json.dumps(value,sort_keys=True,separators=(',',':'))+'\\n').encode('utf-8'); "
+            "assert data == canonical, 'uploaded JSON is not canonical'; "
+            "temporary.write_bytes(data); temporary.chmod(0o400); "
+            "os.replace(temporary,target); target.chmod(0o400)"
         )
-        await self.exec_as_root(
-            environment,
-            command=f"python3 -c {shlex.quote(program)}",
-        )
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", prefix="charting-loop-root-json-", suffix=".json"
+            ) as payload_file:
+                payload_file.write(encoded.encode("utf-8"))
+                payload_file.flush()
+                await environment.upload_file(Path(payload_file.name), remote_source)
+            result = await self.exec_as_root(
+                environment,
+                command=(
+                    f"python3 -c {shlex.quote(program)}; status=$?; "
+                    f"rm -f {shlex.quote(remote_source)} {shlex.quote(remote_target)}; "
+                    "exit $status"
+                ),
+            )
+            if result.return_code != 0:
+                raise RuntimeError(
+                    f"Root JSON write failed for {path}: "
+                    f"{(result.stderr or '').strip()}"
+                )
+        except BaseException:
+            try:
+                await self.exec_as_root(
+                    environment,
+                    command=(
+                        f"rm -f {shlex.quote(remote_source)} "
+                        f"{shlex.quote(remote_target)}"
+                    ),
+                )
+            except Exception:
+                pass
+            raise
 
     async def _admit_fact_file(
         self,

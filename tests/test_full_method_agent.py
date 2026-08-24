@@ -119,6 +119,109 @@ def complete_assessment(
 
 
 class FullMethodContractTests(unittest.TestCase):
+    def test_root_json_writer_streams_large_canonical_payload_with_bounded_argv(self) -> None:
+        adapter = load_harbor_agent_with_stubs()
+        agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
+        uploads: list[tuple[Path, str, bytes]] = []
+        commands: list[str] = []
+
+        class Environment:
+            async def upload_file(self, source: Path, target: str) -> None:
+                data = source.read_bytes()
+                uploads.append((source, target, data))
+                Path(target).write_bytes(data)
+
+        async def exec_root(self, environment, *, command):
+            commands.append(command)
+            completed = subprocess.run(
+                command,
+                shell=True,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            return types.SimpleNamespace(
+                return_code=completed.returncode,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            )
+
+        agent.exec_as_root = types.MethodType(exec_root, agent)
+        sentinel = "transport-sentinel-" * 20_000
+        values = (
+            {"kind": "small", "value": "ok"},
+            {"kind": "large", "value": sentinel},
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            for index, value in enumerate(values):
+                target = Path(directory) / f"result-{index}.json"
+                asyncio.run(
+                    agent._write_root_json(Environment(), path=str(target), value=value)
+                )
+                expected = (
+                    json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
+                ).encode("utf-8")
+                self.assertEqual(expected, target.read_bytes())
+                self.assertEqual(
+                    hashlib.sha256(expected).hexdigest(),
+                    hashlib.sha256(target.read_bytes()).hexdigest(),
+                )
+                self.assertEqual(0o400, stat.S_IMODE(target.stat().st_mode))
+
+        self.assertEqual(2, len(uploads))
+        self.assertGreater(len(uploads[1][2]), 65_536)
+        self.assertTrue(all(not source.exists() for source, _, _ in uploads))
+        self.assertTrue(all(not Path(target).exists() for _, target, _ in uploads))
+        self.assertTrue(all(len(command.encode("utf-8")) < 4_096 for command in commands))
+        self.assertTrue(all(sentinel not in command for command in commands))
+
+    def test_root_json_writer_reports_transport_failure_and_cleans_staging(self) -> None:
+        adapter = load_harbor_agent_with_stubs()
+        agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
+        uploads: list[tuple[Path, str]] = []
+        commands: list[str] = []
+
+        class Environment:
+            async def upload_file(self, source: Path, target: str) -> None:
+                uploads.append((source, target))
+                Path(target).write_bytes(source.read_bytes())
+
+        async def exec_root(self, environment, *, command):
+            commands.append(command)
+            if len(commands) == 1:
+                return types.SimpleNamespace(
+                    return_code=7, stdout="", stderr="simulated remote failure"
+                )
+            completed = subprocess.run(
+                command,
+                shell=True,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            return types.SimpleNamespace(
+                return_code=completed.returncode,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            )
+
+        agent.exec_as_root = types.MethodType(exec_root, agent)
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "existing.json"
+            target.write_bytes(b"existing\n")
+            with self.assertRaisesRegex(RuntimeError, "simulated remote failure"):
+                asyncio.run(
+                    agent._write_root_json(
+                        Environment(), path=str(target), value={"large": "x" * 100_000}
+                    )
+                )
+            self.assertEqual(b"existing\n", target.read_bytes())
+
+        self.assertEqual(1, len(uploads))
+        self.assertFalse(uploads[0][0].exists())
+        self.assertFalse(Path(uploads[0][1]).exists())
+        self.assertEqual(2, len(commands))
+
     def test_verifier_alignment_is_posthoc_read_only_and_not_rule_authority(self) -> None:
         pre_root = contract.pre_verifier_root_manifest(
             frozen_artifacts={
