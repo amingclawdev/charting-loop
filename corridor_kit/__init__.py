@@ -92,6 +92,9 @@ from .submission import (
     verify_submission,
 )
 from .graph import (
+    EXECUTION_TEST_CONTRACT_SCHEMA,
+    EXECUTION_TEST_QA_ASSESSMENT_SCHEMA,
+    EXECUTION_TEST_RECEIPT_SCHEMA,
     GRAPH_ACTORS,
     GRAPH_DOCTOR_SCHEMA,
     GRAPH_RECORD_SCHEMA,
@@ -194,6 +197,9 @@ __all__ = [
     "validate_witnesses",
     "verify_submission",
     "GRAPH_ACTORS",
+    "EXECUTION_TEST_CONTRACT_SCHEMA",
+    "EXECUTION_TEST_QA_ASSESSMENT_SCHEMA",
+    "EXECUTION_TEST_RECEIPT_SCHEMA",
     "GRAPH_DOCTOR_SCHEMA",
     "GRAPH_RECORD_SCHEMA",
     "GRAPH_RECORD_TYPES",

@@ -162,6 +162,14 @@ class GraphIndex:
             add("position", ref, body)
         for ref, body in projection.get("directions", {}).items():
             add("direction", ref, body)
+        for ref, body in projection.get("execution_test_contracts", {}).items():
+            add("execution_test_contract", ref, body)
+        for ref, body in projection.get(
+            "execution_test_qa_assessments", {}
+        ).items():
+            add("execution_test_qa_assessment", ref, body)
+        for ref, body in projection.get("execution_test_receipts", {}).items():
+            add("execution_test_receipt", ref, body)
 
         edges: list[Mapping[str, Any]] = []
         historical_dependants: dict[str, set[str]] = {}
@@ -829,6 +837,32 @@ class GraphIndex:
             for obligation_id, obligation in self._witness_obligations.items()
             if obligation["checklist_item_id"] in related_checklist_ids
         )
+        current_direction_ids = sorted(
+            ref
+            for ref, body in self._projection.get("directions", {}).items()
+            if body.get("position_ref") == frontier["latest_position_ref"]
+        )
+        execution_test_contract_ids = sorted(
+            ref
+            for ref, body in self._projection.get(
+                "execution_test_contracts", {}
+            ).items()
+            if body.get("direction_record_id") in current_direction_ids
+        )
+        execution_test_qa_assessment_ids = sorted(
+            ref
+            for ref, body in self._projection.get(
+                "execution_test_qa_assessments", {}
+            ).items()
+            if body.get("contract_record_id") in execution_test_contract_ids
+        )
+        execution_test_receipt_ids = sorted(
+            ref
+            for ref, body in self._projection.get(
+                "execution_test_receipts", {}
+            ).items()
+            if body.get("contract_record_id") in execution_test_contract_ids
+        )
         hard_semantic_edge_ids = sorted(
             edge_id
             for edge_id in semantic_edge_ids
@@ -904,6 +938,13 @@ class GraphIndex:
                     _copy(self._witness_obligations[obligation_id]),
                 )
             )
+        for contract_id in execution_test_contract_ids:
+            detail_candidates.append(
+                (
+                    f"execution-test-contract:{contract_id}",
+                    _copy(self._projection["execution_test_contracts"][contract_id]),
+                )
+            )
         details: list[dict[str, Any]] = []
         omitted_detail_ids: list[str] = []
         used_chars = 2
@@ -925,6 +966,9 @@ class GraphIndex:
             semantic_edge_ids=semantic_edge_ids,
             stale_semantic_edge_ids=stale_semantic_edge_ids,
             witness_obligation_ids=witness_obligation_ids,
+            execution_test_contract_ids=execution_test_contract_ids,
+            execution_test_qa_assessment_ids=execution_test_qa_assessment_ids,
+            execution_test_receipt_ids=execution_test_receipt_ids,
             compact_hard_constraint_ids={
                 "semantic_edge_ids": hard_semantic_edge_ids,
                 "typed_expansion_ids": hard_typed_expansion_ids,

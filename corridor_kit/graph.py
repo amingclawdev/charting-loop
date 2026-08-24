@@ -42,6 +42,11 @@ from .graph_index import GraphIndex
 RULE_RATIFICATION_SCHEMA_V2 = "charting-loop/rule-ratification/v2"
 RULE_CANDIDATE_REPORT_SCHEMA = "charting-loop/rule-candidate-report/v1"
 RULE_QA_ASSESSMENT_SCHEMA = "charting-loop/rule-qa-assessment/v1"
+EXECUTION_TEST_CONTRACT_SCHEMA = "charting-loop/execution-test-contract/v1"
+EXECUTION_TEST_QA_ASSESSMENT_SCHEMA = (
+    "charting-loop/execution-test-qa-assessment/v1"
+)
+EXECUTION_TEST_RECEIPT_SCHEMA = "charting-loop/execution-test-receipt/v1"
 
 
 GRAPH_RECORD_SCHEMA = "charting-loop/graph-kernel-record/v1"
@@ -66,6 +71,9 @@ GRAPH_RECORD_TYPES = frozenset(
         "position_checkpoint",
         "direction_proposal",
         "direction_snapshot",
+        "execution_test_contract",
+        "execution_test_qa_assessment",
+        "execution_test_receipt",
         "artifact_revision",
     }
 )
@@ -89,6 +97,15 @@ DEPENDENCY_RELATIONSHIPS = frozenset(
     {*HARD_DEPENDENCY_RELATIONSHIPS, *NON_ORDERING_DEPENDENCY_RELATIONSHIPS, "conflicts", "invalidates"}
 )
 RULE_HARD_RELATIONSHIPS = frozenset({"requires", "precondition_for", "precedes"})
+EXECUTION_TEST_KINDS = frozenset({"task_mutation", "read_only_navigation"})
+EXECUTION_TEST_CASE_KINDS = frozenset({"positive", "negative", "boundary"})
+EXECUTION_TEST_OPERATORS = frozenset(
+    {"code_test", "db_replay", "cli_probe", "interaction_probe"}
+)
+EXECUTION_TEST_PRE_ACTION_STATUSES = frozenset(
+    {"not_run_yet", "unsupported", "not_applicable"}
+)
+EXECUTION_TEST_OUTCOMES = frozenset({"passed", "failed", "error", "not_run"})
 
 
 def _strict_object(raw: str, *, line_number: int) -> dict[str, Any]:
@@ -180,6 +197,140 @@ def _validate_rule_qa_assessment_body(body: Mapping[str, Any]) -> dict[str, Any]
     assessment_digest = _digest(body, "assessment_digest")
     if assessment_digest != sha256_json(normalized):
         raise CorridorKitError("Rule QA assessment digest does not match its content")
+    return {**normalized, "assessment_digest": assessment_digest}
+
+
+def _validate_execution_test_case(raw: Any) -> dict[str, Any]:
+    expected = {
+        "probe_id",
+        "checklist_item_id",
+        "case_kind",
+        "source_slice_ids",
+        "operator",
+        "fixture_artifacts",
+        "command",
+        "oracle",
+        "dependency_refs",
+        "predecessor_probe_ids",
+        "pre_action_status",
+        "applicability_predicate",
+        "non_applicability_fact_receipt_ids",
+        "unsupported_reason",
+    }
+    if not isinstance(raw, dict) or set(raw) != expected:
+        raise CorridorKitError("execution test/probe case has unknown or missing fields")
+    case = {
+        "probe_id": _text(raw, "probe_id"),
+        "checklist_item_id": _text(raw, "checklist_item_id"),
+        "case_kind": _text(raw, "case_kind"),
+        "source_slice_ids": _text_list(raw, "source_slice_ids", nonempty=True),
+        "operator": _text(raw, "operator"),
+        "fixture_artifacts": raw["fixture_artifacts"],
+        "command": raw.get("command"),
+        "oracle": _text(raw, "oracle"),
+        "dependency_refs": _text_list(raw, "dependency_refs"),
+        "predecessor_probe_ids": _text_list(raw, "predecessor_probe_ids"),
+        "pre_action_status": _text(raw, "pre_action_status"),
+        "applicability_predicate": raw.get("applicability_predicate"),
+        "non_applicability_fact_receipt_ids": _text_list(
+            raw, "non_applicability_fact_receipt_ids"
+        ),
+        "unsupported_reason": raw.get("unsupported_reason"),
+    }
+    if case["case_kind"] not in EXECUTION_TEST_CASE_KINDS:
+        raise CorridorKitError("execution test/probe case has an unknown case_kind")
+    if case["operator"] not in EXECUTION_TEST_OPERATORS:
+        raise CorridorKitError("execution test/probe case has an unknown operator")
+    if case["pre_action_status"] not in EXECUTION_TEST_PRE_ACTION_STATUSES:
+        raise CorridorKitError("execution test/probe case has an unknown pre_action_status")
+    fixtures = case["fixture_artifacts"]
+    if not isinstance(fixtures, list):
+        raise CorridorKitError("execution test/probe fixture_artifacts must be a list")
+    fixture_paths: set[str] = set()
+    for fixture in fixtures:
+        if not isinstance(fixture, dict) or set(fixture) != {"path", "digest"}:
+            raise CorridorKitError("execution test/probe fixture has unknown or missing fields")
+        path = _text(fixture, "path")
+        _digest(fixture, "digest")
+        if path in fixture_paths:
+            raise CorridorKitError("execution test/probe fixture path is duplicated")
+        fixture_paths.add(path)
+    status = case["pre_action_status"]
+    command = case["command"]
+    applicability_predicate = case["applicability_predicate"]
+    unsupported_reason = case["unsupported_reason"]
+    if status == "not_run_yet":
+        if not isinstance(command, str) or not command.strip() or not fixtures:
+            raise CorridorKitError(
+                "runnable execution test/probe requires command and fixture artifacts"
+            )
+        if unsupported_reason not in {None, ""}:
+            raise CorridorKitError("runnable execution test/probe cannot be unsupported")
+        if applicability_predicate is not None:
+            raise CorridorKitError(
+                "runnable execution test/probe cannot claim a non-applicability predicate"
+            )
+    elif status == "unsupported":
+        if not isinstance(unsupported_reason, str) or not unsupported_reason.strip():
+            raise CorridorKitError("unsupported execution test/probe requires a reason")
+        if case["non_applicability_fact_receipt_ids"]:
+            raise CorridorKitError("unsupported execution test/probe cannot claim N/A evidence")
+        if applicability_predicate is not None:
+            raise CorridorKitError(
+                "unsupported execution test/probe cannot claim a non-applicability predicate"
+            )
+    else:
+        if not case["non_applicability_fact_receipt_ids"]:
+            raise CorridorKitError(
+                "not-applicable execution test/probe requires an admitted Fact receipt"
+            )
+        if not isinstance(unsupported_reason, str) or not unsupported_reason.strip():
+            raise CorridorKitError(
+                "not-applicable execution test/probe requires an applicability reason"
+            )
+        if (
+            not isinstance(applicability_predicate, str)
+            or not applicability_predicate.strip()
+        ):
+            raise CorridorKitError(
+                "not-applicable execution test/probe requires its exact applicability predicate"
+            )
+    return case
+
+
+def _validate_execution_test_qa_assessment_body(
+    body: Mapping[str, Any],
+) -> dict[str, Any]:
+    expected = {
+        "schema_version",
+        "contract_record_id",
+        "contract_digest",
+        "outcome",
+        "findings",
+        "assessment_digest",
+    }
+    if set(body) != expected:
+        raise CorridorKitError(
+            "execution test/probe QA assessment has unknown or missing fields"
+        )
+    if body.get("schema_version") != EXECUTION_TEST_QA_ASSESSMENT_SCHEMA:
+        raise CorridorKitError("execution test/probe QA assessment has the wrong schema")
+    normalized = {
+        "schema_version": EXECUTION_TEST_QA_ASSESSMENT_SCHEMA,
+        "contract_record_id": _text(body, "contract_record_id"),
+        "contract_digest": _digest(body, "contract_digest"),
+        "outcome": _text(body, "outcome"),
+        "findings": _text_list(body, "findings"),
+    }
+    if normalized["outcome"] not in {"pass", "fail", "not_assessed"}:
+        raise CorridorKitError("execution test/probe QA assessment has an unknown outcome")
+    if normalized["outcome"] == "pass" and normalized["findings"]:
+        raise CorridorKitError("passing execution test/probe QA cannot retain findings")
+    if normalized["outcome"] != "pass" and not normalized["findings"]:
+        raise CorridorKitError("non-passing execution test/probe QA requires findings")
+    assessment_digest = _digest(body, "assessment_digest")
+    if assessment_digest != sha256_json(normalized):
+        raise CorridorKitError("execution test/probe QA assessment digest does not match")
     return {**normalized, "assessment_digest": assessment_digest}
 
 
@@ -547,6 +698,11 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     position_ids: set[str] = set()
     directions: dict[str, dict[str, Any]] = {}
     direction_ids: set[str] = set()
+    selected_direction_by_position: dict[str, str] = {}
+    execution_test_contracts: dict[str, dict[str, Any]] = {}
+    execution_test_contract_ids: set[str] = set()
+    execution_test_qa_assessments: dict[str, dict[str, Any]] = {}
+    execution_test_receipts: dict[str, dict[str, Any]] = {}
     artifacts: dict[str, int] = {}
     latest_artifact_record_ids: dict[str, str] = {}
     content_ids: set[str] = set()
@@ -1792,6 +1948,410 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 raise CorridorKitError("Direction snapshot references an unknown proposal")
             if selected is not None and selected not in direction_refs:
                 raise CorridorKitError("selected Direction is not in the snapshot")
+            if selected is not None:
+                selected_direction_by_position[position_ref] = selected
+        elif record_type == "execution_test_contract":
+            if actor != "worker":
+                raise CorridorKitError("execution test/probe contract must be Worker-authored")
+            expected_keys = {
+                "schema_version",
+                "contract_id",
+                "position_ref",
+                "direction_record_id",
+                "execution_kind",
+                "selected_checklist_item_ids",
+                "selected_rule_record_ids",
+                "semantic_edge_ids",
+                "witness_obligation_ids",
+                "probe_cases",
+                "exemption_reason",
+                "contract_digest",
+            }
+            if set(body) != expected_keys:
+                raise CorridorKitError(
+                    "execution test/probe contract has unknown or missing fields"
+                )
+            if body.get("schema_version") != EXECUTION_TEST_CONTRACT_SCHEMA:
+                raise CorridorKitError("execution test/probe contract has the wrong schema")
+            contract_id = _text(body, "contract_id")
+            if contract_id in execution_test_contract_ids:
+                raise CorridorKitError(
+                    f"execution test/probe contract already exists: {contract_id}"
+                )
+            position_ref = _text(body, "position_ref")
+            direction_record_id = _text(body, "direction_record_id")
+            execution_kind = _text(body, "execution_kind")
+            if execution_kind not in EXECUTION_TEST_KINDS:
+                raise CorridorKitError("execution test/probe contract has an unknown kind")
+            if position_ref not in positions:
+                raise CorridorKitError("execution test/probe contract references an unknown Position")
+            if position_ref != next(reversed(positions)):
+                raise CorridorKitError(
+                    "execution test/probe contract must bind the latest Position"
+                )
+            direction = directions.get(direction_record_id)
+            if direction is None or direction.get("position_ref") != position_ref:
+                raise CorridorKitError(
+                    "execution test/probe contract references a mismatched Direction"
+                )
+            if selected_direction_by_position.get(position_ref) != direction_record_id:
+                raise CorridorKitError(
+                    "execution test/probe contract must bind the selected Direction snapshot"
+                )
+            selected_checklist_ids = _text_list(
+                body, "selected_checklist_item_ids"
+            )
+            selected_rule_record_ids = _text_list(
+                body, "selected_rule_record_ids"
+            )
+            semantic_edge_ids = _text_list(body, "semantic_edge_ids")
+            witness_obligation_ids = _text_list(body, "witness_obligation_ids")
+            exemption_reason = body.get("exemption_reason")
+            raw_cases = body.get("probe_cases")
+            if not isinstance(raw_cases, list):
+                raise CorridorKitError("execution test/probe contract probe_cases must be a list")
+            probe_cases = [_validate_execution_test_case(item) for item in raw_cases]
+            probe_ids = [item["probe_id"] for item in probe_cases]
+            if len(probe_ids) != len(set(probe_ids)):
+                raise CorridorKitError("execution test/probe contract duplicates a probe ID")
+            if execution_kind == "read_only_navigation":
+                if any(
+                    (
+                        selected_checklist_ids,
+                        selected_rule_record_ids,
+                        semantic_edge_ids,
+                        witness_obligation_ids,
+                        probe_cases,
+                    )
+                ):
+                    raise CorridorKitError(
+                        "read-only/navigation execution exemption cannot select mutation tests"
+                    )
+                if not isinstance(exemption_reason, str) or not exemption_reason.strip():
+                    raise CorridorKitError(
+                        "read-only/navigation execution exemption requires a reason"
+                    )
+            else:
+                if not selected_checklist_ids or not probe_cases:
+                    raise CorridorKitError(
+                        "task-mutating execution contract requires checklist targets and probes"
+                    )
+                if exemption_reason not in {None, ""}:
+                    raise CorridorKitError(
+                        "task-mutating execution contract cannot claim a navigation exemption"
+                    )
+                if not set(selected_checklist_ids).issubset(
+                    set(direction.get("ready_item_ids", []))
+                ):
+                    raise CorridorKitError(
+                        "execution test/probe targets must be ready at the exact Position"
+                    )
+                selected_items = {
+                    item_id: checklist_items.get(item_id)
+                    for item_id in selected_checklist_ids
+                }
+                if any(item is None for item in selected_items.values()):
+                    raise CorridorKitError(
+                        "execution test/probe contract references an unknown checklist row"
+                    )
+                expected_rule_records = sorted(
+                    {
+                        str(item["source_rule_record_id"])
+                        for item in selected_items.values()
+                        if item is not None
+                    }
+                )
+                if selected_rule_record_ids != expected_rule_records:
+                    raise CorridorKitError(
+                        "execution test/probe Rule bindings do not match selected checklist rows"
+                    )
+                direction_bindings = {
+                    item["checklist_item_id"]: item
+                    for item in direction.get("semantic_bindings", [])
+                    if isinstance(item, dict)
+                }
+                if not set(selected_checklist_ids).issubset(direction_bindings):
+                    raise CorridorKitError(
+                        "execution test/probe targets lack Direction semantic bindings"
+                    )
+                expected_edge_ids = sorted(
+                    {
+                        edge_id
+                        for item_id in selected_checklist_ids
+                        for edge_id in direction_bindings[item_id]["semantic_edge_ids"]
+                    }
+                )
+                expected_witness_ids = sorted(
+                    {
+                        witness_id
+                        for item_id in selected_checklist_ids
+                        for witness_id in direction_bindings[item_id][
+                            "witness_obligation_ids"
+                        ]
+                    }
+                )
+                if semantic_edge_ids != expected_edge_ids:
+                    raise CorridorKitError(
+                        "execution test/probe semantic edges do not match selected targets"
+                    )
+                if witness_obligation_ids != expected_witness_ids:
+                    raise CorridorKitError(
+                        "execution test/probe witness obligations do not match selected targets"
+                    )
+                cases_by_item: dict[str, list[dict[str, Any]]] = {
+                    item_id: [] for item_id in selected_checklist_ids
+                }
+                cases_by_probe_id = {
+                    case["probe_id"]: case for case in probe_cases
+                }
+                for case in probe_cases:
+                    item_id = case["checklist_item_id"]
+                    if item_id not in cases_by_item:
+                        raise CorridorKitError(
+                            "execution test/probe case is outside selected checklist targets"
+                        )
+                    item = selected_items[item_id]
+                    assert item is not None
+                    rule_id = str(item["source_rule_id"])
+                    allowed_slice_ids = {
+                        binding["slice_id"]
+                        for binding in rule_source_bindings.get(rule_id, [])
+                    }
+                    if not set(case["source_slice_ids"]).issubset(allowed_slice_ids):
+                        raise CorridorKitError(
+                            "execution test/probe case is not source-bound to its Rule"
+                        )
+                    expected_dependency_refs = sorted(
+                        {
+                            dependency_id
+                            for dependency_id, dependency in typed_dependencies.items()
+                            if item_id
+                            in {dependency.get("from_ref"), dependency.get("to_ref")}
+                            and semantic_edge_id(
+                                from_rule_id=str(dependency.get("source_rule_id")),
+                                to_rule_id=str(dependency.get("target_rule_id")),
+                                declared_relationship=str(
+                                    dependency.get("relationship")
+                                ),
+                            )
+                            in direction_bindings[item_id]["semantic_edge_ids"]
+                        }
+                    )
+                    if case["dependency_refs"] != expected_dependency_refs:
+                        raise CorridorKitError(
+                            "execution test/probe dependencies do not match its Rule edge"
+                        )
+                    if case["probe_id"] in case["predecessor_probe_ids"]:
+                        raise CorridorKitError(
+                            "execution test/probe cannot depend on itself"
+                        )
+                    if not set(case["predecessor_probe_ids"]).issubset(
+                        cases_by_probe_id
+                    ):
+                        raise CorridorKitError(
+                            "execution test/probe predecessor references are outside its contract"
+                        )
+                    if not set(case["non_applicability_fact_receipt_ids"]).issubset(
+                        set(positions[position_ref].get("fact_receipt_ids", []))
+                    ):
+                        raise CorridorKitError(
+                            "execution test/probe N/A evidence is outside its Position"
+                        )
+                    if case["pre_action_status"] == "not_applicable":
+                        applicability = item.get("applicability")
+                        if (
+                            not isinstance(applicability, dict)
+                            or applicability.get("mode") != "conditional"
+                            or case["applicability_predicate"]
+                            != applicability.get("predicate")
+                        ):
+                            raise CorridorKitError(
+                                "execution test/probe N/A does not bind its conditional Rule applicability predicate"
+                            )
+                    cases_by_item[item_id].append(case)
+                visiting: set[str] = set()
+                visited: set[str] = set()
+
+                def visit_probe(probe_id: str) -> None:
+                    if probe_id in visiting:
+                        raise CorridorKitError(
+                            "execution test/probe predecessor graph contains a cycle"
+                        )
+                    if probe_id in visited:
+                        return
+                    visiting.add(probe_id)
+                    for predecessor_id in cases_by_probe_id[probe_id][
+                        "predecessor_probe_ids"
+                    ]:
+                        visit_probe(predecessor_id)
+                    visiting.remove(probe_id)
+                    visited.add(probe_id)
+
+                for probe_id in sorted(cases_by_probe_id):
+                    visit_probe(probe_id)
+                for item_id, cases in cases_by_item.items():
+                    if not any(item["case_kind"] == "positive" for item in cases):
+                        raise CorridorKitError(
+                            f"execution test/probe target lacks a positive case: {item_id}"
+                        )
+                    if not any(
+                        item["case_kind"] in {"negative", "boundary"}
+                        for item in cases
+                    ):
+                        raise CorridorKitError(
+                            f"execution test/probe target lacks a negative/boundary case: {item_id}"
+                        )
+            normalized = {
+                "schema_version": EXECUTION_TEST_CONTRACT_SCHEMA,
+                "contract_id": contract_id,
+                "position_ref": position_ref,
+                "direction_record_id": direction_record_id,
+                "execution_kind": execution_kind,
+                "selected_checklist_item_ids": selected_checklist_ids,
+                "selected_rule_record_ids": selected_rule_record_ids,
+                "semantic_edge_ids": semantic_edge_ids,
+                "witness_obligation_ids": witness_obligation_ids,
+                "probe_cases": probe_cases,
+                "exemption_reason": exemption_reason,
+            }
+            contract_digest = _digest(body, "contract_digest")
+            if contract_digest != sha256_json(normalized):
+                raise CorridorKitError("execution test/probe contract digest does not match")
+            execution_test_contract_ids.add(contract_id)
+            execution_test_contracts[expected_record] = {
+                **normalized,
+                "contract_digest": contract_digest,
+            }
+        elif record_type == "execution_test_qa_assessment":
+            if actor != "qa":
+                raise CorridorKitError("execution test/probe QA assessment must be QA-authored")
+            assessment = _validate_execution_test_qa_assessment_body(body)
+            contract = execution_test_contracts.get(
+                assessment["contract_record_id"]
+            )
+            if contract is None or contract["contract_digest"] != assessment[
+                "contract_digest"
+            ]:
+                raise CorridorKitError(
+                    "execution test/probe QA assessment references a stale contract"
+                )
+            if any(
+                prior.get("contract_record_id")
+                == assessment["contract_record_id"]
+                for prior in execution_test_qa_assessments.values()
+            ):
+                raise CorridorKitError(
+                    "execution test/probe QA assessment already exists for this contract"
+                )
+            if any(
+                receipt.get("contract_record_id")
+                == assessment["contract_record_id"]
+                for receipt in execution_test_receipts.values()
+            ):
+                raise CorridorKitError(
+                    "execution test/probe QA assessment must precede execution receipts"
+                )
+            execution_test_qa_assessments[expected_record] = assessment
+        elif record_type == "execution_test_receipt":
+            if actor not in {"worker", "runner"}:
+                raise CorridorKitError("execution test/probe receipt has an invalid actor")
+            expected_keys = {
+                "schema_version",
+                "contract_record_id",
+                "contract_digest",
+                "probe_id",
+                "outcome",
+                "pre_action_qa_status",
+                "pre_action_qa_assessment_record_id",
+                "command_digest",
+                "result_digest",
+                "receipt_digest",
+            }
+            if set(body) != expected_keys:
+                raise CorridorKitError(
+                    "execution test/probe receipt has unknown or missing fields"
+                )
+            if body.get("schema_version") != EXECUTION_TEST_RECEIPT_SCHEMA:
+                raise CorridorKitError("execution test/probe receipt has the wrong schema")
+            contract_record_id = _text(body, "contract_record_id")
+            contract = execution_test_contracts.get(contract_record_id)
+            contract_digest = _digest(body, "contract_digest")
+            if contract is None or contract["contract_digest"] != contract_digest:
+                raise CorridorKitError("execution test/probe receipt references a stale contract")
+            probe_id = _text(body, "probe_id")
+            probe = next(
+                (item for item in contract["probe_cases"] if item["probe_id"] == probe_id),
+                None,
+            )
+            if probe is None:
+                raise CorridorKitError("execution test/probe receipt references an unknown probe")
+            outcome = _text(body, "outcome")
+            if outcome not in EXECUTION_TEST_OUTCOMES:
+                raise CorridorKitError("execution test/probe receipt has an unknown outcome")
+            pre_action_qa_status = _text(body, "pre_action_qa_status")
+            if pre_action_qa_status not in {
+                "pass",
+                "fail",
+                "not_assessed",
+                "missing",
+            }:
+                raise CorridorKitError(
+                    "execution test/probe receipt has an unknown pre-action QA status"
+                )
+            pre_action_qa_assessment_record_id = body.get(
+                "pre_action_qa_assessment_record_id"
+            )
+            matching_assessments = [
+                (record_id, assessment)
+                for record_id, assessment in execution_test_qa_assessments.items()
+                if assessment.get("contract_record_id") == contract_record_id
+            ]
+            if matching_assessments:
+                assessment_record_id, assessment = matching_assessments[-1]
+                if (
+                    pre_action_qa_assessment_record_id != assessment_record_id
+                    or pre_action_qa_status != assessment.get("outcome")
+                ):
+                    raise CorridorKitError(
+                        "execution test/probe receipt does not bind its prior QA assessment"
+                    )
+            elif (
+                pre_action_qa_assessment_record_id is not None
+                or pre_action_qa_status != "missing"
+            ):
+                raise CorridorKitError(
+                    "execution test/probe receipt must explicitly record missing pre-action QA"
+                )
+            command_digest = _digest(body, "command_digest")
+            if command_digest != sha256_json({"command": probe.get("command")}):
+                raise CorridorKitError("execution test/probe receipt command digest is stale")
+            result_digest = _digest(body, "result_digest")
+            normalized = {
+                "schema_version": EXECUTION_TEST_RECEIPT_SCHEMA,
+                "contract_record_id": contract_record_id,
+                "contract_digest": contract_digest,
+                "probe_id": probe_id,
+                "outcome": outcome,
+                "pre_action_qa_status": pre_action_qa_status,
+                "pre_action_qa_assessment_record_id": (
+                    pre_action_qa_assessment_record_id
+                ),
+                "command_digest": command_digest,
+                "result_digest": result_digest,
+            }
+            receipt_digest = _digest(body, "receipt_digest")
+            if receipt_digest != sha256_json(normalized):
+                raise CorridorKitError("execution test/probe receipt digest does not match")
+            if any(
+                item["contract_record_id"] == contract_record_id
+                and item["probe_id"] == probe_id
+                for item in execution_test_receipts.values()
+            ):
+                raise CorridorKitError("execution test/probe receipt already exists")
+            execution_test_receipts[expected_record] = {
+                **normalized,
+                "receipt_digest": receipt_digest,
+            }
         elif record_type == "artifact_revision":
             artifact_id = _text(body, "artifact_id")
             _text(body, "path")
@@ -1824,6 +2384,9 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         "admitted_fact_count": len(fact_receipts),
         "position_count": len(positions),
         "direction_proposal_count": len(directions),
+        "execution_test_contract_count": len(execution_test_contracts),
+        "execution_test_qa_assessment_count": len(execution_test_qa_assessments),
+        "execution_test_receipt_count": len(execution_test_receipts),
         "artifact_count": len(artifacts),
         "structurally_valid": True,
         "task_truth_assessed": False,
@@ -1858,6 +2421,9 @@ def _graph_projection(records: list[dict[str, Any]]) -> dict[str, Any]:
     positions: dict[str, dict[str, Any]] = {}
     directions: dict[str, dict[str, Any]] = {}
     direction_snapshots: list[dict[str, Any]] = []
+    execution_test_contracts: dict[str, dict[str, Any]] = {}
+    execution_test_qa_assessments: dict[str, dict[str, Any]] = {}
+    execution_test_receipts: dict[str, dict[str, Any]] = {}
     for record in records:
         record_type = record["record_type"]
         body = record["body"]
@@ -1940,6 +2506,12 @@ def _graph_projection(records: list[dict[str, Any]]) -> dict[str, Any]:
             directions[record["record_id"]] = dict(body)
         elif record_type == "direction_snapshot":
             direction_snapshots.append({**body, "record_id": record["record_id"]})
+        elif record_type == "execution_test_contract":
+            execution_test_contracts[record["record_id"]] = dict(body)
+        elif record_type == "execution_test_qa_assessment":
+            execution_test_qa_assessments[record["record_id"]] = dict(body)
+        elif record_type == "execution_test_receipt":
+            execution_test_receipts[record["record_id"]] = dict(body)
     current_checklists = {
         item_id: item
         for item_id, item in checklist_items.items()
@@ -1969,6 +2541,9 @@ def _graph_projection(records: list[dict[str, Any]]) -> dict[str, Any]:
         "positions": positions,
         "directions": directions,
         "direction_snapshots": direction_snapshots,
+        "execution_test_contracts": execution_test_contracts,
+        "execution_test_qa_assessments": execution_test_qa_assessments,
+        "execution_test_receipts": execution_test_receipts,
     }
 
 
@@ -2519,6 +3094,103 @@ def graph_doctor(path: Path) -> dict[str, Any]:
         ):
             incomplete_reasons.append("direction_semantic_bindings_missing")
 
+    selected_test_contract_ref: str | None = next(
+        (
+            record_id
+            for record_id, body in reversed(
+                list(projection["execution_test_contracts"].items())
+            )
+            if body.get("direction_record_id") == selected_direction_ref
+            and body.get("position_ref") == latest_position_ref
+        ),
+        None,
+    )
+    selected_test_contract = projection["execution_test_contracts"].get(
+        selected_test_contract_ref
+    )
+    selected_test_qa: dict[str, Any] | None = None
+    selected_test_receipts: list[dict[str, Any]] = []
+    if selected_test_contract is None:
+        # Execution-test contracts start with the source-complete v4
+        # projection. Preserve replay/classification compatibility for older
+        # graph schemas while requiring the new evidence on v4 work.
+        if selected_direction is not None and successor_checklist_ids:
+            incomplete_reasons.append("execution_test_contract_missing")
+    else:
+        selected_test_qa = next(
+            (
+                body
+                for body in reversed(
+                    list(projection["execution_test_qa_assessments"].values())
+                )
+                if body.get("contract_record_id") == selected_test_contract_ref
+                and body.get("contract_digest")
+                == selected_test_contract.get("contract_digest")
+            ),
+            None,
+        )
+        if selected_test_qa is None:
+            incomplete_reasons.append("execution_test_contract_qa_missing")
+        elif selected_test_qa.get("outcome") != "pass":
+            incomplete_reasons.append(
+                "execution_test_contract_qa_"
+                + str(selected_test_qa.get("outcome", "not_assessed"))
+            )
+        selected_test_receipts = [
+            body
+            for body in projection["execution_test_receipts"].values()
+            if body.get("contract_record_id") == selected_test_contract_ref
+            and body.get("contract_digest")
+            == selected_test_contract.get("contract_digest")
+        ]
+        receipts_by_probe = {
+            str(body["probe_id"]): body for body in selected_test_receipts
+        }
+        receipt_order = {
+            str(body["probe_id"]): index
+            for index, body in enumerate(selected_test_receipts)
+        }
+        for probe in selected_test_contract.get("probe_cases", []):
+            probe_id = str(probe["probe_id"])
+            if probe.get("pre_action_status") == "unsupported":
+                incomplete_reasons.append(
+                    f"execution_test_probe_unsupported:{probe_id}"
+                )
+                continue
+            if probe.get("pre_action_status") == "not_applicable":
+                continue
+            receipt = receipts_by_probe.get(probe_id)
+            if receipt is None:
+                incomplete_reasons.append(
+                    f"execution_test_receipt_missing:{probe_id}"
+                )
+                continue
+            if receipt.get("pre_action_qa_status") == "missing":
+                incomplete_reasons.append(
+                    f"execution_test_receipt_without_preaction_qa:{probe_id}"
+                )
+            for predecessor_id in probe.get("predecessor_probe_ids", []):
+                predecessor_receipt = receipts_by_probe.get(predecessor_id)
+                if predecessor_receipt is None:
+                    incomplete_reasons.append(
+                        "execution_test_receipt_dependency_unresolved:"
+                        f"{probe_id}:{predecessor_id}"
+                    )
+                elif receipt_order[predecessor_id] >= receipt_order[probe_id]:
+                    incomplete_reasons.append(
+                        "execution_test_receipt_dependency_out_of_order:"
+                        f"{probe_id}:{predecessor_id}"
+                    )
+                elif predecessor_receipt.get("outcome") != "passed":
+                    incomplete_reasons.append(
+                        "execution_test_receipt_dependency_not_passed:"
+                        f"{probe_id}:{predecessor_id}"
+                    )
+            if receipt.get("outcome") != "passed":
+                incomplete_reasons.append(
+                    f"execution_test_receipt_{receipt.get('outcome')}:{probe_id}"
+                )
+
     active_context = graph_index.active_context()
 
     classification = (
@@ -2623,6 +3295,29 @@ def graph_doctor(path: Path) -> dict[str, Any]:
             "omitted_detail_ids_digest": active_context[
                 "omitted_detail_ids_digest"
             ],
+        },
+        "execution_test_contract": {
+            "contract_record_id": selected_test_contract_ref,
+            "contract_digest": (
+                selected_test_contract.get("contract_digest")
+                if selected_test_contract
+                else None
+            ),
+            "execution_kind": (
+                selected_test_contract.get("execution_kind")
+                if selected_test_contract
+                else None
+            ),
+            "selected_checklist_item_ids": (
+                list(selected_test_contract.get("selected_checklist_item_ids", []))
+                if selected_test_contract
+                else []
+            ),
+            "qa_outcome": selected_test_qa.get("outcome") if selected_test_qa else None,
+            "receipt_count": len(selected_test_receipts),
+            "advisory_only": True,
+            "authorizes_mutation": False,
+            "blocking_gate": False,
         },
         "ready_item_ids": (
             list(latest_position.get("ready_item_ids", [])) if latest_position else []

@@ -229,6 +229,31 @@ Missing or incompatible witnesses keep that checklist and verified claim open, b
 they never block freezing a complete scorable snapshot or running the external
 grader.
 
+Before a task-mutating execution choice, the integrated profile records a separate
+`execution_test_contract`. Direction still projects every applicable Rule; this
+contract only binds one later bounded choice to the exact Position, Direction, ready
+checklist rows, Rule records, semantic edges, witness obligations, source slices,
+fixture digests, commands, and oracles. Each selected checklist row needs a positive
+case and a negative or boundary case. Probe order is an explicit acyclic
+`predecessor_probe_ids` graph derived from the selected dependencies. Operators are task-neutral (`code_test`,
+`db_replay`, `cli_probe`, or `interaction_probe`). Pre-action `not_run_yet` is normal;
+`not_applicable` must copy the exact conditional Rule applicability predicate and cite
+a current admitted Fact, while always-applicable Rules cannot use N/A and
+`unsupported` remains visible.
+
+The runner freezes the contract and fixtures for independent pre-action QA. QA judges
+semantic fidelity—for example whether a temporal Rule is tested with before/after
+worlds instead of a timeless union—and appends an identity-bound assessment. After
+execution, Worker/runner `execution_test_receipt` records bind each supported probe's
+command/result digest, predecessor order, and exact prior QA assessment identity.
+When QA was unavailable, the receipt explicitly records `missing` plus a null
+assessment reference; Doctor keeps that state unresolved but does not block execution.
+Any result-repair Direction is likewise frozen and independently reviewed before the
+same Worker mutates the task. Doctor checks identities, coverage, receipts, and current
+Position/Direction bindings, but it cannot decide test semantics. Missing, failed, or
+unassessed evidence remains unresolved and non-Gating: it cannot prevent task work,
+snapshot custody, fallback, or official scoring.
+
 The Doctor is deterministic and read-only. It recomputes chain integrity, hard-edge
 topological order, checklist/Position alignment, Direction freshness, invalidation
 closure, declared behavioral-partition and typed coverage-cell completeness, and

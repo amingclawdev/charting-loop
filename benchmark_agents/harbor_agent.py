@@ -41,6 +41,8 @@ from benchmark_agents.contract import (
     STUDY_PROFILE_PATH,
     TYPED_RULE_IR_PATH,
     TYPED_RULE_REPORT_PATH,
+    EXECUTION_TEST_ROOT,
+    EXECUTION_TEST_QA_PATH,
     METHOD_PATH,
     METHOD_CONTENT_SHA256,
     METHOD_SCOPE_SHA256,
@@ -69,10 +71,15 @@ from benchmark_agents.contract import (
     graph_compile_qa_prompt,
     graph_compile_repair_prompt,
     graph_implementation_prompt,
+    graph_execution_test_plan_prompt,
+    graph_execution_test_qa_prompt,
+    graph_execution_test_repair_prompt,
+    graph_result_repair_test_plan_prompt,
     graph_qa_prompt,
     graph_repair_prompt,
     graph_worker_prompt,
     validate_graph_compile_audit,
+    validate_execution_test_audit,
     validate_graph_audit,
 )
 
@@ -2293,7 +2300,8 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
     ORCHESTRATION_MESSAGE = (
         "Deterministic orchestration: frozen Study profile plus shared Graph "
         "Kernel -> Worker compile -> compile QA/recompile -> RuleClosure -> "
-        "same-Worker implementation -> frozen-result QA/repair -> official scoring."
+        "Direction/test contract -> pre-action QA -> same-Worker implementation "
+        "-> frozen-result QA/repair -> official scoring."
     )
     ORCHESTRATION_METHOD = "method-guided-graph-kernel"
 
@@ -2311,7 +2319,8 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
             command=(
                 f"rm -rf {shlex.quote(str(PurePosixPath(GRAPH_PATH).parent))} && "
                 f"install -d -m 0700 -o {user} "
-                f"{shlex.quote(str(PurePosixPath(GRAPH_PATH).parent))} && "
+                f"{shlex.quote(str(PurePosixPath(GRAPH_PATH).parent))} "
+                f"{shlex.quote(EXECUTION_TEST_ROOT)} && "
                 f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
                 f"python3 -m corridor_kit graph init {shlex.quote(GRAPH_PATH)} && "
                 f"chown {user} {shlex.quote(GRAPH_PATH)} && "
@@ -2434,13 +2443,15 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
         *,
         iteration: int,
         worker_snapshot_ref: str,
+        namespace: str = "result",
+        include_execution_test_fixtures: bool = False,
     ) -> dict[str, Any]:
         """Copy one exact graph revision for QA without freezing the live graph."""
 
         revision_root = (
             PurePosixPath(RUNTIME_ROOT)
             / "graph-freezes"
-            / f"revision-{iteration:04d}"
+            / f"{namespace}-{iteration:04d}"
         )
         frozen_graph_path = (revision_root / "GRAPH.jsonl").as_posix()
         manifest_path = (revision_root / "GRAPH-FREEZE.json").as_posix()
@@ -2467,10 +2478,95 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
                 "status": "graph_revision_copy_failed",
                 "error": (copied.stderr or copied.stdout or "no output")[-2000:],
             }
+        fixture_manifest_path: str | None = None
+        if include_execution_test_fixtures:
+            selected_contract_record_id = prefreeze_doctor.get(
+                "execution_test_contract", {}
+            ).get("contract_record_id")
+            if not isinstance(selected_contract_record_id, str):
+                return {
+                    "ok": False,
+                    "iteration": iteration,
+                    "worker_snapshot_ref": worker_snapshot_ref,
+                    "status": "execution_test_contract_identity_missing",
+                }
+            fixture_manifest_path = (
+                revision_root / "EXECUTION-TEST-FIXTURES.json"
+            ).as_posix()
+            fixture_program = """
+import hashlib
+import json
+from pathlib import Path
+
+graph = Path(__GRAPH_PATH__)
+root = Path(__FREEZE_ROOT__)
+allowed_root = Path(__ALLOWED_ROOT__).resolve(strict=True)
+records = [json.loads(line) for line in graph.read_text(encoding="utf-8").splitlines()]
+contracts = [record for record in records if record.get("record_type") == "execution_test_contract"]
+matching = [record for record in contracts if record.get("record_id") == __CONTRACT_RECORD_ID__]
+if len(matching) != 1:
+    raise RuntimeError("selected execution_test_contract is missing or duplicated")
+contract = matching[0]
+fixtures_by_identity = {}
+for case in contract["body"].get("probe_cases", []):
+    for item in case.get("fixture_artifacts", []):
+        source = Path(item["path"])
+        if not source.is_absolute() or source.is_symlink() or not source.is_file():
+            raise RuntimeError(f"invalid execution test fixture: {source}")
+        resolved = source.resolve(strict=True)
+        try:
+            resolved.relative_to(allowed_root)
+        except ValueError as exc:
+            raise RuntimeError(f"execution test fixture is outside the declared root: {source}") from exc
+        data = resolved.read_bytes()
+        digest = "sha256:" + hashlib.sha256(data).hexdigest()
+        if digest != item["digest"]:
+            raise RuntimeError(f"execution test fixture digest mismatch: {source}")
+        frozen_dir = root / "fixtures"
+        frozen_dir.mkdir(mode=0o700, exist_ok=True)
+        frozen = frozen_dir / (hashlib.sha256(str(resolved).encode()).hexdigest() + resolved.suffix)
+        frozen.write_bytes(data)
+        frozen.chmod(0o444)
+        identity = (str(resolved), digest)
+        fixtures_by_identity[identity] = {"source_path": str(resolved), "frozen_path": str(frozen), "digest": digest, "bytes": len(data)}
+manifest = {
+    "schema_version": "charting-loop/execution-test-fixture-freeze/v1",
+    "contract_record_id": contract["record_id"],
+    "contract_digest": contract["body"]["contract_digest"],
+    "fixtures": sorted(fixtures_by_identity.values(), key=lambda item: (item["source_path"], item["digest"])),
+}
+Path(__MANIFEST_PATH__).write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+Path(__MANIFEST_PATH__).chmod(0o444)
+""".replace("__GRAPH_PATH__", repr(frozen_graph_path)).replace(
+                "__FREEZE_ROOT__", repr(revision_root.as_posix())
+            ).replace("__ALLOWED_ROOT__", repr(EXECUTION_TEST_ROOT)).replace(
+                "__MANIFEST_PATH__", repr(fixture_manifest_path)
+            ).replace(
+                "__CONTRACT_RECORD_ID__", repr(selected_contract_record_id)
+            )
+            fixtures_frozen = await self.exec_as_root(
+                environment,
+                command=f"python3 -c {shlex.quote(fixture_program)}",
+            )
+            if fixtures_frozen.return_code != 0:
+                return {
+                    "ok": False,
+                    "iteration": iteration,
+                    "worker_snapshot_ref": worker_snapshot_ref,
+                    "status": "execution_test_fixture_freeze_failed",
+                    "error": (
+                        fixtures_frozen.stderr
+                        or fixtures_frozen.stdout
+                        or "no output"
+                    )[-4000:],
+                }
         qa_intake_doctor = await self._graph_doctor_report(
             environment, graph_path=frozen_graph_path
         )
         graph_digest = qa_intake_doctor.get("graph_digest")
+        selected_frozen_contract_id = qa_intake_doctor.get(
+            "execution_test_contract", {}
+        ).get("contract_record_id")
         exact_bytes_match = (
             prefreeze_doctor.get("graph_bytes_digest")
             == qa_intake_doctor.get("graph_bytes_digest")
@@ -2481,6 +2577,10 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
             or qa_intake_doctor.get("structurally_valid") is not True
             or not isinstance(graph_digest, str)
             or not exact_bytes_match
+            or (
+                include_execution_test_fixtures
+                and selected_frozen_contract_id != selected_contract_record_id
+            )
         ):
             invalid_identity = {
                 "schema_version": "charting-loop/frozen-graph-revision/v1",
@@ -2525,6 +2625,13 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
             "position_ref": qa_intake_doctor.get("latest_position_ref"),
             "direction_digest": qa_intake_doctor.get("direction_digest"),
             "acceptance_root": qa_intake_doctor.get("acceptance_root"),
+            "execution_test_contract_record_id": qa_intake_doctor.get(
+                "execution_test_contract", {}
+            ).get("contract_record_id"),
+            "execution_test_contract_digest": qa_intake_doctor.get(
+                "execution_test_contract", {}
+            ).get("contract_digest"),
+            "execution_test_fixture_manifest_path": fixture_manifest_path,
             "exact_graph_bytes_match": exact_bytes_match,
         }
         await self._write_root_json(
@@ -2759,6 +2866,99 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
             }
         return result
 
+    async def _read_execution_test_audit(
+        self,
+        environment: BaseEnvironment,
+        *,
+        path: str,
+        study_profile_digest: str,
+        candidate: dict[str, Any],
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        result = await environment.exec(
+            command=f"python3 -c {shlex.quote(remote_json_read_program(path))}",
+            user=environment.default_user,
+        )
+        if result.return_code != 0 or not result.stdout:
+            return None, {
+                "valid": False,
+                "errors": ["EXECUTION_TEST_AUDIT_UNREADABLE"],
+                "outcome": "not_assessed",
+                "revision_requested": False,
+            }
+        try:
+            value = load_qa_json_text(result.stdout)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None, {
+                "valid": False,
+                "errors": ["EXECUTION_TEST_AUDIT_JSON"],
+                "outcome": "not_assessed",
+                "revision_requested": False,
+            }
+        errors = validate_execution_test_audit(
+            value,
+            study_profile_digest=study_profile_digest,
+            graph_digest=str(candidate["graph_digest"]),
+            contract_record_id=str(candidate["execution_test_contract_record_id"]),
+            contract_digest=str(candidate["execution_test_contract_digest"]),
+        )
+        outcome = value.get("outcome") if not errors else "not_assessed"
+        return value, {
+            "valid": not errors,
+            "errors": errors,
+            "outcome": outcome,
+            "revision_requested": not errors and outcome == "fail" and bool(
+                value.get("findings")
+            ),
+            "advisory_only": True,
+            "blocking_gate": False,
+            "authorizes_mutation": False,
+        }
+
+    async def _append_execution_test_qa_assessment(
+        self,
+        environment: BaseEnvironment,
+        *,
+        qa_path: str,
+        candidate: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Runner appends exact QA bytes without granting mutation authority."""
+
+        program = (
+            "import json; from pathlib import Path; "
+            "from corridor_kit.core import sha256_json; "
+            "from corridor_kit.graph import append_graph_record, EXECUTION_TEST_QA_ASSESSMENT_SCHEMA; "
+            f"a=json.loads(Path({qa_path!r}).read_text(encoding='utf-8')); "
+            "n={'schema_version':EXECUTION_TEST_QA_ASSESSMENT_SCHEMA,"
+            f"'contract_record_id':{candidate['execution_test_contract_record_id']!r},"
+            f"'contract_digest':{candidate['execution_test_contract_digest']!r},"
+            "'outcome':a['outcome'],'findings':a['findings']}; "
+            "b={**n,'assessment_digest':sha256_json(n)}; "
+            f"r=append_graph_record(Path({GRAPH_PATH!r}),record_type='execution_test_qa_assessment',actor='qa',body=b); "
+            "print(json.dumps(r,sort_keys=True))"
+        )
+        appended = await environment.exec(
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                f"python3 -c {shlex.quote(program)}"
+            ),
+            user=environment.default_user,
+        )
+        lines = [line for line in (appended.stdout or "").splitlines() if line.strip()]
+        if appended.return_code != 0 or not lines:
+            return {
+                "ok": False,
+                "status": "execution_test_qa_append_failed",
+                "error": (appended.stderr or appended.stdout or "no output")[-4000:],
+            }
+        try:
+            return {"ok": True, **json.loads(lines[-1])}
+        except json.JSONDecodeError:
+            return {
+                "ok": False,
+                "status": "execution_test_qa_append_unreadable",
+                "error": (appended.stdout or "")[-4000:],
+            }
+
     async def _read_graph_audit(
         self,
         environment: BaseEnvironment,
@@ -2857,7 +3057,9 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
             "builder_present": False,
             "roles": ["worker", "qa"],
             "task_clock_roles": ["worker", "qa"],
-            "qa_schedule": "compile_candidate_then_each_worker_freeze",
+            "qa_schedule": (
+                "compile_candidate_then_execution_test_contract_then_each_worker_freeze"
+            ),
             "qa_budget_is_separate": False,
             "phase_events": [
                 "study_profile_frozen",
@@ -3049,7 +3251,207 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
 
         metadata["compile_qa_decision"] = compile_decision
         metadata["rule_closure"] = rule_closure
+        execution_test_iteration = 0
+        execution_test_candidate: dict[str, Any] | None = None
+        execution_test_qa_path: str | None = None
+        execution_test_qa_assessment_record_id: str | None = None
+        execution_test_decision: dict[str, Any] = {
+            "valid": False,
+            "errors": ["EXECUTION_TEST_QA_NOT_RUN"],
+            "outcome": "not_assessed",
+            "revision_requested": False,
+            "advisory_only": True,
+            "blocking_gate": False,
+            "authorizes_mutation": False,
+        }
         if rule_closure is not None and _remaining_seconds(execution_deadline) > 0:
+            while _remaining_seconds(execution_deadline) > 0:
+                execution_test_iteration += 1
+                execution_test_qa_assessment_record_id = None
+                if execution_test_candidate is None:
+                    plan_prompt = graph_execution_test_plan_prompt(
+                        instruction,
+                        arm=self.ARM,
+                        study_profile_digest=str(profile["profile_digest"]),
+                        graph_digest=str(rule_closure["graph_digest"]),
+                        qa_assessment_ref=str(rule_closure["qa_assessment_ref"]),
+                        remaining_seconds=_remaining_seconds(execution_deadline),
+                        method_text=method_text,
+                    )
+                    phase = "worker-execution-test-plan"
+                else:
+                    assert execution_test_qa_path is not None
+                    plan_prompt = graph_execution_test_repair_prompt(
+                        instruction,
+                        arm=self.ARM,
+                        study_profile_digest=str(profile["profile_digest"]),
+                        prior_contract_record_id=str(
+                            execution_test_candidate[
+                                "execution_test_contract_record_id"
+                            ]
+                        ),
+                        prior_contract_digest=str(
+                            execution_test_candidate[
+                                "execution_test_contract_digest"
+                            ]
+                        ),
+                        qa_path=execution_test_qa_path,
+                        remaining_seconds=_remaining_seconds(execution_deadline),
+                        method_text=method_text,
+                    )
+                    phase = f"worker-execution-test-revision-{execution_test_iteration:04d}"
+                _, plan_run = await self._resume_role(
+                    "worker",
+                    worker,
+                    plan_prompt,
+                    environment,
+                    phase=phase,
+                    deadline=execution_deadline,
+                )
+                self._record_phase_outcome(metadata, plan_run, context)
+                execution_test_candidate = await self._freeze_graph_revision(
+                    environment,
+                    iteration=execution_test_iteration,
+                    worker_snapshot_ref=(
+                        f"execution-test-contract-{execution_test_iteration:04d}"
+                    ),
+                    namespace="execution-test",
+                    include_execution_test_fixtures=True,
+                )
+                metadata.setdefault("execution_test_candidates", []).append(
+                    execution_test_candidate
+                )
+                if execution_test_candidate.get("ok") is not True:
+                    metadata["phase_events"].append(
+                        "execution_test_candidate_freeze_failed"
+                    )
+                    break
+                contract_record_id = execution_test_candidate.get(
+                    "execution_test_contract_record_id"
+                )
+                contract_digest = execution_test_candidate.get(
+                    "execution_test_contract_digest"
+                )
+                fixture_manifest_path = execution_test_candidate.get(
+                    "execution_test_fixture_manifest_path"
+                )
+                if not all(
+                    isinstance(item, str) and item
+                    for item in (
+                        contract_record_id,
+                        contract_digest,
+                        fixture_manifest_path,
+                    )
+                ):
+                    metadata["phase_events"].append(
+                        "execution_test_candidate_identity_missing"
+                    )
+                    break
+                execution_test_qa_path = (
+                    PurePosixPath(RUNTIME_ROOT)
+                    / "qa"
+                    / f"execution-test-audit-{execution_test_iteration:04d}.json"
+                ).as_posix()
+                await self._open_qa_directory(environment)
+                try:
+                    test_qa_prompt = graph_execution_test_qa_prompt(
+                        instruction,
+                        arm=self.ARM,
+                        study_profile_digest=str(profile["profile_digest"]),
+                        graph_digest=str(execution_test_candidate["graph_digest"]),
+                        contract_record_id=str(contract_record_id),
+                        contract_digest=str(contract_digest),
+                        fixture_manifest_path=str(fixture_manifest_path),
+                        graph_path=str(execution_test_candidate["graph_path"]),
+                        qa_output_path=execution_test_qa_path,
+                        remaining_seconds=_remaining_seconds(execution_deadline),
+                        method_text=method_text,
+                        audit_iteration=execution_test_iteration,
+                    )
+                    if qa_started:
+                        _, test_qa_run = await self._resume_role(
+                            "qa",
+                            qa,
+                            test_qa_prompt,
+                            environment,
+                            phase=f"execution-test-qa-{execution_test_iteration:04d}",
+                            deadline=execution_deadline,
+                        )
+                    else:
+                        _, test_qa_run = await self._run_new_role(
+                            "qa",
+                            qa,
+                            test_qa_prompt,
+                            environment,
+                            deadline=execution_deadline,
+                        )
+                        qa_started = True
+                    qa_snapshot = await self._freeze_submission_paths(
+                        environment,
+                        role="qa",
+                        paths=[execution_test_qa_path],
+                    )
+                    metadata["submission_snapshots"].append(qa_snapshot)
+                finally:
+                    await self._seal_qa_directory(environment)
+                self._record_phase_outcome(metadata, test_qa_run, context)
+                test_assessment, execution_test_decision = (
+                    await self._read_execution_test_audit(
+                        environment,
+                        path=execution_test_qa_path,
+                        study_profile_digest=str(profile["profile_digest"]),
+                        candidate=execution_test_candidate,
+                    )
+                )
+                metadata["qa_audits"].append(
+                    {
+                        "kind": "execution_test_pre_action",
+                        "iteration": execution_test_iteration,
+                        "qa_path": execution_test_qa_path,
+                        "graph_digest": execution_test_candidate["graph_digest"],
+                        "contract_record_id": contract_record_id,
+                        "contract_digest": contract_digest,
+                        "decision": execution_test_decision,
+                        "assessment": test_assessment,
+                    }
+                )
+                if execution_test_decision.get("valid") is True:
+                    appended = await self._append_execution_test_qa_assessment(
+                        environment,
+                        qa_path=execution_test_qa_path,
+                        candidate=execution_test_candidate,
+                    )
+                    metadata.setdefault(
+                        "execution_test_assessment_records", []
+                    ).append(appended)
+                    if appended.get("ok") is True and isinstance(
+                        appended.get("record_id"), str
+                    ):
+                        execution_test_qa_assessment_record_id = str(
+                            appended["record_id"]
+                        )
+                if execution_test_decision.get("outcome") == "pass":
+                    metadata["phase_events"].append("execution_test_qa_passed")
+                    break
+                if (
+                    execution_test_decision.get("revision_requested") is True
+                    and execution_test_iteration < 2
+                    and _remaining_seconds(execution_deadline) > 0
+                ):
+                    metadata["phase_events"].append(
+                        "execution_test_qa_returned_for_revision"
+                    )
+                    continue
+                metadata["phase_events"].append(
+                    "execution_test_unresolved_but_nonblocking"
+                )
+                break
+
+        metadata["execution_test_qa_decision"] = execution_test_decision
+        if rule_closure is not None and _remaining_seconds(execution_deadline) > 0:
+            live_doctor = await self._graph_doctor_report(
+                environment, graph_path=GRAPH_PATH
+            )
             _, implementation_run = await self._resume_role(
                 "worker",
                 worker,
@@ -3057,10 +3459,44 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
                     instruction,
                     arm=self.ARM,
                     study_profile_digest=str(profile["profile_digest"]),
-                    graph_digest=str(rule_closure["graph_digest"]),
+                    graph_digest=str(
+                        live_doctor.get("graph_digest", rule_closure["graph_digest"])
+                    ),
                     qa_assessment_ref=str(rule_closure["qa_assessment_ref"]),
                     remaining_seconds=_remaining_seconds(execution_deadline),
                     method_text=method_text,
+                    execution_test_contract_record_id=(
+                        str(
+                            execution_test_candidate.get(
+                                "execution_test_contract_record_id"
+                            )
+                        )
+                        if execution_test_candidate
+                        and execution_test_candidate.get(
+                            "execution_test_contract_record_id"
+                        )
+                        else None
+                    ),
+                    execution_test_contract_digest=(
+                        str(
+                            execution_test_candidate.get(
+                                "execution_test_contract_digest"
+                            )
+                        )
+                        if execution_test_candidate
+                        and execution_test_candidate.get(
+                            "execution_test_contract_digest"
+                        )
+                        else None
+                    ),
+                    execution_test_qa_outcome=str(
+                        execution_test_decision.get("outcome", "not_assessed")
+                        if execution_test_qa_assessment_record_id is not None
+                        else "missing"
+                    ),
+                    execution_test_qa_assessment_record_id=(
+                        execution_test_qa_assessment_record_id
+                    ),
                 ),
                 environment,
                 phase="worker-implementation",
@@ -3210,6 +3646,211 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
             if _remaining_seconds(execution_deadline) <= 0:
                 metadata["phase_events"].append("repair_skipped_task_deadline")
                 break
+
+            repair_test_candidate: dict[str, Any] | None = None
+            repair_test_decision: dict[str, Any] = {
+                "valid": False,
+                "errors": ["REPAIR_EXECUTION_TEST_QA_NOT_RUN"],
+                "outcome": "not_assessed",
+                "revision_requested": False,
+                "advisory_only": True,
+                "blocking_gate": False,
+                "authorizes_mutation": False,
+            }
+            repair_test_qa_path: str | None = None
+            repair_test_qa_assessment_record_id: str | None = None
+            for repair_test_iteration in range(1, 3):
+                if _remaining_seconds(execution_deadline) <= 0:
+                    metadata["phase_events"].append(
+                        "repair_execution_test_skipped_task_deadline"
+                    )
+                    break
+                repair_test_qa_assessment_record_id = None
+                if repair_test_candidate is None:
+                    repair_plan_prompt = graph_result_repair_test_plan_prompt(
+                        instruction,
+                        arm=self.ARM,
+                        study_profile_digest=str(profile["profile_digest"]),
+                        graph_digest=str(graph_revision["graph_digest"]),
+                        audited_snapshot_ref=snapshot_ref,
+                        qa_path=qa_path,
+                        remaining_seconds=_remaining_seconds(execution_deadline),
+                        method_text=method_text,
+                    )
+                    repair_plan_phase = (
+                        f"repair-execution-test-plan-{audit_iteration:04d}"
+                    )
+                else:
+                    assert repair_test_qa_path is not None
+                    repair_plan_prompt = graph_execution_test_repair_prompt(
+                        instruction,
+                        arm=self.ARM,
+                        study_profile_digest=str(profile["profile_digest"]),
+                        prior_contract_record_id=str(
+                            repair_test_candidate[
+                                "execution_test_contract_record_id"
+                            ]
+                        ),
+                        prior_contract_digest=str(
+                            repair_test_candidate[
+                                "execution_test_contract_digest"
+                            ]
+                        ),
+                        qa_path=repair_test_qa_path,
+                        remaining_seconds=_remaining_seconds(execution_deadline),
+                        method_text=method_text,
+                    )
+                    repair_plan_phase = (
+                        "repair-execution-test-revision-"
+                        f"{audit_iteration:04d}-{repair_test_iteration:04d}"
+                    )
+                _, repair_plan_run = await self._resume_role(
+                    "worker",
+                    worker,
+                    repair_plan_prompt,
+                    environment,
+                    phase=repair_plan_phase,
+                    deadline=execution_deadline,
+                )
+                self._record_phase_outcome(metadata, repair_plan_run, context)
+                repair_test_candidate = await self._freeze_graph_revision(
+                    environment,
+                    iteration=repair_test_iteration,
+                    worker_snapshot_ref=(
+                        "repair-execution-test-contract-"
+                        f"{audit_iteration:04d}-{repair_test_iteration:04d}"
+                    ),
+                    namespace=f"repair-execution-test-{audit_iteration:04d}",
+                    include_execution_test_fixtures=True,
+                )
+                metadata.setdefault("repair_execution_test_candidates", []).append(
+                    repair_test_candidate
+                )
+                if repair_test_candidate.get("ok") is not True:
+                    metadata["phase_events"].append(
+                        "repair_execution_test_candidate_freeze_failed"
+                    )
+                    break
+                repair_contract_record_id = repair_test_candidate.get(
+                    "execution_test_contract_record_id"
+                )
+                repair_contract_digest = repair_test_candidate.get(
+                    "execution_test_contract_digest"
+                )
+                repair_fixture_manifest_path = repair_test_candidate.get(
+                    "execution_test_fixture_manifest_path"
+                )
+                if not all(
+                    isinstance(item, str) and item
+                    for item in (
+                        repair_contract_record_id,
+                        repair_contract_digest,
+                        repair_fixture_manifest_path,
+                    )
+                ):
+                    metadata["phase_events"].append(
+                        "repair_execution_test_candidate_identity_missing"
+                    )
+                    break
+                repair_test_qa_path = (
+                    PurePosixPath(RUNTIME_ROOT)
+                    / "qa"
+                    / (
+                        "repair-execution-test-audit-"
+                        f"{audit_iteration:04d}-{repair_test_iteration:04d}.json"
+                    )
+                ).as_posix()
+                await self._open_qa_directory(environment)
+                try:
+                    repair_test_qa_prompt = graph_execution_test_qa_prompt(
+                        instruction,
+                        arm=self.ARM,
+                        study_profile_digest=str(profile["profile_digest"]),
+                        graph_digest=str(repair_test_candidate["graph_digest"]),
+                        contract_record_id=str(repair_contract_record_id),
+                        contract_digest=str(repair_contract_digest),
+                        fixture_manifest_path=str(repair_fixture_manifest_path),
+                        graph_path=str(repair_test_candidate["graph_path"]),
+                        qa_output_path=repair_test_qa_path,
+                        remaining_seconds=_remaining_seconds(execution_deadline),
+                        method_text=method_text,
+                        audit_iteration=repair_test_iteration,
+                    )
+                    _, repair_test_qa_run = await self._resume_role(
+                        "qa",
+                        qa,
+                        repair_test_qa_prompt,
+                        environment,
+                        phase=(
+                            "repair-execution-test-qa-"
+                            f"{audit_iteration:04d}-{repair_test_iteration:04d}"
+                        ),
+                        deadline=execution_deadline,
+                    )
+                    repair_qa_snapshot = await self._freeze_submission_paths(
+                        environment,
+                        role="qa",
+                        paths=[repair_test_qa_path],
+                    )
+                    metadata["submission_snapshots"].append(repair_qa_snapshot)
+                finally:
+                    await self._seal_qa_directory(environment)
+                self._record_phase_outcome(metadata, repair_test_qa_run, context)
+                repair_test_assessment, repair_test_decision = (
+                    await self._read_execution_test_audit(
+                        environment,
+                        path=repair_test_qa_path,
+                        study_profile_digest=str(profile["profile_digest"]),
+                        candidate=repair_test_candidate,
+                    )
+                )
+                metadata["qa_audits"].append(
+                    {
+                        "kind": "repair_execution_test_pre_action",
+                        "result_audit_iteration": audit_iteration,
+                        "iteration": repair_test_iteration,
+                        "qa_path": repair_test_qa_path,
+                        "graph_digest": repair_test_candidate["graph_digest"],
+                        "contract_record_id": repair_contract_record_id,
+                        "contract_digest": repair_contract_digest,
+                        "decision": repair_test_decision,
+                        "assessment": repair_test_assessment,
+                    }
+                )
+                if repair_test_decision.get("valid") is True:
+                    appended = await self._append_execution_test_qa_assessment(
+                        environment,
+                        qa_path=repair_test_qa_path,
+                        candidate=repair_test_candidate,
+                    )
+                    metadata.setdefault(
+                        "execution_test_assessment_records", []
+                    ).append(appended)
+                    if appended.get("ok") is True and isinstance(
+                        appended.get("record_id"), str
+                    ):
+                        repair_test_qa_assessment_record_id = str(
+                            appended["record_id"]
+                        )
+                if repair_test_decision.get("outcome") == "pass":
+                    metadata["phase_events"].append(
+                        "repair_execution_test_qa_passed"
+                    )
+                    break
+                if (
+                    repair_test_decision.get("revision_requested") is True
+                    and repair_test_iteration < 2
+                    and _remaining_seconds(execution_deadline) > 0
+                ):
+                    metadata["phase_events"].append(
+                        "repair_execution_test_qa_returned_for_revision"
+                    )
+                    continue
+                metadata["phase_events"].append(
+                    "repair_execution_test_unresolved_but_nonblocking"
+                )
+                break
+
             _, repair_run = await self._resume_role(
                 "worker",
                 worker,
@@ -3222,6 +3863,38 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
                     qa_path=qa_path,
                     remaining_seconds=_remaining_seconds(execution_deadline),
                     method_text=method_text,
+                    execution_test_contract_record_id=(
+                        str(
+                            repair_test_candidate.get(
+                                "execution_test_contract_record_id"
+                            )
+                        )
+                        if repair_test_candidate
+                        and repair_test_candidate.get(
+                            "execution_test_contract_record_id"
+                        )
+                        else None
+                    ),
+                    execution_test_contract_digest=(
+                        str(
+                            repair_test_candidate.get(
+                                "execution_test_contract_digest"
+                            )
+                        )
+                        if repair_test_candidate
+                        and repair_test_candidate.get(
+                            "execution_test_contract_digest"
+                        )
+                        else None
+                    ),
+                    execution_test_qa_outcome=str(
+                        repair_test_decision.get("outcome", "not_assessed")
+                        if repair_test_qa_assessment_record_id is not None
+                        else "missing"
+                    ),
+                    execution_test_qa_assessment_record_id=(
+                        repair_test_qa_assessment_record_id
+                    ),
                 ),
                 environment,
                 phase=f"repair-{audit_iteration:04d}",

@@ -15,6 +15,9 @@ from corridor_kit import (
     AUTHORING_SCHEMA,
     CAPABILITY_SCHEMA,
     FACT_CANDIDATES_SCHEMA,
+    EXECUTION_TEST_CONTRACT_SCHEMA,
+    EXECUTION_TEST_QA_ASSESSMENT_SCHEMA,
+    EXECUTION_TEST_RECEIPT_SCHEMA,
     KIT_VERSION,
     WITNESSES_SCHEMA,
     WORK_BACKLOG_SCHEMA,
@@ -2293,33 +2296,71 @@ class TypedRuleCompilerTests(unittest.TestCase):
                 dependant = dependency["to_ref"]
                 prerequisite = dependency["from_ref"]
             checklist_ids = sorted(checklist_by_id)
+            position_body = {
+                "position_id": "P-ACTIVE-CONTEXT",
+                "previous_position_ref": None,
+                "task_identity": {"task_ref": "public/v4-example"},
+                "scope": {"working_set": ["/workspace"]},
+                "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                "rule_record_ids": sorted(rule_records.values()),
+                "rule_closure_digests": closure_digests,
+                "fact_receipt_ids": [],
+                "artifact_record_ids": [],
+                "checkpoint_kind": "row_progress",
+                "checklist_item_ids": checklist_ids,
+                "ready_item_ids": [prerequisite],
+                "blocked_item_ids": [dependant],
+                "unresolved_checklist_item_ids": checklist_ids,
+                "checklist_assessments": {
+                    item_id: {
+                        "status": "unknown",
+                        "applicability_status": "applicable",
+                        "witness_fact_receipt_ids": [],
+                    }
+                    for item_id in checklist_ids
+                },
+            }
+            initial_position = append_graph_record(
+                path,
+                record_type="position_checkpoint",
+                actor="worker",
+                body=position_body,
+            )["record"]
+            ready_rule_id = checklist_by_id[prerequisite]["source_rule_id"]
+            applicability_fact = append_graph_record(
+                path,
+                record_type="fact_proposal",
+                actor="worker",
+                body={
+                    "fact_id": "F-UNRELATED-N-A",
+                    "statement": "An unrelated observation exists.",
+                    "evidence_ref": "probe:unrelated",
+                    "evidence_digest": "sha256:" + "6" * 64,
+                    "position_ref": initial_position["record_id"],
+                },
+            )["record"]
+            applicability_receipt = append_graph_record(
+                path,
+                record_type="fact_admission",
+                actor="worker",
+                body={
+                    "fact_id": "F-UNRELATED-N-A",
+                    "fact_record_id": applicability_fact["record_id"],
+                    "admission_rule_id": ready_rule_id,
+                    "admission_rule_record_id": rule_records[ready_rule_id],
+                    "admitter_ref": "worker:test",
+                    "receipt_ref": "receipt:unrelated",
+                },
+            )["record"]
             position = append_graph_record(
                 path,
                 record_type="position_checkpoint",
                 actor="worker",
                 body={
-                    "position_id": "P-ACTIVE-CONTEXT",
-                    "previous_position_ref": None,
-                    "task_identity": {"task_ref": "public/v4-example"},
-                    "scope": {"working_set": ["/workspace"]},
-                    "role_assignments": {"executor": "worker", "reviewer": "qa"},
-                    "rule_record_ids": sorted(rule_records.values()),
-                    "rule_closure_digests": closure_digests,
-                    "fact_receipt_ids": [],
-                    "artifact_record_ids": [],
-                    "checkpoint_kind": "row_progress",
-                    "checklist_item_ids": checklist_ids,
-                    "ready_item_ids": [prerequisite],
-                    "blocked_item_ids": [dependant],
-                    "unresolved_checklist_item_ids": checklist_ids,
-                    "checklist_assessments": {
-                        item_id: {
-                            "status": "unknown",
-                            "applicability_status": "applicable",
-                            "witness_fact_receipt_ids": [],
-                        }
-                        for item_id in checklist_ids
-                    },
+                    **position_body,
+                    "position_id": "P-ACTIVE-CONTEXT-WITH-FACT",
+                    "previous_position_ref": initial_position["record_id"],
+                    "fact_receipt_ids": [applicability_receipt["record_id"]],
                 },
             )["record"]
             direction_body = {
@@ -2328,7 +2369,7 @@ class TypedRuleCompilerTests(unittest.TestCase):
                 "statement": "Project the ready Rule before choosing an action.",
                 "rule_record_ids": sorted(rule_records.values()),
                 "rule_closure_digests": closure_digests,
-                "fact_receipt_ids": [],
+                "fact_receipt_ids": [applicability_receipt["record_id"]],
                 "evidence_refs": [],
                 "checklist_item_ids": checklist_ids,
                 "ready_item_ids": [prerequisite],
@@ -2366,7 +2407,6 @@ class TypedRuleCompilerTests(unittest.TestCase):
                 bounded["compact_hard_constraint_ids"],
             )
 
-            ready_rule_id = checklist_by_id[prerequisite]["source_rule_id"]
             witness_ids = sorted(
                 item["witness_obligation_id"]
                 for item in report["witness_obligation_templates"]
@@ -2429,6 +2469,210 @@ class TypedRuleCompilerTests(unittest.TestCase):
             self.assertNotIn(
                 "direction_semantic_bindings_missing",
                 graph_doctor(path)["incomplete_reasons"],
+            )
+            self.assertIn(
+                "execution_test_contract_missing",
+                graph_doctor(path)["incomplete_reasons"],
+            )
+
+            before_fixture = Path(temporary) / "before-fixture.json"
+            before_fixture.write_text('{"world":"before"}\n', encoding="utf-8")
+            after_fixture = Path(temporary) / "after-fixture.json"
+            after_fixture.write_text('{"world":"after"}\n', encoding="utf-8")
+            source_slice_id = next(
+                item["slice_id"]
+                for rule in self._v4_ir()["rules"]
+                if rule["rule_id"] == ready_rule_id
+                for item in rule["source_slices"]
+            )
+            cases = []
+            for case_kind in ("positive", "boundary"):
+                fixture = (
+                    before_fixture if case_kind == "positive" else after_fixture
+                )
+                cases.append(
+                    {
+                        "probe_id": f"PROBE-{case_kind.upper()}",
+                        "checklist_item_id": prerequisite,
+                        "case_kind": case_kind,
+                        "source_slice_ids": [source_slice_id],
+                        "operator": "code_test",
+                        "fixture_artifacts": [
+                            {
+                                "path": str(fixture),
+                                "digest": sha256_bytes(fixture.read_bytes()),
+                            }
+                        ],
+                        "command": f"python3 {fixture}",
+                        "oracle": (
+                            "The source-bound obligation holds in this exact world."
+                            if case_kind == "positive"
+                            else "The boundary world is rejected without weakening the Rule."
+                        ),
+                        "dependency_refs": [dependency["dependency_id"]],
+                        "predecessor_probe_ids": (
+                            []
+                            if case_kind == "positive"
+                            else ["PROBE-POSITIVE"]
+                        ),
+                        "pre_action_status": "not_run_yet",
+                        "applicability_predicate": None,
+                        "non_applicability_fact_receipt_ids": [],
+                        "unsupported_reason": None,
+                    }
+                )
+            contract_body = {
+                "schema_version": EXECUTION_TEST_CONTRACT_SCHEMA,
+                "contract_id": "EXECUTION-CONTRACT-001",
+                "position_ref": position["record_id"],
+                "direction_record_id": bound_direction["record_id"],
+                "execution_kind": "task_mutation",
+                "selected_checklist_item_ids": [prerequisite],
+                "selected_rule_record_ids": [rule_records[ready_rule_id]],
+                "semantic_edge_ids": [edge_id],
+                "witness_obligation_ids": witness_ids,
+                "probe_cases": cases,
+                "exemption_reason": None,
+            }
+            invalid_na_contract = json.loads(json.dumps(contract_body))
+            invalid_na_contract["contract_id"] = "EXECUTION-CONTRACT-INVALID-N-A"
+            invalid_boundary = invalid_na_contract["probe_cases"][1]
+            invalid_boundary["pre_action_status"] = "not_applicable"
+            invalid_boundary["applicability_predicate"] = "an unrelated predicate"
+            invalid_boundary["non_applicability_fact_receipt_ids"] = [
+                applicability_receipt["record_id"]
+            ]
+            invalid_boundary["unsupported_reason"] = (
+                "The unrelated Fact supposedly makes the boundary inapplicable."
+            )
+            invalid_na_contract["contract_digest"] = sha256_json(invalid_na_contract)
+            with self.assertRaisesRegex(
+                CorridorKitError, "conditional Rule applicability predicate"
+            ):
+                append_graph_record(
+                    path,
+                    record_type="execution_test_contract",
+                    actor="worker",
+                    body=invalid_na_contract,
+                )
+            contract_body["contract_digest"] = sha256_json(contract_body)
+            contract_record = append_graph_record(
+                path,
+                record_type="execution_test_contract",
+                actor="worker",
+                body=contract_body,
+            )["record"]
+            self.assertIn(
+                "execution_test_contract_qa_missing",
+                graph_doctor(path)["incomplete_reasons"],
+            )
+            missing_qa_path = Path(temporary) / "missing-qa-graph.jsonl"
+            missing_qa_path.write_bytes(path.read_bytes())
+            missing_qa_receipt = {
+                "schema_version": EXECUTION_TEST_RECEIPT_SCHEMA,
+                "contract_record_id": contract_record["record_id"],
+                "contract_digest": contract_body["contract_digest"],
+                "probe_id": cases[0]["probe_id"],
+                "outcome": "passed",
+                "pre_action_qa_status": "missing",
+                "pre_action_qa_assessment_record_id": None,
+                "command_digest": sha256_json({"command": cases[0]["command"]}),
+                "result_digest": sha256_bytes(b"probe passed\n"),
+            }
+            missing_qa_receipt["receipt_digest"] = sha256_json(missing_qa_receipt)
+            append_graph_record(
+                missing_qa_path,
+                record_type="execution_test_receipt",
+                actor="worker",
+                body=missing_qa_receipt,
+            )
+            missing_qa_doctor = graph_doctor(missing_qa_path)
+            self.assertTrue(missing_qa_doctor["structurally_valid"])
+            self.assertFalse(missing_qa_doctor["blocking_gate"])
+            self.assertIn(
+                "execution_test_receipt_without_preaction_qa:PROBE-POSITIVE",
+                missing_qa_doctor["incomplete_reasons"],
+            )
+            assessment_body = {
+                "schema_version": EXECUTION_TEST_QA_ASSESSMENT_SCHEMA,
+                "contract_record_id": contract_record["record_id"],
+                "contract_digest": contract_body["contract_digest"],
+                "outcome": "pass",
+                "findings": [],
+            }
+            assessment_body["assessment_digest"] = sha256_json(assessment_body)
+            assessment_record = append_graph_record(
+                path,
+                record_type="execution_test_qa_assessment",
+                actor="qa",
+                body=assessment_body,
+            )["record"]
+            with self.assertRaisesRegex(
+                CorridorKitError, "must precede execution receipts"
+            ):
+                append_graph_record(
+                    missing_qa_path,
+                    record_type="execution_test_qa_assessment",
+                    actor="qa",
+                    body=assessment_body,
+                )
+
+            def receipt_for(case: dict[str, object]) -> dict[str, object]:
+                receipt_body = {
+                    "schema_version": EXECUTION_TEST_RECEIPT_SCHEMA,
+                    "contract_record_id": contract_record["record_id"],
+                    "contract_digest": contract_body["contract_digest"],
+                    "probe_id": case["probe_id"],
+                    "outcome": "passed",
+                    "pre_action_qa_status": "pass",
+                    "pre_action_qa_assessment_record_id": assessment_record[
+                        "record_id"
+                    ],
+                    "command_digest": sha256_json({"command": case["command"]}),
+                    "result_digest": sha256_bytes(b"probe passed\n"),
+                }
+                receipt_body["receipt_digest"] = sha256_json(receipt_body)
+                return receipt_body
+
+            out_of_order_path = Path(temporary) / "out-of-order-graph.jsonl"
+            out_of_order_path.write_bytes(path.read_bytes())
+            for case in reversed(cases):
+                append_graph_record(
+                    out_of_order_path,
+                    record_type="execution_test_receipt",
+                    actor="worker",
+                    body=receipt_for(case),
+                )
+            self.assertIn(
+                "execution_test_receipt_dependency_out_of_order:PROBE-BOUNDARY:PROBE-POSITIVE",
+                graph_doctor(out_of_order_path)["incomplete_reasons"],
+            )
+
+            for case in cases:
+                append_graph_record(
+                    path,
+                    record_type="execution_test_receipt",
+                    actor="worker",
+                    body=receipt_for(case),
+                )
+            doctor = graph_doctor(path)
+            self.assertEqual(
+                contract_record["record_id"],
+                doctor["execution_test_contract"]["contract_record_id"],
+            )
+            self.assertEqual("pass", doctor["execution_test_contract"]["qa_outcome"])
+            self.assertEqual(2, doctor["execution_test_contract"]["receipt_count"])
+            self.assertFalse(
+                any(
+                    reason.startswith("execution_test_")
+                    for reason in doctor["incomplete_reasons"]
+                ),
+                doctor["incomplete_reasons"],
+            )
+            active_with_tests = query_graph(path, kind="active-context")
+            self.assertEqual(
+                [contract_record["record_id"]],
+                active_with_tests["execution_test_contract_ids"],
             )
 
     def test_v4_witness_families_require_explicit_semantics(self) -> None:

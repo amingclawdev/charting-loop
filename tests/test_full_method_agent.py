@@ -1860,6 +1860,45 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("must not mutate", compile_qa)
         self.assertIn("must not ratify", compile_qa)
         self.assertIn(contract.RULE_COMPILE_AUDIT_SCHEMA, compile_qa)
+        execution_plan = contract.graph_execution_test_plan_prompt(
+            "Repair the public task.",
+            arm="method",
+            study_profile_digest=digest,
+            graph_digest="sha256:" + "c" * 64,
+            qa_assessment_ref="sha256:" + "d" * 64,
+            remaining_seconds=920,
+            method_text=method_text,
+        )
+        self.assertIn("pre-action stage", execution_plan)
+        self.assertIn("do not yet mutate", execution_plan)
+        self.assertIn("all\napplicable current Rules", execution_plan)
+        self.assertIn("does not choose an action", execution_plan)
+        self.assertIn("execution_test_contract", execution_plan)
+        self.assertIn("positive case", execution_plan)
+        self.assertIn("negative or boundary case", execution_plan)
+        self.assertIn("predecessor probe IDs", execution_plan)
+        self.assertIn("applicability_predicate", execution_plan)
+        self.assertIn("not_run_yet", execution_plan)
+        self.assertIn("one total task\nclock", execution_plan)
+        execution_qa = contract.graph_execution_test_qa_prompt(
+            "Repair the public task.",
+            arm="method",
+            study_profile_digest=digest,
+            graph_digest="sha256:" + "c" * 64,
+            contract_record_id="sha256:" + "e" * 64,
+            contract_digest="sha256:" + "f" * 64,
+            fixture_manifest_path="/audit/FIXTURES.json",
+            graph_path="/audit/GRAPH.jsonl",
+            qa_output_path="/audit/execution-test.json",
+            remaining_seconds=880,
+            method_text=method_text,
+            audit_iteration=1,
+        )
+        self.assertIn("independent pre-action", execution_qa)
+        self.assertIn("before/after boundary worlds", execution_qa)
+        self.assertIn("timeless union", execution_qa)
+        self.assertIn("cannot prevent\nimplementation", execution_qa)
+        self.assertIn(contract.EXECUTION_TEST_AUDIT_SCHEMA, execution_qa)
         implementation = contract.graph_implementation_prompt(
             "Repair the public task.",
             arm="method",
@@ -1868,15 +1907,20 @@ class FullMethodContractTests(unittest.TestCase):
             qa_assessment_ref="sha256:" + "d" * 64,
             remaining_seconds=900,
             method_text=method_text,
+            execution_test_contract_record_id="sha256:" + "e" * 64,
+            execution_test_contract_digest="sha256:" + "f" * 64,
+            execution_test_qa_outcome="pass",
+            execution_test_qa_assessment_record_id="sha256:" + "a" * 64,
         )
         self.assertIn("now implement", implementation)
-        self.assertIn("initial whole-state `position_checkpoint`", implementation)
-        self.assertIn("`direction_proposal` against that exact Position", implementation)
-        self.assertIn("active-context", implementation)
-        self.assertIn("reverse-trace each", implementation)
-        self.assertIn("semantic_bindings", implementation)
-        self.assertIn("do not turn an unresolved relationship", implementation)
-        self.assertIn("do not put the concrete task action inside Direction", implementation)
+        self.assertIn("pre-action stage already", implementation)
+        self.assertIn("execution test/probe contract", implementation)
+        self.assertIn("Before each selected mutating action", implementation)
+        self.assertIn("execution_test_receipt", implementation)
+        self.assertIn("pre_action_qa_assessment_record_id", implementation)
+        self.assertIn("timeless aggregate", implementation)
+        self.assertIn("new Position", implementation)
+        self.assertIn("Position-bound Direction", implementation)
         self.assertIn("submission freeze", implementation)
         qa = contract.graph_qa_prompt(
             "Repair the public task.",
@@ -1923,6 +1967,21 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("required versus\noptional", qa)
         self.assertIn("must not append a second Rule assessment", qa)
         self.assertIn("not a QA verdict", qa)
+        repair_plan = contract.graph_result_repair_test_plan_prompt(
+            "Repair the public task.",
+            arm="method",
+            study_profile_digest=digest,
+            graph_digest="sha256:" + "9" * 64,
+            audited_snapshot_ref="worker-000001-example",
+            qa_path="/audit/qa.json",
+            remaining_seconds=140,
+            method_text=method_text,
+        )
+        self.assertIn("pre-repair execution choice", repair_plan)
+        self.assertIn("do not yet mutate", repair_plan)
+        self.assertIn("new whole-state Position", repair_plan)
+        self.assertIn("new Direction", repair_plan)
+        self.assertIn("execution_test_contract", repair_plan)
         repair = contract.graph_repair_prompt(
             "Repair the public task.",
             arm="method",
@@ -1932,16 +1991,23 @@ class FullMethodContractTests(unittest.TestCase):
             qa_path="/audit/qa.json",
             remaining_seconds=120,
             method_text=method_text,
+            execution_test_contract_record_id="sha256:" + "e" * 64,
+            execution_test_contract_digest="sha256:" + "f" * 64,
+            execution_test_qa_outcome="pass",
+            execution_test_qa_assessment_record_id="sha256:" + "a" * 64,
         )
         self.assertIn("SAME Worker", repair)
         self.assertIn("Reproduce every witness", repair)
         self.assertIn("Never overwrite or invalidate the prior freeze", repair)
         self.assertIn("same total task clock", repair)
-        self.assertIn("re-project invalidated checklist assessments", repair)
+        self.assertIn("already-frozen\nPosition/Direction/contract", repair)
+        self.assertIn("Do not create a\ncontract and mutate in the same turn", repair)
         self.assertIn("graph doctor", repair)
         self.assertIn("revision_kind", repair)
         self.assertIn("parent_ir_digest", repair)
         self.assertIn("qa_witness_refs", repair)
+        self.assertIn("pre-action contract", repair)
+        self.assertIn("predecessor order", repair)
 
     def test_compile_probe_is_isolated_digest_bound_and_non_scoring(self) -> None:
         method_text = (REPOSITORY_ROOT / "method-paper" / "METHOD.md").read_text(
@@ -1981,7 +2047,10 @@ class FullMethodContractTests(unittest.TestCase):
         agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
         doctor_calls: list[str] = []
         writes: list[dict] = []
+        commands: list[str] = []
         digest = "sha256:" + "d" * 64
+        contract_record_id = "sha256:" + "3" * 64
+        contract_digest = "sha256:" + "4" * 64
 
         async def doctor(self, environment, *, graph_path):
             doctor_calls.append(graph_path)
@@ -1998,9 +2067,14 @@ class FullMethodContractTests(unittest.TestCase):
                 "latest_position_ref": "sha256:" + "f" * 64,
                 "direction_digest": "sha256:" + "1" * 64,
                 "acceptance_root": "sha256:" + "2" * 64,
+                "execution_test_contract": {
+                    "contract_record_id": contract_record_id,
+                    "contract_digest": contract_digest,
+                },
             }
 
         async def exec_root(self, environment, *, command):
+            commands.append(command)
             return types.SimpleNamespace(return_code=0, stdout="", stderr="")
 
         async def write(self, environment, *, path, value):
@@ -2011,7 +2085,10 @@ class FullMethodContractTests(unittest.TestCase):
         agent._write_root_json = types.MethodType(write, agent)
         report = asyncio.run(
             agent._freeze_graph_revision(
-                object(), iteration=1, worker_snapshot_ref="worker-000001-example"
+                object(),
+                iteration=1,
+                worker_snapshot_ref="worker-000001-example",
+                include_execution_test_fixtures=True,
             )
         )
 
@@ -2024,6 +2101,8 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertEqual("sha256:" + "f" * 64, report["position_ref"])
         self.assertEqual("sha256:" + "1" * 64, report["direction_digest"])
         self.assertEqual("sha256:" + "2" * 64, report["acceptance_root"])
+        self.assertEqual(contract_record_id, report["execution_test_contract_record_id"])
+        self.assertTrue(any(contract_record_id in command for command in commands))
         self.assertEqual(report["doctor_report_digest"], writes[0]["doctor_report_digest"])
 
     def test_graph_corridor_finalization_uses_the_contract_corridor_root(self) -> None:
@@ -2217,10 +2296,46 @@ class FullMethodContractTests(unittest.TestCase):
             contract.validate_graph_compile_audit(value, **arguments),
         )
 
+    def test_execution_test_qa_is_identity_bound_and_advisory(self) -> None:
+        value = {
+            "schema_version": contract.EXECUTION_TEST_AUDIT_SCHEMA,
+            "study_profile_digest": "sha256:" + "1" * 64,
+            "graph_digest": "sha256:" + "2" * 64,
+            "contract_record_id": "sha256:" + "3" * 64,
+            "contract_digest": "sha256:" + "4" * 64,
+            "outcome": "pass",
+            "findings": [],
+            "scope_limitations": [],
+        }
+        arguments = {
+            "study_profile_digest": "sha256:" + "1" * 64,
+            "graph_digest": "sha256:" + "2" * 64,
+            "contract_record_id": "sha256:" + "3" * 64,
+            "contract_digest": "sha256:" + "4" * 64,
+        }
+        self.assertEqual(
+            [], contract.validate_execution_test_audit(value, **arguments)
+        )
+        value["outcome"] = "fail"
+        value["findings"] = [
+            "The temporal Rule's negative fixture uses a timeless union."
+        ]
+        self.assertEqual(
+            [], contract.validate_execution_test_audit(value, **arguments)
+        )
+        value["contract_digest"] = "sha256:" + "5" * 64
+        self.assertIn(
+            "EXECUTION_TEST_AUDIT_CONTRACT_DIGEST_IDENTITY",
+            contract.validate_execution_test_audit(value, **arguments),
+        )
+
     def test_graph_agent_profiles_use_one_in_clock_worker_qa_repair_loop(self) -> None:
         adapter = load_harbor_agent_with_stubs()
         method = object.__new__(adapter.ChartingLoopGraphKernelMethodAgent)
         neutral = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
+        # The public doctor freezes the experiment condition at 1.2.0. The
+        # post-Direction evidence records extend that frozen profile without
+        # silently changing its declared task/model/runtime condition.
         self.assertEqual(method.version(), "1.2.0")
         self.assertEqual(neutral.version(), "1.2.0")
         self.assertEqual(method.ROLE_SEQUENCE, ("worker", "qa"))
@@ -2242,7 +2357,16 @@ class FullMethodContractTests(unittest.TestCase):
             'self._resume_role(\n                "worker"',
             "graph_compile_qa_prompt(",
             "graph_compile_repair_prompt(",
+            "graph_execution_test_plan_prompt(",
+            "graph_execution_test_qa_prompt(",
+            "_append_execution_test_qa_assessment(",
+            "execution_test_iteration < 2",
+            "resolved.relative_to(allowed_root)",
+            "fixtures_by_identity",
+            "selected_contract_record_id",
+            'record.get("record_id") == __CONTRACT_RECORD_ID__',
             "graph_implementation_prompt(",
+            "graph_result_repair_test_plan_prompt(",
             "_install_rule_closure(",
             "graph_repair_prompt(",
             '"target.write_bytes(source.read_bytes()); target.chmod(0o444)"',
@@ -2270,6 +2394,8 @@ class FullMethodContractTests(unittest.TestCase):
             "rule_closure_established": False,
             "position_ref": None,
             "direction_digest": None,
+            "execution_test_audits": 0,
+            "result_audits": 0,
         }
 
         async def write_root_json(self, environment, *, path, value):
@@ -2290,7 +2416,7 @@ class FullMethodContractTests(unittest.TestCase):
                 test_case.assertFalse(state["rule_closure_established"])
                 test_case.assertIsNone(state["position_ref"])
                 test_case.assertIsNone(state["direction_digest"])
-            if role == "worker" and phase == "worker-implementation":
+            if role == "worker" and phase == "worker-execution-test-plan":
                 test_case.assertTrue(state["rule_closure_established"])
                 test_case.assertIn("RuleClosure", prompt)
                 test_case.assertIn("position_checkpoint", prompt)
@@ -2299,7 +2425,26 @@ class FullMethodContractTests(unittest.TestCase):
                 state["direction_digest"] = "sha256:" + "f" * 64
                 events.append("position-checkpoint-created")
                 events.append("direction-proposal-created")
+                events.append("execution-test-contract-created")
+            if role == "worker" and phase.startswith(
+                "worker-execution-test-revision-"
+            ):
+                test_case.assertIn("before implementation", prompt)
+                test_case.assertIn("source-grounded finding", prompt)
+                events.append("execution-test-contract-revised")
+            if role == "worker" and phase == "worker-implementation":
+                test_case.assertTrue(state["rule_closure_established"])
+                test_case.assertIn("execution test/probe contract", prompt)
+                test_case.assertIn("not_assessed", prompt)
                 state["worker_snapshot"] = "worker-000001-implemented"
+            if role == "worker" and phase == "repair-execution-test-plan-0001":
+                test_case.assertIn("pre-repair execution choice", prompt)
+                test_case.assertIn("do not yet mutate", prompt)
+                events.append("repair-position-direction-contract-created")
+            if role == "worker" and phase == "repair-0001":
+                test_case.assertIn("already-frozen", prompt)
+                test_case.assertIn("Do not create a", prompt)
+                state["worker_snapshot"] = "worker-000002-repaired"
             return adapter.AgentContext(), {
                 "phase": phase,
                 "role": role,
@@ -2317,6 +2462,13 @@ class FullMethodContractTests(unittest.TestCase):
                 "available": True,
                 "snapshot_count": len(snapshots),
                 "snapshots": snapshots,
+            }
+
+        async def graph_doctor_report(self, environment, *, graph_path):
+            return {
+                "structurally_valid": True,
+                "classification": "structurally_valid_but_incomplete",
+                "graph_digest": "sha256:" + "2" * 64,
             }
 
         async def freeze_compile(self, environment, *, iteration, ir_path):
@@ -2362,18 +2514,37 @@ class FullMethodContractTests(unittest.TestCase):
                 "assessed_graph_path": f"/audit/rule-closure-{iteration}.jsonl",
             }
 
-        async def freeze_graph(self, environment, *, iteration, worker_snapshot_ref):
+        async def freeze_graph(
+            self,
+            environment,
+            *,
+            iteration,
+            worker_snapshot_ref,
+            namespace="result",
+            include_execution_test_fixtures=False,
+        ):
             test_case.assertTrue(state["rule_closure_established"])
             test_case.assertIsNotNone(state["position_ref"])
             test_case.assertIsNotNone(state["direction_digest"])
-            events.append(f"graph-freeze-{iteration}:{worker_snapshot_ref}")
-            return {
+            events.append(
+                f"graph-freeze-{namespace}-{iteration}:{worker_snapshot_ref}"
+            )
+            result = {
                 "ok": True,
                 "graph_path": f"/audit/graph-{iteration}.jsonl",
                 "graph_digest": "sha256:" + str(iteration) * 64,
                 "position_ref": state["position_ref"],
                 "direction_digest": state["direction_digest"],
             }
+            if include_execution_test_fixtures:
+                result.update(
+                    {
+                        "execution_test_contract_record_id": "sha256:" + "8" * 64,
+                        "execution_test_contract_digest": "sha256:" + "9" * 64,
+                        "execution_test_fixture_manifest_path": "/audit/FIXTURES.json",
+                    }
+                )
+            return result
 
         async def open_qa(self, environment):
             events.append("qa-open")
@@ -2394,7 +2565,8 @@ class FullMethodContractTests(unittest.TestCase):
             graph_digest,
             snapshot_ref,
         ):
-            repair = False
+            state["result_audits"] += 1
+            repair = state["result_audits"] == 1
             events.append(f"qa-decision:{snapshot_ref}:{repair}")
             return {"snapshot_ref": snapshot_ref}, {
                 "valid": True,
@@ -2405,6 +2577,40 @@ class FullMethodContractTests(unittest.TestCase):
                 "blocking_gate": False,
                 "authorizes_mutation": False,
             }
+
+        async def read_execution_test_audit(
+            self, environment, *, path, study_profile_digest, candidate
+        ):
+            state["execution_test_audits"] += 1
+            first = state["execution_test_audits"] == 1
+            initial_unresolved = state["execution_test_audits"] == 2
+            outcome = "fail" if first else "not_assessed" if initial_unresolved else "pass"
+            finding = (
+                "The timeless union fixture does not distinguish the source-bound before and after worlds."
+                if first
+                else "The revised boundary fixture could not be fully assessed before the shared deadline."
+                if initial_unresolved
+                else None
+            )
+            events.append(f"execution-test-decision:{outcome}")
+            return {
+                "outcome": outcome,
+                "findings": [] if finding is None else [finding],
+            }, {
+                "valid": True,
+                "errors": [],
+                "outcome": outcome,
+                "revision_requested": first,
+                "advisory_only": True,
+                "blocking_gate": False,
+                "authorizes_mutation": False,
+            }
+
+        async def append_execution_test_assessment(
+            self, environment, *, qa_path, candidate
+        ):
+            events.append("execution-test-assessment-appended")
+            return {"ok": True, "record_id": "sha256:" + "a" * 64}
 
         async def seal_graph(self, environment):
             events.append("final-graph-sealed")
@@ -2424,6 +2630,7 @@ class FullMethodContractTests(unittest.TestCase):
             ("_run_new_role", run_new),
             ("_resume_role", resume),
             ("_worker_revision_progress", progress),
+            ("_graph_doctor_report", graph_doctor_report),
             ("_freeze_rule_compile_candidate", freeze_compile),
             ("_read_rule_compile_audit", read_compile),
             ("_install_rule_closure", install_closure),
@@ -2432,6 +2639,11 @@ class FullMethodContractTests(unittest.TestCase):
             ("_seal_qa_directory", seal_qa),
             ("_freeze_submission_paths", freeze_submission),
             ("_read_graph_audit", read_audit),
+            ("_read_execution_test_audit", read_execution_test_audit),
+            (
+                "_append_execution_test_qa_assessment",
+                append_execution_test_assessment,
+            ),
             ("_seal_graph_corridor", seal_graph),
             ("_restore_latest_worker_submission", restore),
         ):
@@ -2466,22 +2678,56 @@ class FullMethodContractTests(unittest.TestCase):
                 "qa-seal",
                 "compile-decision-2:True",
                 "rule-closure-2",
-                "worker-resume:worker-implementation",
+                "worker-resume:worker-execution-test-plan",
                 "position-checkpoint-created",
                 "direction-proposal-created",
-                "graph-freeze-1:worker-000001-implemented",
+                "execution-test-contract-created",
+                "graph-freeze-execution-test-1:execution-test-contract-0001",
+                "qa-open",
+                "qa-resume:execution-test-qa-0001",
+                "qa-report-frozen",
+                "qa-seal",
+                "execution-test-decision:fail",
+                "execution-test-assessment-appended",
+                "worker-resume:worker-execution-test-revision-0002",
+                "execution-test-contract-revised",
+                "graph-freeze-execution-test-2:execution-test-contract-0002",
+                "qa-open",
+                "qa-resume:execution-test-qa-0002",
+                "qa-report-frozen",
+                "qa-seal",
+                "execution-test-decision:not_assessed",
+                "execution-test-assessment-appended",
+                "worker-resume:worker-implementation",
+                "graph-freeze-result-1:worker-000001-implemented",
                 "qa-open",
                 "qa-resume:qa-audit-0001",
                 "qa-report-frozen",
                 "qa-seal",
-                "qa-decision:worker-000001-implemented:False",
+                "qa-decision:worker-000001-implemented:True",
+                "worker-resume:repair-execution-test-plan-0001",
+                "repair-position-direction-contract-created",
+                "graph-freeze-repair-execution-test-0001-1:repair-execution-test-contract-0001-0001",
+                "qa-open",
+                "qa-resume:repair-execution-test-qa-0001-0001",
+                "qa-report-frozen",
+                "qa-seal",
+                "execution-test-decision:pass",
+                "execution-test-assessment-appended",
+                "worker-resume:repair-0001",
+                "graph-freeze-result-2:worker-000002-repaired",
+                "qa-open",
+                "qa-resume:qa-audit-0002",
+                "qa-report-frozen",
+                "qa-seal",
+                "qa-decision:worker-000002-repaired:False",
                 "final-graph-sealed",
                 "latest-worker-restored",
             ],
         )
         self.assertEqual(
             context.metadata["qa_schedule"],
-            "compile_candidate_then_each_worker_freeze",
+            "compile_candidate_then_execution_test_contract_then_each_worker_freeze",
         )
         self.assertFalse(context.metadata["qa_budget_is_separate"])
         self.assertFalse(context.metadata["qa_can_repair"])
@@ -2506,7 +2752,17 @@ class FullMethodContractTests(unittest.TestCase):
                     "complete": True,
                     "advisory_only": True,
                     "blocking_gate": False,
-                }
+                },
+                {
+                    "iteration": 2,
+                    "worker_snapshot_ref": "worker-000002-repaired",
+                    "rule_closure_established": True,
+                    "position_ref": "sha256:" + "e" * 64,
+                    "direction_digest": "sha256:" + "f" * 64,
+                    "complete": True,
+                    "advisory_only": True,
+                    "blocking_gate": False,
+                },
             ],
         )
         self.assertIn(
@@ -2514,7 +2770,7 @@ class FullMethodContractTests(unittest.TestCase):
         )
         self.assertEqual(
             context.metadata["submission_fallback"]["snapshot_id"],
-            "worker-000001-implemented",
+            "worker-000002-repaired",
         )
         self.assertEqual(context.metadata["official_verifier_schedule"], "after_agent_return")
         self.assertEqual(context.metadata["phase_events"][-1], "agent_returned_for_grading")

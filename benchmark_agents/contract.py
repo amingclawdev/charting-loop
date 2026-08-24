@@ -36,6 +36,8 @@ GRAPH_PATH = f"{CORRIDOR_PATH}/GRAPH.jsonl"
 STUDY_PROFILE_PATH = f"{CORRIDOR_PATH}/STUDY.json"
 TYPED_RULE_IR_PATH = f"{CORRIDOR_PATH}/TYPED-RULE-IR-FIRST.json"
 TYPED_RULE_REPORT_PATH = f"{CORRIDOR_PATH}/TYPED-RULE-COMPILE-FIRST.json"
+EXECUTION_TEST_ROOT = f"{RUNTIME_ROOT}/execution-tests"
+EXECUTION_TEST_QA_PATH = f"{RUNTIME_ROOT}/qa/execution-test-audit.json"
 ACCEPTANCE_PATH = f"{CORRIDOR_PATH}/ACCEPTANCE.json"
 WORK_PATH = f"{CORRIDOR_PATH}/WORK_ITEMS.json"
 CAPABILITIES_PATH = f"{CORRIDOR_PATH}/CAPABILITIES.json"
@@ -66,6 +68,7 @@ METHOD_SCOPE_SHA256 = (
 GRAPH_STUDY_SCHEMA = "charting-loop/method-guided-graph-study/v2"
 GRAPH_AUDIT_SCHEMA = "charting-loop/graph-path-audit/v2"
 RULE_COMPILE_AUDIT_SCHEMA = "charting-loop/rule-compile-audit/v1"
+EXECUTION_TEST_AUDIT_SCHEMA = "charting-loop/execution-test-audit/v1"
 VERIFIER_ALIGNMENT_SCHEMA = "charting-loop/verifier-alignment/v1"
 PRE_VERIFIER_ROOT_SCHEMA = "charting-loop/pre-verifier-root/v1"
 VERIFIER_ORDER_RECEIPT_SCHEMA = "charting-loop/verifier-order-receipt/v1"
@@ -1562,6 +1565,139 @@ the same total clock. Return immediately after the new compile report is complet
 """
 
 
+def graph_execution_test_plan_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    graph_digest: str,
+    qa_assessment_ref: str,
+    remaining_seconds: int,
+    method_text: str | None,
+) -> str:
+    """Project Direction and freeze tests/probes without implementing the task."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""Resume as the SAME Worker and prepare the next execution choice.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+Compilation QA `{qa_assessment_ref}` passed and RuleClosure exists in `{GRAPH_PATH}`
+at graph digest `{graph_digest}`. This is a pre-action stage: do not yet mutate,
+patch, or submit the official task. Replay the graph, query bounded `active-context`,
+and reverse-trace relevant semantic edges. Append an initial whole-state
+`position_checkpoint`, then a `direction_proposal` that remains a projection of all
+applicable current Rules at that exact Position. Direction does not choose an action
+or checklist subset. Append a `direction_snapshot` that selects that exact proposal;
+the later execution contract cannot bind an unselected alternative.
+
+After Direction, choose one bounded next execution step and append exactly one
+non-authoritative `execution_test_contract`. Store its executable fixtures under
+`{EXECUTION_TEST_ROOT}` before appending the record. The contract binds the exact
+Position and Direction record, selected ready checklist rows and their current Rule,
+semantic-edge and witness identities, plus one or more code tests, DB replays, CLI
+probes, or interaction probes. Every selected checklist row needs a source-bound
+positive case and a negative or boundary case. Each case names exact source slice
+IDs, semantic dependency refs, predecessor probe IDs, operator, fixture path/digest,
+command and oracle. `predecessor_probe_ids` is the explicit acyclic execution order;
+use an empty list where the probe has no predecessor. Before action,
+`pre_action_status: not_run_yet` is expected. If a fixture cannot be built, use
+`unsupported` with a reason; do not invent evidence. `not_applicable` is legal only
+with `applicability_predicate` exactly equal to the conditional Rule predicate and a
+current admitted Fact receipt proving it. Other statuses use null for that field.
+
+Compute `contract_digest` over every contract field except that digest. The Kernel
+checks identity, source bindings, target readiness, operators, partition presence and
+fixture identities; it does not judge semantic adequacy. Run the read-only Doctor,
+which may honestly report missing receipts before action. Return immediately after
+the graph and fixture bytes are complete so the runner can freeze the exact candidate
+for independent QA. About {remaining_seconds} seconds remain on the one total task
+clock; there is no stage-owned budget.
+"""
+
+
+def graph_execution_test_qa_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    graph_digest: str,
+    contract_record_id: str,
+    contract_digest: str,
+    fixture_manifest_path: str,
+    graph_path: str,
+    qa_output_path: str,
+    remaining_seconds: int,
+    method_text: str | None,
+    audit_iteration: int,
+) -> str:
+    """Review one frozen execution test/probe contract before implementation."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""You are the independent pre-action test/probe QA reviewer.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+The Worker has not implemented the selected action. Audit frozen graph `{graph_path}`
+with digest `{graph_digest}` and exact `execution_test_contract`
+`{contract_record_id}` / `{contract_digest}`. The runner's frozen fixture manifest is
+`{fixture_manifest_path}`. Replay the graph, run Doctor, verify every frozen fixture
+digest, and independently re-read the public Rule source slices.
+
+Judge whether the positive and negative/boundary cases, operator, fixture, command and
+oracle actually distinguish the required behavior. In particular, a temporal Rule
+must include before/after boundary worlds; a timeless union or aggregate surrogate is
+not equivalent. Structural validity and hashes establish identity, not semantics.
+Do not edit the graph, fixtures or task, choose an action, authorize mutation, or
+predict official PASS. A `fail` requires a concise source-grounded replayable finding.
+Use `not_assessed` when evidence or time is insufficient. This review cannot prevent
+implementation, complete snapshot custody, fallback, or official scoring.
+
+This is execution-test audit iteration {audit_iteration}; about {remaining_seconds}
+seconds remain on the single task clock. Write exactly one JSON object to
+`{qa_output_path}` with schema `{EXECUTION_TEST_AUDIT_SCHEMA}` and exactly these
+fields: `schema_version`, `study_profile_digest`, `graph_digest`,
+`contract_record_id`, `contract_digest`, `outcome` (`pass|fail|not_assessed`),
+`findings`, and `scope_limitations`. PASS has no findings; non-PASS has at least one.
+Return promptly.
+"""
+
+
+def graph_execution_test_repair_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    prior_contract_record_id: str,
+    prior_contract_digest: str,
+    qa_path: str,
+    remaining_seconds: int,
+    method_text: str | None,
+) -> str:
+    """Resume the same Worker for one bounded pre-action contract revision."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""Resume as the SAME Worker before implementation.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+Independent QA reviewed execution test/probe contract
+`{prior_contract_record_id}` / `{prior_contract_digest}`. Read `{qa_path}` and
+reproduce each source-grounded finding. Do not overwrite prior graph records or
+fixtures and do not mutate the official task. If a finding is valid, write separately
+named fixture bytes and append one new complete `execution_test_contract` against the
+same current Position/Direction. If it is unsupported, preserve that limitation
+honestly. Return after one bounded revision. About {remaining_seconds} seconds remain
+on the same total clock; there is no revision budget.
+"""
+
+
 def graph_implementation_prompt(
     task_instruction: str,
     *,
@@ -1571,6 +1707,10 @@ def graph_implementation_prompt(
     qa_assessment_ref: str,
     remaining_seconds: int,
     method_text: str | None,
+    execution_test_contract_record_id: str | None = None,
+    execution_test_contract_digest: str | None = None,
+    execution_test_qa_outcome: str = "not_assessed",
+    execution_test_qa_assessment_record_id: str | None = None,
 ) -> str:
     """Prompt stage three: resume the same Worker after RuleClosure exists."""
 
@@ -1582,19 +1722,29 @@ def graph_implementation_prompt(
 {condition}
 
 Compilation QA `{qa_assessment_ref}` passed and the runner materialized RuleClosure
-in `{GRAPH_PATH}` at graph digest `{graph_digest}`. Replay the graph. Before changing
-the task, append an initial whole-state `position_checkpoint` that binds every current
-Rule record and RuleClosure digest and the complete checklist/frontier. Then append a
-`direction_proposal` against that exact Position and those same Rule/checklist
-identities. Direction is your task-specific projection from the current Position; the
-Kernel validates reference closure but does not choose it.
+in `{GRAPH_PATH}` at graph digest `{graph_digest}`. The pre-action stage already
+froze the exact Position, Direction and non-authoritative execution choice. Replay
+the graph before changing the task.
 
-Before that Direction, run one bounded `active-context` query and reverse-trace each
-relevant semantic edge. Populate concrete `semantic_bindings` from the exact
-Position/Rule/checklist/edge/witness identities returned by those frozen bytes. Do
-not copy only aggregate ID lists, do not turn an unresolved relationship into an
-expectation, and do not put the concrete task action inside Direction. Select and
-execute the action only after this projection is frozen.
+The selected execution test/probe contract is
+`{execution_test_contract_record_id}` with digest
+`{execution_test_contract_digest}`. Its independent pre-action QA outcome is
+`{execution_test_qa_outcome}` and its graph assessment record is
+`{execution_test_qa_assessment_record_id}`. Re-read its exact source, Position, Direction,
+checklist, edge, witness, fixture and oracle bindings. A passing review is guidance,
+not mutation authority. A fail/not_assessed/missing review keeps the execution claim
+unresolved but never blocks implementation, custody, fallback, or official scoring.
+
+Before each selected mutating action, preserve the contract's positive and
+negative/boundary fixtures. After acting, run every supported test/probe command and
+append one digest-bound `execution_test_receipt` per probe in predecessor order. Each
+receipt must copy `pre_action_qa_status` and bind
+`pre_action_qa_assessment_record_id`; when the review was unavailable, record status
+`missing` and null assessment ID so Doctor reports unresolved without blocking. Use failures as evidence
+for a new Position/Direction/contract revision. `not_applicable` requires its admitted
+applicability Fact; `unsupported` remains visibly unresolved. Do not weaken a
+temporal or conditional Rule into a timeless aggregate merely because that surrogate
+passes a broad happy-path probe.
 
 During implementation, append a new Position for meaningful state changes and a new
 Position-bound Direction before the next move. Respect hard dependency order and
@@ -1732,6 +1882,46 @@ deliverability, correctness, Gate decision, or PASS.
 """
 
 
+def graph_result_repair_test_plan_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    graph_digest: str,
+    audited_snapshot_ref: str,
+    qa_path: str,
+    remaining_seconds: int,
+    method_text: str | None,
+) -> str:
+    """Plan and freeze a witnessed result repair before mutating the task."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""Resume as the SAME Worker for a pre-repair execution choice only.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+QA audited Worker snapshot `{audited_snapshot_ref}` against graph digest
+`{graph_digest}` under frozen Study `{study_profile_digest}`. Read `{qa_path}` and
+reproduce every source-grounded witness, but do not yet mutate, patch, or submit the
+official task. Reject unsupported QA advice.
+
+For a reproduced defect, append a new whole-state Position that records the affected
+checklist state, then project all applicable current Rules into a new Direction and
+select that exact Direction snapshot. Append one new bounded
+`execution_test_contract` for the proposed repair action. Bind exact Rule, source,
+edge, witness and dependency identities; include source-grounded positive plus
+negative/boundary probes, explicit acyclic predecessor probe IDs, exact fixture
+digests, commands and oracles. Store fixtures under `{EXECUTION_TEST_ROOT}`. Do not
+reuse the prior Direction's contract and do not append execution receipts yet.
+
+Return immediately after those graph and fixture bytes are complete so the runner
+can freeze them for distinct pre-action QA. About {remaining_seconds} seconds remain
+on the same total clock; there is no repair-owned budget.
+"""
+
+
 def graph_repair_prompt(
     task_instruction: str,
     *,
@@ -1742,6 +1932,10 @@ def graph_repair_prompt(
     qa_path: str,
     remaining_seconds: int,
     method_text: str | None,
+    execution_test_contract_record_id: str | None = None,
+    execution_test_contract_digest: str | None = None,
+    execution_test_qa_outcome: str = "not_assessed",
+    execution_test_qa_assessment_record_id: str | None = None,
 ) -> str:
     """Resume the same Worker against one identity-bound advisory QA finding."""
 
@@ -1758,8 +1952,19 @@ assessment at `{qa_path}`. Reproduce every witness before changing anything. QA 
 not authority: reject a suggested repair if replay or the current ratified Rules and
 admitted Facts do not support it.
 
-If a repair is justified, update the official task, append new evidence/Position and
-Direction records to the live graph, re-project invalidated checklist assessments,
+The runner separately froze the proposed repair's pre-action contract
+`{execution_test_contract_record_id}` / `{execution_test_contract_digest}` and its
+independent QA outcome `{execution_test_qa_outcome}` at assessment record
+`{execution_test_qa_assessment_record_id}`. Replay those exact records before acting.
+Missing/not_assessed QA remains unresolved but does not block the repair, snapshot
+custody, fallback, or official scoring.
+
+If a repair is justified, update the official task under that already-frozen
+Position/Direction/contract, append new evidence and a post-action Position/Direction,
+and run the contract probes in predecessor order. Append digest-bound
+`execution_test_receipt` records that copy the exact pre-action QA status and
+assessment record ID (`missing` plus null when no assessment exists). Do not create a
+contract and mutate in the same turn. Then
 run `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph doctor {GRAPH_PATH}`, verify the complete task, and freeze a new
 complete scorable Worker revision. Never overwrite or invalidate the prior freeze.
 For a semantic compilation repair, never overwrite `{TYPED_RULE_IR_PATH}` or
@@ -1829,6 +2034,62 @@ def validate_graph_compile_audit(
         errors.append("RULE_COMPILE_AUDIT_PASS_WITH_FINDINGS")
     if outcome in {"fail", "not_assessed"} and not findings:
         errors.append("RULE_COMPILE_AUDIT_NONPASS_REQUIRES_FINDING")
+    return errors
+
+
+def validate_execution_test_audit(
+    value: Any,
+    *,
+    study_profile_digest: str,
+    graph_digest: str,
+    contract_record_id: str,
+    contract_digest: str,
+) -> list[str]:
+    """Validate one identity-bound pre-action test/probe QA result."""
+
+    errors: list[str] = []
+    if not isinstance(value, dict):
+        return ["EXECUTION_TEST_AUDIT_OBJECT_REQUIRED"]
+    expected_keys = {
+        "schema_version",
+        "study_profile_digest",
+        "graph_digest",
+        "contract_record_id",
+        "contract_digest",
+        "outcome",
+        "findings",
+        "scope_limitations",
+    }
+    if set(value) != expected_keys:
+        errors.append("EXECUTION_TEST_AUDIT_FIELDS")
+    if value.get("schema_version") != EXECUTION_TEST_AUDIT_SCHEMA:
+        errors.append("EXECUTION_TEST_AUDIT_SCHEMA")
+    for field, expected in (
+        ("study_profile_digest", study_profile_digest),
+        ("graph_digest", graph_digest),
+        ("contract_record_id", contract_record_id),
+        ("contract_digest", contract_digest),
+    ):
+        if value.get(field) != expected:
+            errors.append(f"EXECUTION_TEST_AUDIT_{field.upper()}_IDENTITY")
+    outcome = value.get("outcome")
+    if outcome not in {"pass", "fail", "not_assessed"}:
+        errors.append("EXECUTION_TEST_AUDIT_OUTCOME")
+    findings = value.get("findings")
+    if not isinstance(findings, list) or any(
+        not isinstance(item, str) or not item.strip() for item in findings
+    ):
+        errors.append("EXECUTION_TEST_AUDIT_FINDINGS")
+        findings = []
+    limitations = value.get("scope_limitations")
+    if not isinstance(limitations, list) or any(
+        not isinstance(item, str) or not item.strip() for item in limitations
+    ):
+        errors.append("EXECUTION_TEST_AUDIT_SCOPE_LIMITATIONS")
+    if outcome == "pass" and findings:
+        errors.append("EXECUTION_TEST_AUDIT_PASS_WITH_FINDINGS")
+    if outcome in {"fail", "not_assessed"} and not findings:
+        errors.append("EXECUTION_TEST_AUDIT_NONPASS_REQUIRES_FINDING")
     return errors
 
 
