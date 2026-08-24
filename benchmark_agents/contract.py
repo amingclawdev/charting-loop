@@ -1410,6 +1410,17 @@ assignments, and known artifact revisions. Then write one or more
 Kernel only checks identity and reference closure. A later QA reviews the path but
 does not authoritatively choose Direction for you.
 
+Before proposing Direction, query the one-shot bounded `active-context` pack. For
+each relevant declared semantic edge, query `edge-source-trace` and compare its
+declared relationship, endpoint Rule/checklist identities, source bindings or
+derivation inputs, condition kinds, and witness obligations with the current
+Position. Do not infer an expected relationship from Rule or condition kind: an
+`unresolved` expectation remains unresolved. Direction carries no concrete action.
+Each `semantic_bindings` entry uses exactly `position_ref`, `rule_id`,
+`rule_record_id`, `semantic_edge_ids`, `checklist_item_id`, and
+`witness_obligation_ids`. Select the later task action only after freezing this
+Position-bound projection.
+
 For new checkpoints, bind `checkpoint_kind` (`row_progress` or
 `acceptance_assessment`), the whole current checklist, pass/fail/unknown assessments
 and Fact-receipt witnesses, plus the recomputed ready, blocked, and unresolved
@@ -1431,6 +1442,10 @@ digest-bound advisory index, for example:
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph query {GRAPH_PATH} --kind prerequisites --ref <checklist-or-rule-id>`
 
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph query {GRAPH_PATH} --kind explain-blocked --ref <checklist-id>`
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph query {GRAPH_PATH} --kind active-context`
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph query {GRAPH_PATH} --kind edge-source-trace --ref <semantic-edge-id>`
 
 The query result is guidance only. It reports its logical graph digest, exact byte
 digest, and head record ID; it cannot establish RuleClosure, choose Direction,
@@ -1491,8 +1506,11 @@ The exact candidate report is `{candidate_report_record_id}` with digest
 `{candidate_report_digest}`. Verify complete clause coverage, ordered byte slices,
 source-to-role semantics, reverse projection, zero SemanticDelta, explicit dependency
 alignment, temporal and conditional relations, required/optional classification,
-and deterministic checklist coverage. Bounds and digests establish identity, not
-meaning. QA must not mutate the task, graph, IR, or candidate and must not ratify
+deterministic checklist coverage, semantic-edge templates, and witness-obligation
+templates. Check that a relationship is called `source_bound` only when explicit
+relationship slices support it; derived or absent relationship meaning remains
+`unresolved`. Bounds and digests establish identity, not meaning. QA must not mutate
+the task, graph, IR, or candidate and must not ratify
 Rules. A `pass` means this exact candidate can become RuleClosure; otherwise return
 `fail` or `not_assessed` with one or more concise replayable findings that cite the
 source clause/range and the mismatched Rule or edge.
@@ -1571,6 +1589,13 @@ Rule record and RuleClosure digest and the complete checklist/frontier. Then app
 identities. Direction is your task-specific projection from the current Position; the
 Kernel validates reference closure but does not choose it.
 
+Before that Direction, run one bounded `active-context` query and reverse-trace each
+relevant semantic edge. Populate concrete `semantic_bindings` from the exact
+Position/Rule/checklist/edge/witness identities returned by those frozen bytes. Do
+not copy only aggregate ID lists, do not turn an unresolved relationship into an
+expectation, and do not put the concrete task action inside Direction. Select and
+execute the action only after this projection is frozen.
+
 During implementation, append a new Position for meaningful state changes and a new
 Position-bound Direction before the next move. Respect hard dependency order and
 recompute downstream checklist/frontier state when upstream evidence changes. Run the
@@ -1632,6 +1657,13 @@ that every query reports the sealed graph digest and head record ID. These query
 surfaces are advisory and do not replace your independent review or runner-owned
 ratification.
 
+Also run one `active-context` query and independently reverse-trace every semantic
+edge referenced by the selected Direction. Verify each Direction semantic binding
+against its exact Position, current Rule record, checklist row, source-bound or
+honestly unresolved relationship status, and witness obligation. Aggregate identity
+lists alone are not closure evidence. Direction must not contain the concrete action;
+the later execution transition is reviewed separately.
+
 Audit the entire path: runner-owned AuthoritySnapshot manifest/receipt equality,
 source versus extraction-representation bytes,
 official-source Rule coverage and dependencies, immutable candidate lineage, reverse
@@ -1652,6 +1684,9 @@ is not task truth or PASS. You may identify a better Direction, but you must not
 mutate the task, graph, Worker snapshot, or official outputs. Only a concrete
 replayable witness may recommend that the harness resume the same Worker for repair;
 QA itself never repairs or blocks final submission.
+Missing or incompatible witnesses keep the affected checklist and verified claim
+open, but never block custody of the latest complete scorable freeze or external
+grading.
 Independently re-read the public instruction and every named public authoritative
 source declared in `{TYPED_RULE_IR_PATH}`. Verify their retrieval statuses and digests,
 then enumerate their normative clauses without trusting the Worker's Rule list.

@@ -200,7 +200,34 @@ python3 -m corridor_kit graph append /tmp/charting-loop/GRAPH.jsonl \
 # Only then may Position and Direction bind the resulting RuleClosure digest.
 python3 -m corridor_kit graph replay /tmp/charting-loop/GRAPH.jsonl
 python3 -m corridor_kit graph doctor /tmp/charting-loop/GRAPH.jsonl
+python3 -m corridor_kit graph query /tmp/charting-loop/GRAPH.jsonl \
+  --kind active-context --max-chars 24000
+python3 -m corridor_kit graph query /tmp/charting-loop/GRAPH.jsonl \
+  --kind edge-source-trace --ref SEDGE-...
 ```
+
+The immutable index stores each declared semantic Rule edge once and links its
+typed checklist expansions by ID. An edge trace exposes its endpoint Rule/record
+identities, declared relationship and alignment, direct source slices or declared
+derivation inputs, condition kinds, checklist rows, and witness obligations. The
+relationship expectation is `source_bound` only for explicit frozen relationship
+slices; otherwise it remains `unresolved`. The Kit never guesses `requires`,
+ordering, conflict, or other business meaning from a Rule or condition kind.
+
+`active-context` deterministically selects the latest Position's open checklist,
+hard ancestors, immediate dependants, conflict/invalidation edges, source traces,
+and witness obligations. A character cap limits expanded detail, while compact hard
+constraint IDs are always retained. Truncation reports exact omitted IDs and their
+digest; it never causes a second model call.
+
+A successor Direction may add `semantic_bindings`. Every entry binds the exact
+Position, current Rule ID and record, semantic-edge IDs where applicable, one
+checklist row, and its deterministic witness-obligation IDs. Concrete task action is
+not a Direction field; it belongs to the later execution transition. Aggregate ID
+lists or a timeless/global-union witness cannot close a typed temporal checklist.
+Missing or incompatible witnesses keep that checklist and verified claim open, but
+they never block freezing a complete scorable snapshot or running the external
+grader.
 
 The Doctor is deterministic and read-only. It recomputes chain integrity, hard-edge
 topological order, checklist/Position alignment, Direction freshness, invalidation

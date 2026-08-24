@@ -69,6 +69,34 @@ RULE_RELATIONSHIPS = frozenset(
 TEMPORAL_OPERATORS = frozenset(
     {"ordered_before", "ordered_after", "duration", "state_transition"}
 )
+WITNESS_OBLIGATION_SCHEMA = "charting-loop/witness-obligation/v1"
+SEMANTIC_EDGE_TEMPLATE_SCHEMA = "charting-loop/semantic-edge-template/v1"
+_WITNESS_FAMILY_OPERATORS = {
+    "namespace_disjointness": frozenset(
+        {
+            "collision_free",
+            "disjoint",
+            "namespace_disjoint",
+            "not_equal",
+            "unique",
+        }
+    ),
+    "relational_closure": frozenset(
+        {"acyclic", "cycle_free", "permutation", "transitive", "two_hop"}
+    ),
+    "numeric_boundary": frozenset(
+        {
+            "above",
+            "at_least",
+            "at_most",
+            "below",
+            "equal",
+            "greater_than",
+            "less_than",
+            "numeric_compare",
+        }
+    ),
+}
 RUN_CLASSIFICATIONS = frozenset(
     {"fresh_task_pre_experiment", "same_task_regression"}
 )
@@ -1696,6 +1724,78 @@ def project_rule_checklist_templates(
     return templates
 
 
+def project_witness_obligation_templates(
+    *, rule_id: str, statement: str, semantics: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """Project explicit Rule semantics into stable, task-neutral witness duties.
+
+    The projection classifies only condition kinds and operator names that the
+    compiled Rule already declares.  It never infers a business relationship or
+    expected outcome from a Rule kind.
+    """
+
+    normalized = validate_rule_semantics(dict(semantics))
+    semantics_digest = sha256_json(normalized)
+    checklist = project_rule_checklist_templates(
+        rule_id=rule_id,
+        statement=statement,
+        semantics=normalized,
+    )
+    condition_by_id = {
+        condition["condition_id"]: condition
+        for condition in normalized["conditions"]
+    }
+    obligations: list[dict[str, Any]] = []
+    for item in checklist:
+        condition = condition_by_id[item["coverage_cell"]["condition_id"]]
+        operators = set(condition["required_witness_operators"])
+        families = {"declared_condition"}
+        condition_kind = condition.get("condition_kind", "legacy_untyped")
+        if condition_kind == "temporal" or operators.intersection(TEMPORAL_OPERATORS):
+            families.add("temporal_boundary")
+        if condition_kind == "state_transition" or "state_transition" in operators:
+            families.add("state_transition")
+        if normalized.get("applicability", {}).get("mode") == "conditional":
+            families.add("conditional_branch")
+        for family, family_operators in _WITNESS_FAMILY_OPERATORS.items():
+            if operators.intersection(family_operators):
+                families.add(family)
+        identity = {
+            "rule_id": rule_id,
+            "checklist_item_id": item["checklist_item_id"],
+            "condition_id": condition["condition_id"],
+            "condition_kind": condition_kind,
+            "required_witness_operators": sorted(operators),
+            "behavioral_partitions": sorted(item["behavioral_partitions"]),
+            "rule_semantics_digest": semantics_digest,
+        }
+        obligations.append(
+            {
+                "schema_version": WITNESS_OBLIGATION_SCHEMA,
+                "witness_obligation_id": f"WOB-{sha256_json(identity)[7:23]}",
+                **identity,
+                "witness_families": sorted(families),
+                "evidence_requirement": item["evidence_requirement"],
+                "decision_rule": item["decision_rule"],
+            }
+        )
+    return obligations
+
+
+def semantic_edge_id(
+    *, from_rule_id: str, to_rule_id: str, declared_relationship: str
+) -> str:
+    """Return the stable family identity for one declared semantic Rule edge."""
+
+    return "SEDGE-" + sha256_json(
+        {
+            "from_rule_id": from_rule_id,
+            "to_rule_id": to_rule_id,
+            "declared_relationship": declared_relationship,
+        }
+    )[7:23]
+
+
 def _compiler_implementation_digest() -> str:
     try:
         return sha256_bytes(Path(__file__).read_bytes())
@@ -1993,6 +2093,7 @@ def compile_typed_rule_ir(
     rule_ids: set[str] = set()
     rule_bodies: list[dict[str, Any]] = []
     checklist_templates: list[dict[str, Any]] = []
+    witness_obligation_templates: list[dict[str, Any]] = []
     rule_dependency_templates: list[dict[str, Any]] = []
     checklist_templates_by_rule: dict[str, list[dict[str, Any]]] = {}
     rule_provenance_digest_by_id: dict[str, str] = {}
@@ -2125,6 +2226,13 @@ def compile_typed_rule_ir(
         )
         checklist_templates_by_rule[rule_id] = projected_checklists
         checklist_templates.extend(projected_checklists)
+        witness_obligation_templates.extend(
+            project_witness_obligation_templates(
+                rule_id=rule_id,
+                statement=statement,
+                semantics=semantics,
+            )
+        )
         for dependency in semantics["dependencies"]:
             rule_dependency_templates.append(
                 {
@@ -2536,6 +2644,108 @@ def compile_typed_rule_ir(
                     }
                 )
 
+    semantic_edge_templates: list[dict[str, Any]] = []
+    if is_v4:
+        checklist_ids_by_rule = {
+            rule_id: sorted(
+                item["checklist_item_id"]
+                for item in checklist_templates_by_rule[rule_id]
+            )
+            for rule_id in sorted(checklist_templates_by_rule)
+        }
+        obligation_ids_by_rule = {
+            rule_id: sorted(
+                item["witness_obligation_id"]
+                for item in witness_obligation_templates
+                if item["rule_id"] == rule_id
+            )
+            for rule_id in sorted(checklist_templates_by_rule)
+        }
+        rule_semantics_by_id = {
+            rule["rule_id"]: rule["semantics"] for rule in normalized_rules
+        }
+        slice_details = {
+            source_slice["slice_id"]: {
+                "slice_id": source_slice["slice_id"],
+                "clause_id": clause["clause_id"],
+                "source_id": source_slice["source_id"],
+                "representation": source_slice["representation"],
+                "byte_start": source_slice["byte_start"],
+                "byte_end": source_slice["byte_end"],
+                "slice_digest": source_slice["slice_digest"],
+            }
+            for clause in source_clauses
+            for source_slice in clause["source_slices"]
+        }
+        for dependency in rule_dependency_templates:
+            from_rule_id = dependency["from_rule_id"]
+            to_rule_id = dependency["to_rule_id"]
+            provenance = dependency["edge_provenance"]
+            source_slice_ids = list(provenance["source_slice_ids"])
+            declared_relationship = dependency["relationship"]
+            projected_relationship = work_relationships.get(declared_relationship)
+            typed_expansion_ids = sorted(
+                item["dependency_id"]
+                for item in typed_dependency_templates
+                if item["source_rule_id"] == from_rule_id
+                and item.get("target_rule_id") == to_rule_id
+                and item["relationship"] == projected_relationship
+            )
+            semantic_edge_templates.append(
+                {
+                    "schema_version": SEMANTIC_EDGE_TEMPLATE_SCHEMA,
+                    "semantic_edge_id": semantic_edge_id(
+                        from_rule_id=from_rule_id,
+                        to_rule_id=to_rule_id,
+                        declared_relationship=declared_relationship,
+                    ),
+                    "from_rule_id": from_rule_id,
+                    "to_rule_id": to_rule_id,
+                    "declared_relationship": declared_relationship,
+                    "relationship_alignment": dependency["relationship_alignment"],
+                    "edge_provenance": provenance,
+                    "relationship_expectation_status": (
+                        "source_bound"
+                        if provenance["kind"] == "direct" and source_slice_ids
+                        else "unresolved"
+                    ),
+                    "relationship_source_bindings": [
+                        slice_details[slice_id]
+                        for slice_id in source_slice_ids
+                    ],
+                    "relationship_derivation_inputs": dict(
+                        provenance["input_rule_provenance_digests"]
+                    ),
+                    "endpoint_condition_kinds": {
+                        from_rule_id: sorted(
+                            {
+                                condition["condition_kind"]
+                                for condition in rule_semantics_by_id[from_rule_id][
+                                    "conditions"
+                                ]
+                            }
+                        ),
+                        to_rule_id: sorted(
+                            {
+                                condition["condition_kind"]
+                                for condition in rule_semantics_by_id[to_rule_id][
+                                    "conditions"
+                                ]
+                            }
+                        ),
+                    },
+                    "endpoint_checklist_item_ids": {
+                        from_rule_id: checklist_ids_by_rule[from_rule_id],
+                        to_rule_id: checklist_ids_by_rule[to_rule_id],
+                    },
+                    "endpoint_witness_obligation_ids": {
+                        from_rule_id: obligation_ids_by_rule[from_rule_id],
+                        to_rule_id: obligation_ids_by_rule[to_rule_id],
+                    },
+                    "typed_expansion_ids": typed_expansion_ids,
+                }
+            )
+
     normalized_ir = (
         {
             "schema_version": (
@@ -2781,6 +2991,14 @@ def compile_typed_rule_ir(
         ),
         "semantic_delta": semantic_delta,
         "semantic_delta_digest": sha256_json(semantic_delta) if is_v4 else None,
+        "semantic_edge_templates": semantic_edge_templates,
+        "semantic_edge_templates_digest": (
+            sha256_json(semantic_edge_templates) if is_v4 else None
+        ),
+        "witness_obligation_templates": witness_obligation_templates,
+        "witness_obligation_templates_digest": sha256_json(
+            witness_obligation_templates
+        ),
         "source_clause_rule_matrix": mapping_matrix,
         "unaccounted_normative_ranges": unaccounted_normative_ranges,
         "relationship_alignment_issues": relationship_alignment_issues,

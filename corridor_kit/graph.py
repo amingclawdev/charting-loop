@@ -27,7 +27,9 @@ from .compiler import (
     compile_typed_rule_ir,
     project_relationship_alignment,
     project_rule_checklist_templates,
+    project_witness_obligation_templates,
     rule_source_provenance_identity,
+    semantic_edge_id,
     validate_rule_source_slices,
     validate_rule_semantics,
     validate_source_artifact,
@@ -319,6 +321,17 @@ def _direction_bindings_present(body: Mapping[str, Any]) -> bool:
     return bool(present)
 
 
+def _direction_semantic_bindings_present(body: Mapping[str, Any]) -> bool:
+    if "semantic_bindings" not in body:
+        return False
+    bindings = body["semantic_bindings"]
+    if not isinstance(bindings, list) or not bindings:
+        raise CorridorKitError(
+            "Direction semantic_bindings must be a non-empty list"
+        )
+    return True
+
+
 def _successor_source_bundle(
     source_artifacts: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
@@ -524,6 +537,7 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     dependencies: dict[str, set[str]] = {}
     checklist_items: dict[str, dict[str, Any]] = {}
     typed_dependencies: dict[str, dict[str, Any]] = {}
+    semantic_edges: dict[str, dict[str, Any]] = {}
     dependency_resolutions: dict[str, dict[str, Any]] = {}
     hard_dependencies: dict[str, set[str]] = {}
     fact_records: dict[str, str] = {}
@@ -1016,6 +1030,16 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 raise CorridorKitError(
                     "legacy rule dependency cannot claim successor provenance"
                 )
+            edge_ref = semantic_edge_id(
+                from_rule_id=source,
+                to_rule_id=target,
+                declared_relationship=relationship,
+            )
+            semantic_edges[edge_ref] = {
+                "from_rule_id": source,
+                "to_rule_id": target,
+                "declared_relationship": relationship,
+            }
             if relationship in RULE_HARD_RELATIONSHIPS:
                 dependant, prerequisite = (
                     (source, target)
@@ -1575,6 +1599,107 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                     if _text_list(body, field) != position[field]:
                         raise CorridorKitError(
                             f"Direction {field} does not match its exact Position"
+                        )
+            if _direction_semantic_bindings_present(body):
+                if not _position_bindings_present(position):
+                    raise CorridorKitError(
+                        "Direction semantic bindings require a checklist-bound Position"
+                    )
+                expected_keys = {
+                    "position_ref",
+                    "rule_id",
+                    "rule_record_id",
+                    "semantic_edge_ids",
+                    "checklist_item_id",
+                    "witness_obligation_ids",
+                }
+                bound_checklist_ids: set[str] = set()
+                for binding in body["semantic_bindings"]:
+                    if not isinstance(binding, dict) or set(binding) != expected_keys:
+                        raise CorridorKitError(
+                            "Direction semantic binding has unknown or missing fields"
+                        )
+                    if _text(binding, "position_ref") != position_ref:
+                        raise CorridorKitError(
+                            "Direction semantic binding references a stale Position"
+                        )
+                    rule_id = _text(binding, "rule_id")
+                    rule_record_id = _text(binding, "rule_record_id")
+                    if (
+                        rule_records.get(rule_id) != rule_record_id
+                        or rule_id not in ratified_rules
+                        or rule_record_id not in position["rule_record_ids"]
+                    ):
+                        raise CorridorKitError(
+                            "Direction semantic binding references a stale Rule"
+                        )
+                    checklist_item_id = _text(binding, "checklist_item_id")
+                    checklist_item = checklist_items.get(checklist_item_id)
+                    if (
+                        checklist_item is None
+                        or checklist_item_id not in body.get("checklist_item_ids", [])
+                        or checklist_item["source_rule_id"] != rule_id
+                    ):
+                        raise CorridorKitError(
+                            "Direction semantic binding references a mismatched checklist row"
+                        )
+                    if checklist_item_id in bound_checklist_ids:
+                        raise CorridorKitError(
+                            "Direction semantic binding duplicates a checklist row"
+                        )
+                    bound_checklist_ids.add(checklist_item_id)
+                    edge_refs = _text_list(binding, "semantic_edge_ids")
+                    projected_relationships = {
+                        "precedes": "precondition_for",
+                        "requires": "requires",
+                        "precondition_for": "precondition_for",
+                        "invalidates": "invalidates",
+                        "conflicts": "conflicts",
+                    }
+                    applicable_edge_refs = sorted(
+                        edge_ref
+                        for edge_ref, edge in semantic_edges.items()
+                        if edge["from_rule_id"] == rule_id
+                        or edge["to_rule_id"] == rule_id
+                        if any(
+                            (
+                                dependency.get("from_ref") == checklist_item_id
+                                or dependency.get("to_ref") == checklist_item_id
+                            )
+                            and dependency.get("source_rule_id")
+                            == edge["from_rule_id"]
+                            and dependency.get("target_rule_id")
+                            == edge["to_rule_id"]
+                            and dependency.get("relationship")
+                            == projected_relationships.get(
+                                edge["declared_relationship"]
+                            )
+                            for dependency in typed_dependencies.values()
+                        )
+                    )
+                    if edge_refs != applicable_edge_refs:
+                        raise CorridorKitError(
+                            "Direction semantic edge bindings do not match the checklist row"
+                        )
+                    semantics = rule_semantics.get(rule_id)
+                    if semantics is None:
+                        expected_witness_ids: list[str] = []
+                    else:
+                        expected_witness_ids = sorted(
+                            obligation["witness_obligation_id"]
+                            for obligation in project_witness_obligation_templates(
+                                rule_id=rule_id,
+                                statement=current_rule_bodies[rule_id]["statement"],
+                                semantics=semantics,
+                            )
+                            if obligation["checklist_item_id"]
+                            == checklist_item_id
+                        )
+                    if _text_list(
+                        binding, "witness_obligation_ids"
+                    ) != expected_witness_ids:
+                        raise CorridorKitError(
+                            "Direction witness obligations do not match the checklist row"
                         )
             if direction_id in direction_ids:
                 raise CorridorKitError(f"Direction proposal already exists: {direction_id}")
@@ -2257,6 +2382,9 @@ def graph_doctor(path: Path) -> dict[str, Any]:
                                 f"checklist_witness_operators_missing:{item_id}:"
                                 + ",".join(missing_operators)
                             )
+                            incomplete_reasons.append(
+                                f"checklist_witness_obligation_unsatisfied:{item_id}"
+                            )
         if latest_position.get("unresolved_checklist_item_ids"):
             incomplete_reasons.append("latest_position_has_unresolved_checklist_items")
         if latest_position.get("blocked_item_ids"):
@@ -2277,6 +2405,12 @@ def graph_doctor(path: Path) -> dict[str, Any]:
             None,
         )
     selected_direction = projection["directions"].get(selected_direction_ref)
+    successor_checklist_ids = {
+        item_id
+        for item_id, item in checklist_items.items()
+        if item.get("typed_rule_semantics_schema")
+        == TYPED_RULE_SEMANTICS_SCHEMA_V4
+    }
     if selected_direction is None:
         incomplete_reasons.append("no_direction_for_latest_position")
     elif not _direction_bindings_present(selected_direction):
@@ -2290,6 +2424,12 @@ def graph_doctor(path: Path) -> dict[str, Any]:
         ):
             if selected_direction[field] != latest_position[field]:
                 incomplete_reasons.append(f"stale_direction_{field}")
+        if successor_checklist_ids and not _direction_semantic_bindings_present(
+            selected_direction
+        ):
+            incomplete_reasons.append("direction_semantic_bindings_missing")
+
+    active_context = graph_index.active_context()
 
     classification = (
         "acceptance_assessed_complete"
@@ -2373,6 +2513,26 @@ def graph_doctor(path: Path) -> dict[str, Any]:
             "graph_bytes_digest": graph_index.graph_bytes_digest,
             "head_record_id": graph_index.head_record_id,
             "advisory_only": True,
+        },
+        "active_context": {
+            "status": active_context["status"],
+            "latest_position_ref": active_context["latest_position_ref"],
+            "rule_ids": active_context["rule_ids"],
+            "semantic_edge_ids": active_context["semantic_edge_ids"],
+            "witness_obligation_ids": active_context[
+                "witness_obligation_ids"
+            ],
+            "compact_hard_constraint_ids": active_context[
+                "compact_hard_constraint_ids"
+            ],
+            "unresolved_mismatch_ids": active_context[
+                "unresolved_mismatch_ids"
+            ],
+            "details_digest": active_context["details_digest"],
+            "omitted_detail_ids": active_context["omitted_detail_ids"],
+            "omitted_detail_ids_digest": active_context[
+                "omitted_detail_ids_digest"
+            ],
         },
         "ready_item_ids": (
             list(latest_position.get("ready_item_ids", [])) if latest_position else []
@@ -2574,6 +2734,7 @@ def query_graph(
     ref: str | None = None,
     target_ref: str | None = None,
     expected_digest: str | None = None,
+    max_chars: int = 24_000,
 ) -> dict[str, Any]:
     """Run one task-neutral, non-authoritative graph query."""
 
@@ -2582,6 +2743,7 @@ def query_graph(
         ref=ref,
         target_ref=target_ref,
         expected_digest=expected_digest,
+        max_chars=max_chars,
     )
 
 

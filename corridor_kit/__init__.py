@@ -51,7 +51,9 @@ from .compiler import (
     TYPED_RULE_SEMANTICS_SCHEMA_V4,
     TASK_SOURCE_BUNDLE_SCHEMA_V3,
     compile_typed_rule_ir,
+    project_witness_obligation_templates,
     project_rule_checklist_templates,
+    semantic_edge_id,
     validate_rule_semantics,
     validate_relationship_alignment,
     validate_source_bundle,
@@ -105,7 +107,11 @@ from .graph import (
     replay_graph,
     validate_graph_records,
 )
-from .graph_index import GraphIndex, canonical_dependency_edge
+from .graph_index import (
+    ACTIVE_CONTEXT_DEFAULT_MAX_CHARS,
+    GraphIndex,
+    canonical_dependency_edge,
+)
 
 __all__ = [
     "ACCEPTANCE_SCHEMA",
@@ -133,6 +139,7 @@ __all__ = [
     "TYPED_RULE_IR_SCHEMA_V4",
     "TYPED_RULE_SEMANTICS_SCHEMA_V4",
     "TASK_SOURCE_BUNDLE_SCHEMA_V3",
+    "ACTIVE_CONTEXT_DEFAULT_MAX_CHARS",
     "WORK_BACKLOG_SCHEMA",
     "AcceptanceReport",
     "AuthoringReport",
@@ -168,6 +175,8 @@ __all__ = [
     "project_direction",
     "project_rule_closure",
     "project_rule_checklist_templates",
+    "project_witness_obligation_templates",
+    "semantic_edge_id",
     "runtime_guide",
     "restore_submission",
     "validate_acceptance_file",

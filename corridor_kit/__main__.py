@@ -219,8 +219,10 @@ def _parser() -> argparse.ArgumentParser:
             "impact",
             "topology",
             "frontier",
+            "active-context",
             "path",
             "source-trace",
+            "edge-source-trace",
             "explain-blocked",
             "rule-closure",
         ),
@@ -228,6 +230,7 @@ def _parser() -> argparse.ArgumentParser:
     graph_query.add_argument("--ref")
     graph_query.add_argument("--target-ref")
     graph_query.add_argument("--expected-digest")
+    graph_query.add_argument("--max-chars", type=int, default=24_000)
     graph_query.add_argument("--output", type=Path)
 
     manifest = commands.add_parser("manifest", help="hash a closed regular-file tree")
@@ -420,6 +423,7 @@ def main(argv: list[str] | None = None) -> int:
                         ref=args.ref,
                         target_ref=args.target_ref,
                         expected_digest=args.expected_digest,
+                        max_chars=args.max_chars,
                     ),
                     args.output,
                 )

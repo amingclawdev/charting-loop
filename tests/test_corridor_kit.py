@@ -33,6 +33,7 @@ from corridor_kit import (
     load_graph_index,
     list_submissions,
     public_world_inventory,
+    project_witness_obligation_templates,
     query_graph,
     regular_tree_manifest,
     replay_graph,
@@ -2221,6 +2222,247 @@ class TypedRuleCompilerTests(unittest.TestCase):
         )
         self.assertTrue(report["candidate_revision_digest"].startswith("sha256:"))
         self.assertTrue(report["reverse_semantic_projection_digest"].startswith("sha256:"))
+        self.assertEqual(1, len(report["semantic_edge_templates"]))
+        edge = report["semantic_edge_templates"][0]
+        self.assertEqual("source_bound", edge["relationship_expectation_status"])
+        self.assertEqual(
+            [report["typed_dependency_templates"][0]["dependency_id"]],
+            edge["typed_expansion_ids"],
+        )
+        self.assertTrue(edge["relationship_source_bindings"])
+        self.assertTrue(report["witness_obligation_templates"])
+        self.assertTrue(
+            all(
+                obligation["witness_families"] == ["declared_condition"]
+                for obligation in report["witness_obligation_templates"]
+            )
+        )
+
+    def test_v4_active_context_reverse_edge_and_direction_witness_bindings(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            report, candidate, rule_records = self._append_v4_candidate(
+                path, self._v4_ir()
+            )
+            closure_digests = self._ratify_v4_candidate(
+                path, report, candidate, rule_records
+            )
+            checklist_by_id = {}
+            for template in report["checklist_templates"]:
+                checklist_by_id[template["checklist_item_id"]] = template
+                append_graph_record(
+                    path,
+                    record_type="acceptance_checklist_item",
+                    actor="runner",
+                    body={
+                        **template,
+                        "source_rule_record_id": rule_records[
+                            template["source_rule_id"]
+                        ],
+                    },
+                )
+            for template in report["rule_dependency_templates"]:
+                append_graph_record(
+                    path,
+                    record_type="rule_dependency",
+                    actor="runner",
+                    body=template,
+                )
+            for template in report["typed_dependency_templates"]:
+                append_graph_record(
+                    path,
+                    record_type="typed_dependency",
+                    actor="runner",
+                    body={
+                        **template,
+                        "source_rule_record_id": rule_records[
+                            template["source_rule_id"]
+                        ],
+                        "target_rule_record_id": rule_records[
+                            template["target_rule_id"]
+                        ],
+                    },
+                )
+            dependency = report["typed_dependency_templates"][0]
+            if dependency["relationship"] == "requires":
+                dependant = dependency["from_ref"]
+                prerequisite = dependency["to_ref"]
+            else:
+                dependant = dependency["to_ref"]
+                prerequisite = dependency["from_ref"]
+            checklist_ids = sorted(checklist_by_id)
+            position = append_graph_record(
+                path,
+                record_type="position_checkpoint",
+                actor="worker",
+                body={
+                    "position_id": "P-ACTIVE-CONTEXT",
+                    "previous_position_ref": None,
+                    "task_identity": {"task_ref": "public/v4-example"},
+                    "scope": {"working_set": ["/workspace"]},
+                    "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                    "rule_record_ids": sorted(rule_records.values()),
+                    "rule_closure_digests": closure_digests,
+                    "fact_receipt_ids": [],
+                    "artifact_record_ids": [],
+                    "checkpoint_kind": "row_progress",
+                    "checklist_item_ids": checklist_ids,
+                    "ready_item_ids": [prerequisite],
+                    "blocked_item_ids": [dependant],
+                    "unresolved_checklist_item_ids": checklist_ids,
+                    "checklist_assessments": {
+                        item_id: {
+                            "status": "unknown",
+                            "applicability_status": "applicable",
+                            "witness_fact_receipt_ids": [],
+                        }
+                        for item_id in checklist_ids
+                    },
+                },
+            )["record"]
+            direction_body = {
+                "direction_id": "D-UNBOUND",
+                "position_ref": position["record_id"],
+                "statement": "Project the ready Rule before choosing an action.",
+                "rule_record_ids": sorted(rule_records.values()),
+                "rule_closure_digests": closure_digests,
+                "fact_receipt_ids": [],
+                "evidence_refs": [],
+                "checklist_item_ids": checklist_ids,
+                "ready_item_ids": [prerequisite],
+                "blocked_item_ids": [dependant],
+                "unresolved_checklist_item_ids": checklist_ids,
+            }
+            append_graph_record(
+                path,
+                record_type="direction_proposal",
+                actor="worker",
+                body=direction_body,
+            )
+            self.assertIn(
+                "direction_semantic_bindings_missing",
+                graph_doctor(path)["incomplete_reasons"],
+            )
+
+            active = query_graph(path, kind="active-context")
+            edge_id = report["semantic_edge_templates"][0]["semantic_edge_id"]
+            self.assertEqual([edge_id], active["semantic_edge_ids"])
+            self.assertIn(
+                edge_id,
+                active["compact_hard_constraint_ids"]["semantic_edge_ids"],
+            )
+            trace = query_graph(path, kind="edge-source-trace", ref=edge_id)
+            self.assertEqual(
+                "source_bound",
+                trace["semantic_edge"]["relationship_expectation_status"],
+            )
+            bounded = query_graph(path, kind="active-context", max_chars=512)
+            self.assertEqual("truncated", bounded["status"])
+            self.assertTrue(bounded["omitted_detail_ids"])
+            self.assertEqual(
+                active["compact_hard_constraint_ids"],
+                bounded["compact_hard_constraint_ids"],
+            )
+
+            ready_rule_id = checklist_by_id[prerequisite]["source_rule_id"]
+            witness_ids = sorted(
+                item["witness_obligation_id"]
+                for item in report["witness_obligation_templates"]
+                if item["checklist_item_id"] == prerequisite
+            )
+            invalid = {
+                **direction_body,
+                "direction_id": "D-INVALID-WITNESS",
+                "semantic_bindings": [
+                    {
+                        "position_ref": position["record_id"],
+                        "rule_id": ready_rule_id,
+                        "rule_record_id": rule_records[ready_rule_id],
+                        "semantic_edge_ids": [edge_id],
+                        "checklist_item_id": prerequisite,
+                        "witness_obligation_ids": [],
+                    }
+                ],
+            }
+            before = path.read_bytes()
+            with self.assertRaisesRegex(
+                CorridorKitError, "witness obligations do not match"
+            ):
+                append_graph_record(
+                    path,
+                    record_type="direction_proposal",
+                    actor="worker",
+                    body=invalid,
+                )
+            self.assertEqual(before, path.read_bytes())
+            bound_direction = append_graph_record(
+                path,
+                record_type="direction_proposal",
+                actor="worker",
+                body={
+                    **direction_body,
+                    "direction_id": "D-BOUND",
+                    "semantic_bindings": [
+                        {
+                            "position_ref": position["record_id"],
+                            "rule_id": ready_rule_id,
+                            "rule_record_id": rule_records[ready_rule_id],
+                            "semantic_edge_ids": [edge_id],
+                            "checklist_item_id": prerequisite,
+                            "witness_obligation_ids": witness_ids,
+                        }
+                    ],
+                },
+            )["record"]
+            append_graph_record(
+                path,
+                record_type="direction_snapshot",
+                actor="worker",
+                body={
+                    "position_ref": position["record_id"],
+                    "direction_record_ids": [bound_direction["record_id"]],
+                    "selected_direction_record_id": bound_direction["record_id"],
+                },
+            )
+            self.assertNotIn(
+                "direction_semantic_bindings_missing",
+                graph_doctor(path)["incomplete_reasons"],
+            )
+
+    def test_v4_witness_families_require_explicit_semantics(self) -> None:
+        value = self._v4_ir()
+        ordinary_rule = value["rules"][0]
+        ordinary = project_witness_obligation_templates(
+            rule_id=ordinary_rule["rule_id"],
+            statement=ordinary_rule["statement"],
+            semantics=ordinary_rule["semantics"],
+        )
+        self.assertTrue(ordinary)
+        self.assertTrue(
+            all(
+                "namespace_disjointness" not in item["witness_families"]
+                for item in ordinary
+            )
+        )
+
+        explicit_semantics = json.loads(json.dumps(ordinary_rule["semantics"]))
+        explicit_semantics["conditions"][0][
+            "required_witness_operators"
+        ] = ["namespace_disjoint"]
+        explicit = project_witness_obligation_templates(
+            rule_id=ordinary_rule["rule_id"],
+            statement=ordinary_rule["statement"],
+            semantics=explicit_semantics,
+        )
+        condition_id = explicit_semantics["conditions"][0]["condition_id"]
+        self.assertTrue(
+            all(
+                "namespace_disjointness" in item["witness_families"]
+                for item in explicit
+                if item["condition_id"] == condition_id
+            )
+        )
 
     def test_v4_reverse_projection_exposes_missing_semantic_role(self) -> None:
         value = self._v4_ir()
