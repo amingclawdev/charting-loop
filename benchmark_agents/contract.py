@@ -68,6 +68,7 @@ METHOD_SCOPE_SHA256 = (
 GRAPH_STUDY_SCHEMA = "charting-loop/method-guided-graph-study/v2"
 GRAPH_AUDIT_SCHEMA = "charting-loop/graph-path-audit/v2"
 RULE_COMPILE_AUDIT_SCHEMA = "charting-loop/rule-compile-audit/v1"
+RULE_COMPILE_FAILURE_AUDIT_SCHEMA = "charting-loop/rule-compile-failure-audit/v1"
 EXECUTION_TEST_AUDIT_SCHEMA = "charting-loop/execution-test-audit/v1"
 VERIFIER_ALIGNMENT_SCHEMA = "charting-loop/verifier-alignment/v1"
 PRE_VERIFIER_ROOT_SCHEMA = "charting-loop/pre-verifier-root/v1"
@@ -1541,6 +1542,63 @@ non-passing outcome has at least one finding. Return promptly.
 """
 
 
+def graph_compile_failure_qa_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    failed_candidate_id: str,
+    remaining_seconds: int,
+    method_text: str | None,
+    typed_rule_ir_path: str,
+    typed_rule_ir_digest: str,
+    typed_rule_ir_size: int,
+    failure_descriptor_path: str,
+    failure_descriptor_digest: str,
+    failure_descriptor_size: int,
+    qa_output_path: str,
+    audit_iteration: int,
+) -> str:
+    """Prompt stage two to audit one sealed compiler-rejected IR."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""You are the independent compilation QA reviewer.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+This is stage 2 of one in-clock lifecycle. The Worker has not implemented the task.
+The task-neutral compiler rejected exact sealed candidate `{failed_candidate_id}`.
+Its read-only IR is `{typed_rule_ir_path}` ({typed_rule_ir_digest},
+{typed_rule_ir_size} bytes). Its bounded read-only failure descriptor is
+`{failure_descriptor_path}` ({failure_descriptor_digest},
+{failure_descriptor_size} bytes). Hash both files before reading them and reject any
+identity mismatch. Do not read or trust mutable Worker output paths.
+
+Re-run exactly:
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit rules compile {typed_rule_ir_path}`
+
+Independently re-read the public authority and determine whether the compiler
+rejection identifies a source-grounded semantic defect that the same Worker can
+repair. The descriptor contains bounded identity and classification only; reproduce
+the rejection rather than asking for raw runner stderr. Do not mutate the task, IR,
+descriptor, or any graph. A compiler-rejected candidate can never PASS, establish
+RuleClosure, or authorize implementation. Use `fail` with concise replayable
+source/rule/edge findings when the rejection reproduces. Use `not_assessed` when the
+identity, evidence, reproduction, or remaining time is insufficient.
+
+This is compilation audit iteration {audit_iteration}. About {remaining_seconds}
+seconds remain on the same total task clock; there is no QA-owned phase budget.
+Write exactly one JSON object to `{qa_output_path}` with schema
+`{RULE_COMPILE_FAILURE_AUDIT_SCHEMA}` and exactly these fields: `schema_version`,
+`study_profile_digest`, `failed_candidate_id`, `typed_rule_ir_digest`,
+`failure_descriptor_digest`, `outcome` (`fail|not_assessed`), `findings`, and
+`scope_limitations`. Every outcome has at least one finding. Return promptly.
+"""
+
+
 def graph_compile_repair_prompt(
     task_instruction: str,
     *,
@@ -1574,6 +1632,43 @@ Create parent directories as needed. Bind the revision to the prior candidate an
 evidence using the IR's semantic-repair lineage fields. Do not implement, patch, or
 submit the official task in this turn. About {remaining_seconds} seconds remain on
 the same total clock. Return immediately after the new compile report is complete.
+"""
+
+
+def graph_compile_failure_repair_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    failed_candidate_id: str,
+    prior_typed_rule_ir_digest: str,
+    qa_path: str,
+    output_ir_path: str,
+    output_report_path: str,
+    remaining_seconds: int,
+    method_text: str | None,
+) -> str:
+    """Resume the same Worker after QA audits a sealed compiler rejection."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""Resume as the SAME compilation Worker.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+Stage-2 QA audited compiler-rejected candidate `{failed_candidate_id}`, whose sealed
+IR digest is `{prior_typed_rule_ir_digest}`. Read the sealed QA report `{qa_path}`.
+Reproduce every finding against public authority before changing semantics. Do not
+overwrite the prior IR, failure descriptor, QA report, or any graph. Write a complete
+new `charting-loop/typed-rule-ir/v4` candidate to `{output_ir_path}` and its compiler
+report to `{output_report_path}` using
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit rules compile {output_ir_path} > {output_report_path}`.
+Create parent directories as needed. Bind the revision to the prior sealed IR digest
+and QA evidence using the IR's semantic-repair lineage fields. Do not implement,
+patch, or submit the official task in this turn. About {remaining_seconds} seconds
+remain on the same total clock. Return immediately after the new compile report is
+complete.
 """
 
 
@@ -2046,6 +2141,58 @@ def validate_graph_compile_audit(
         errors.append("RULE_COMPILE_AUDIT_PASS_WITH_FINDINGS")
     if outcome in {"fail", "not_assessed"} and not findings:
         errors.append("RULE_COMPILE_AUDIT_NONPASS_REQUIRES_FINDING")
+    return errors
+
+
+def validate_graph_compile_failure_audit(
+    value: Any,
+    *,
+    study_profile_digest: str,
+    failed_candidate_id: str,
+    typed_rule_ir_digest: str,
+    failure_descriptor_digest: str,
+) -> list[str]:
+    """Validate a non-PASS audit of one sealed compiler-rejected IR."""
+
+    errors: list[str] = []
+    if not isinstance(value, dict):
+        return ["RULE_COMPILE_FAILURE_AUDIT_OBJECT_REQUIRED"]
+    expected_keys = {
+        "schema_version",
+        "study_profile_digest",
+        "failed_candidate_id",
+        "typed_rule_ir_digest",
+        "failure_descriptor_digest",
+        "outcome",
+        "findings",
+        "scope_limitations",
+    }
+    if set(value) != expected_keys:
+        errors.append("RULE_COMPILE_FAILURE_AUDIT_FIELDS")
+    if value.get("schema_version") != RULE_COMPILE_FAILURE_AUDIT_SCHEMA:
+        errors.append("RULE_COMPILE_FAILURE_AUDIT_SCHEMA")
+    for field, expected in (
+        ("study_profile_digest", study_profile_digest),
+        ("failed_candidate_id", failed_candidate_id),
+        ("typed_rule_ir_digest", typed_rule_ir_digest),
+        ("failure_descriptor_digest", failure_descriptor_digest),
+    ):
+        if value.get(field) != expected:
+            errors.append(
+                f"RULE_COMPILE_FAILURE_AUDIT_{field.upper()}_IDENTITY"
+            )
+    if value.get("outcome") not in {"fail", "not_assessed"}:
+        errors.append("RULE_COMPILE_FAILURE_AUDIT_OUTCOME")
+    findings = value.get("findings")
+    if not isinstance(findings, list) or not findings or any(
+        not isinstance(item, str) or not item.strip() for item in findings
+    ):
+        errors.append("RULE_COMPILE_FAILURE_AUDIT_FINDINGS")
+    limitations = value.get("scope_limitations")
+    if not isinstance(limitations, list) or any(
+        not isinstance(item, str) or not item.strip() for item in limitations
+    ):
+        errors.append("RULE_COMPILE_FAILURE_AUDIT_SCOPE_LIMITATIONS")
     return errors
 
 

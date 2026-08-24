@@ -69,7 +69,9 @@ from benchmark_agents.contract import (
     worker_prompt,
     graph_study_profile,
     graph_compile_qa_prompt,
+    graph_compile_failure_qa_prompt,
     graph_compile_repair_prompt,
+    graph_compile_failure_repair_prompt,
     graph_implementation_prompt,
     graph_execution_test_plan_prompt,
     graph_execution_test_qa_prompt,
@@ -79,13 +81,14 @@ from benchmark_agents.contract import (
     graph_repair_prompt,
     graph_worker_prompt,
     validate_graph_compile_audit,
+    validate_graph_compile_failure_audit,
     validate_execution_test_audit,
     validate_graph_audit,
 )
 
 
 AGENT_VERSION = "0.9.0"
-GRAPH_AGENT_VERSION = "1.2.0"
+GRAPH_AGENT_VERSION = "1.2.1"
 METHOD_SOURCE_COMMIT = "3c3813444a7d43d0a56837e9cb960be86ce26d06"
 METHOD_SOURCE_PATH = "method-paper/METHOD.md"
 METHOD_SCOPE_PATH = "method-paper/SCOPE-DATUM.md"
@@ -2681,6 +2684,14 @@ Path(__MANIFEST_PATH__).chmod(0o444)
             "candidate_report_record_id",
             "candidate_report_digest",
             "candidate_report_schema",
+            "failed_candidate_id",
+            "failure_classification",
+            "failure_type",
+            "failure_size",
+            "failure_sha256",
+            "failure_descriptor_path",
+            "failure_descriptor_size",
+            "failure_descriptor_sha256",
             "typed_rule_ir_path",
             "typed_rule_ir_size",
             "typed_rule_ir_sha256",
@@ -2738,16 +2749,32 @@ Path(__MANIFEST_PATH__).chmod(0o444)
         graph_path = (candidate_root / "GRAPH.jsonl").as_posix()
         candidate_ir_path = (candidate_root / "TYPED-RULE-IR.json").as_posix()
         candidate_report_path = (candidate_root / "TYPED-RULE-COMPILE.json").as_posix()
-        build_program = (
-            "import json; from pathlib import Path; "
-            "from corridor_kit.graph import freeze_rule_candidate,read_rule_candidate_payload; "
-            f"p=Path({graph_path!r}); ir=json.loads(Path({ir_path!r}).read_text(encoding='utf-8')); "
-            "r=freeze_rule_candidate(p,typed_rule_ir=ir,include_compile_report=False); "
-            "d=read_rule_candidate_payload(p,candidate_report_record_id=r['candidate_report_record_id'],candidate_report_digest=r['candidate_report_digest']); "
-            f"Path({candidate_ir_path!r}).write_bytes(d['typed_rule_ir_bytes']); "
-            f"Path({candidate_report_path!r}).write_bytes(d['compile_report_bytes']); "
-            f"r.update({{'typed_rule_ir_path':{candidate_ir_path!r},'typed_rule_report_path':{candidate_report_path!r}}}); "
-            "print(json.dumps(r,sort_keys=True))"
+        build_program = "\n".join(
+            [
+                "import json",
+                "from pathlib import Path",
+                "from corridor_kit import CorridorKitError,canonical_json_bytes,sha256_bytes,sha256_json",
+                "from corridor_kit.graph import freeze_rule_candidate,read_rule_candidate_payload",
+                f"p=Path({graph_path!r})",
+                f"ir=json.loads(Path({ir_path!r}).read_text(encoding='utf-8'))",
+                "ir_bytes=canonical_json_bytes(ir)",
+                f"Path({candidate_ir_path!r}).write_bytes(ir_bytes)",
+                "try:",
+                "    r=freeze_rule_candidate(p,typed_rule_ir=ir,include_compile_report=False)",
+                "    d=read_rule_candidate_payload(p,candidate_report_record_id=r['candidate_report_record_id'],candidate_report_digest=r['candidate_report_digest'])",
+                f"    Path({candidate_ir_path!r}).write_bytes(d['typed_rule_ir_bytes'])",
+                f"    Path({candidate_report_path!r}).write_bytes(d['compile_report_bytes'])",
+                f"    r.update({{'typed_rule_ir_path':{candidate_ir_path!r},'typed_rule_report_path':{candidate_report_path!r}}})",
+                "except CorridorKitError as exc:",
+                "    failure_bytes=str(exc).encode('utf-8')",
+                "    identity={'schema_version':'charting-loop/rule-compile-failure/v1','status':'compile_candidate_semantic_rejected','failure_classification':'semantic_compile_rejected','failure_type':type(exc).__name__,'failure_size':len(failure_bytes),'failure_sha256':sha256_bytes(failure_bytes),'typed_rule_ir_size':len(ir_bytes),'typed_rule_ir_sha256':sha256_bytes(ir_bytes)}",
+                "    failed_candidate_id=sha256_json(identity)",
+                "    descriptor={**identity,'failed_candidate_id':failed_candidate_id}",
+                "    descriptor_bytes=canonical_json_bytes(descriptor)",
+                f"    Path({candidate_report_path!r}).write_bytes(descriptor_bytes)",
+                f"    r={{'ok':False,**descriptor,'failure_descriptor_path':{candidate_report_path!r},'failure_descriptor_size':len(descriptor_bytes),'failure_descriptor_sha256':sha256_bytes(descriptor_bytes),'typed_rule_ir_path':{candidate_ir_path!r}}}",
+                "print(json.dumps(r,sort_keys=True))",
+            ]
         )
         command = (
             f"test -f {shlex.quote(ir_path)} && "
@@ -2758,26 +2785,59 @@ Path(__MANIFEST_PATH__).chmod(0o444)
             f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
             f"python3 -c {shlex.quote(build_program)}"
         )
-        built = await self.exec_as_root(environment, command=command)
+        try:
+            built = await self.exec_as_root(environment, command=command)
+        except Exception as exc:
+            failure_bytes = str(exc).encode("utf-8")
+            return {
+                "ok": False,
+                "iteration": iteration,
+                "graph_path": graph_path,
+                "status": "compile_candidate_execution_failed",
+                "failure_type": type(exc).__name__,
+                "failure_size": len(failure_bytes),
+                "failure_sha256": "sha256:"
+                + hashlib.sha256(failure_bytes).hexdigest(),
+            }
         lines = [line for line in (built.stdout or "").splitlines() if line.strip()]
         if built.return_code != 0 or not lines:
+            failure_bytes = (
+                built.stderr or built.stdout or "no output"
+            ).encode("utf-8")
             return {
                 "ok": False,
                 "iteration": iteration,
                 "graph_path": graph_path,
                 "status": "compile_candidate_build_failed",
-                "error": (built.stderr or built.stdout or "no output")[-4000:],
+                "failure_type": "command_failed",
+                "failure_size": len(failure_bytes),
+                "failure_sha256": "sha256:"
+                + hashlib.sha256(failure_bytes).hexdigest(),
             }
         try:
             candidate = json.loads(lines[-1])
         except json.JSONDecodeError:
+            failure_bytes = (built.stdout or "").encode("utf-8")
             return {
                 "ok": False,
                 "iteration": iteration,
                 "graph_path": graph_path,
                 "status": "compile_candidate_result_unreadable",
-                "error": (built.stdout or "")[-4000:],
+                "failure_type": "result_unreadable",
+                "failure_size": len(failure_bytes),
+                "failure_sha256": "sha256:"
+                + hashlib.sha256(failure_bytes).hexdigest(),
             }
+        candidate = {"iteration": iteration, "graph_path": graph_path, **candidate}
+        if candidate.get("status") == "compile_candidate_semantic_rejected":
+            await self.exec_as_root(
+                environment,
+                command=(
+                    f"find {shlex.quote(candidate_root.as_posix())} -type f -exec chmod 0444 {{}} + && "
+                    f"chmod 0555 {shlex.quote(candidate_root.as_posix())}"
+                ),
+            )
+            return candidate
         doctor = await self._graph_doctor_report(environment, graph_path=graph_path)
         if (
             candidate.get("ok") is not True
@@ -2801,8 +2861,6 @@ Path(__MANIFEST_PATH__).chmod(0o444)
         )
         return {
             "ok": True,
-            "iteration": iteration,
-            "graph_path": graph_path,
             **candidate,
             "doctor": doctor,
         }
@@ -2835,13 +2893,26 @@ Path(__MANIFEST_PATH__).chmod(0o444)
                 "outcome": "not_assessed",
                 "rule_closure_ready": False,
             }
-        errors = validate_graph_compile_audit(
-            value,
-            study_profile_digest=study_profile_digest,
-            graph_digest=str(candidate["graph_digest"]),
-            candidate_report_record_id=str(candidate["candidate_report_record_id"]),
-            candidate_report_digest=str(candidate["candidate_report_digest"]),
-        )
+        if candidate.get("status") == "compile_candidate_semantic_rejected":
+            errors = validate_graph_compile_failure_audit(
+                value,
+                study_profile_digest=study_profile_digest,
+                failed_candidate_id=str(candidate["failed_candidate_id"]),
+                typed_rule_ir_digest=str(candidate["typed_rule_ir_sha256"]),
+                failure_descriptor_digest=str(
+                    candidate["failure_descriptor_sha256"]
+                ),
+            )
+        else:
+            errors = validate_graph_compile_audit(
+                value,
+                study_profile_digest=study_profile_digest,
+                graph_digest=str(candidate["graph_digest"]),
+                candidate_report_record_id=str(
+                    candidate["candidate_report_record_id"]
+                ),
+                candidate_report_digest=str(candidate["candidate_report_digest"]),
+            )
         outcome = value.get("outcome") if not errors else "not_assessed"
         return value, {
             "valid": not errors,
@@ -3165,10 +3236,28 @@ Path(__MANIFEST_PATH__).chmod(0o444)
             ir_path, report_path = self._rule_compile_paths(compile_iteration)
             if worker_started:
                 assert prior_candidate is not None and compile_qa_path is not None
-                _, worker_run = await self._resume_role(
-                    "worker",
-                    worker,
-                    graph_compile_repair_prompt(
+                if (
+                    prior_candidate.get("status")
+                    == "compile_candidate_semantic_rejected"
+                ):
+                    repair_prompt = graph_compile_failure_repair_prompt(
+                        instruction,
+                        arm=self.ARM,
+                        study_profile_digest=str(profile["profile_digest"]),
+                        failed_candidate_id=str(
+                            prior_candidate["failed_candidate_id"]
+                        ),
+                        prior_typed_rule_ir_digest=str(
+                            prior_candidate["typed_rule_ir_sha256"]
+                        ),
+                        qa_path=compile_qa_path,
+                        output_ir_path=ir_path,
+                        output_report_path=report_path,
+                        remaining_seconds=_remaining_seconds(execution_deadline),
+                        method_text=method_text,
+                    )
+                else:
+                    repair_prompt = graph_compile_repair_prompt(
                         instruction,
                         arm=self.ARM,
                         study_profile_digest=str(profile["profile_digest"]),
@@ -3181,7 +3270,11 @@ Path(__MANIFEST_PATH__).chmod(0o444)
                         output_report_path=report_path,
                         remaining_seconds=_remaining_seconds(execution_deadline),
                         method_text=method_text,
-                    ),
+                    )
+                _, worker_run = await self._resume_role(
+                    "worker",
+                    worker,
+                    repair_prompt,
                     environment,
                     phase=f"worker-recompile-{compile_iteration:04d}",
                     deadline=execution_deadline,
@@ -3210,9 +3303,17 @@ Path(__MANIFEST_PATH__).chmod(0o444)
             metadata.setdefault("compile_candidates", []).append(
                 self._rule_compile_candidate_metadata(compile_candidate)
             )
-            if compile_candidate.get("ok") is not True:
+            compiler_rejected = (
+                compile_candidate.get("status")
+                == "compile_candidate_semantic_rejected"
+            )
+            if compile_candidate.get("ok") is not True and not compiler_rejected:
                 metadata["phase_events"].append("compile_candidate_build_failed")
                 break
+            if compiler_rejected:
+                metadata["phase_events"].append(
+                    "compile_candidate_semantic_rejected"
+                )
 
             compile_qa_path = (
                 PurePosixPath(RUNTIME_ROOT)
@@ -3221,41 +3322,73 @@ Path(__MANIFEST_PATH__).chmod(0o444)
             ).as_posix()
             await self._open_qa_directory(environment)
             try:
-                compile_prompt = graph_compile_qa_prompt(
-                    instruction,
-                    arm=self.ARM,
-                    study_profile_digest=str(profile["profile_digest"]),
-                    graph_digest=str(compile_candidate["graph_digest"]),
-                    candidate_report_record_id=str(
-                        compile_candidate["candidate_report_record_id"]
-                    ),
-                    candidate_report_digest=str(
-                        compile_candidate["candidate_report_digest"]
-                    ),
-                    remaining_seconds=_remaining_seconds(execution_deadline),
-                    method_text=method_text,
-                    graph_path=str(compile_candidate["graph_path"]),
-                    typed_rule_ir_path=str(
-                        compile_candidate["typed_rule_ir_path"]
-                    ),
-                    typed_rule_ir_digest=str(
-                        compile_candidate["typed_rule_ir_sha256"]
-                    ),
-                    typed_rule_ir_size=int(
-                        compile_candidate["typed_rule_ir_size"]
-                    ),
-                    typed_rule_report_path=str(
-                        compile_candidate["typed_rule_report_path"]
-                    ),
-                    typed_rule_report_digest=str(
-                        compile_candidate["compile_report_sha256"]
-                    ),
-                    typed_rule_report_size=int(
-                        compile_candidate["compile_report_size"]
-                    ),
-                    qa_output_path=compile_qa_path,
-                    audit_iteration=compile_iteration,
-                )
+                if compiler_rejected:
+                    compile_prompt = graph_compile_failure_qa_prompt(
+                        instruction,
+                        arm=self.ARM,
+                        study_profile_digest=str(profile["profile_digest"]),
+                        failed_candidate_id=str(
+                            compile_candidate["failed_candidate_id"]
+                        ),
+                        remaining_seconds=_remaining_seconds(execution_deadline),
+                        method_text=method_text,
+                        typed_rule_ir_path=str(
+                            compile_candidate["typed_rule_ir_path"]
+                        ),
+                        typed_rule_ir_digest=str(
+                            compile_candidate["typed_rule_ir_sha256"]
+                        ),
+                        typed_rule_ir_size=int(
+                            compile_candidate["typed_rule_ir_size"]
+                        ),
+                        failure_descriptor_path=str(
+                            compile_candidate["failure_descriptor_path"]
+                        ),
+                        failure_descriptor_digest=str(
+                            compile_candidate["failure_descriptor_sha256"]
+                        ),
+                        failure_descriptor_size=int(
+                            compile_candidate["failure_descriptor_size"]
+                        ),
+                        qa_output_path=compile_qa_path,
+                        audit_iteration=compile_iteration,
+                    )
+                else:
+                    compile_prompt = graph_compile_qa_prompt(
+                        instruction,
+                        arm=self.ARM,
+                        study_profile_digest=str(profile["profile_digest"]),
+                        graph_digest=str(compile_candidate["graph_digest"]),
+                        candidate_report_record_id=str(
+                            compile_candidate["candidate_report_record_id"]
+                        ),
+                        candidate_report_digest=str(
+                            compile_candidate["candidate_report_digest"]
+                        ),
+                        remaining_seconds=_remaining_seconds(execution_deadline),
+                        method_text=method_text,
+                        graph_path=str(compile_candidate["graph_path"]),
+                        typed_rule_ir_path=str(
+                            compile_candidate["typed_rule_ir_path"]
+                        ),
+                        typed_rule_ir_digest=str(
+                            compile_candidate["typed_rule_ir_sha256"]
+                        ),
+                        typed_rule_ir_size=int(
+                            compile_candidate["typed_rule_ir_size"]
+                        ),
+                        typed_rule_report_path=str(
+                            compile_candidate["typed_rule_report_path"]
+                        ),
+                        typed_rule_report_digest=str(
+                            compile_candidate["compile_report_sha256"]
+                        ),
+                        typed_rule_report_size=int(
+                            compile_candidate["compile_report_size"]
+                        ),
+                        qa_output_path=compile_qa_path,
+                        audit_iteration=compile_iteration,
+                    )
                 if qa_started:
                     _, qa_run = await self._resume_role(
                         "qa",
@@ -3283,21 +3416,45 @@ Path(__MANIFEST_PATH__).chmod(0o444)
                 study_profile_digest=str(profile["profile_digest"]),
                 candidate=compile_candidate,
             )
-            metadata["qa_audits"].append(
-                {
-                    "kind": "rule_compile",
-                    "iteration": compile_iteration,
-                    "qa_path": compile_qa_path,
-                    "graph_digest": compile_candidate["graph_digest"],
-                    "candidate_report_record_id": compile_candidate[
-                        "candidate_report_record_id"
-                    ],
-                    "decision": compile_decision,
-                    "assessment": compile_assessment,
-                }
-            )
+            compile_audit_record = {
+                "kind": "rule_compile",
+                "iteration": compile_iteration,
+                "qa_path": compile_qa_path,
+                "decision": compile_decision,
+                "assessment": compile_assessment,
+            }
+            if compiler_rejected:
+                compile_audit_record.update(
+                    {
+                        "candidate_status": compile_candidate["status"],
+                        "failed_candidate_id": compile_candidate[
+                            "failed_candidate_id"
+                        ],
+                        "typed_rule_ir_sha256": compile_candidate[
+                            "typed_rule_ir_sha256"
+                        ],
+                        "failure_descriptor_sha256": compile_candidate[
+                            "failure_descriptor_sha256"
+                        ],
+                    }
+                )
+            else:
+                compile_audit_record.update(
+                    {
+                        "graph_digest": compile_candidate["graph_digest"],
+                        "candidate_report_record_id": compile_candidate[
+                            "candidate_report_record_id"
+                        ],
+                    }
+                )
+            metadata["qa_audits"].append(compile_audit_record)
             compile_assessment_record: dict[str, Any] | None = None
-            if compile_decision.get("valid") is True:
+            if compiler_rejected and compile_decision.get("valid") is not True:
+                metadata["phase_events"].append(
+                    "compile_failure_audit_invalid"
+                )
+                break
+            if compile_decision.get("valid") is True and not compiler_rejected:
                 compile_assessment_record = await self._install_rule_closure(
                     environment,
                     candidate=compile_candidate,

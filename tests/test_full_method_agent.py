@@ -332,15 +332,97 @@ class FullMethodContractTests(unittest.TestCase):
 
         self.assertFalse(result["ok"])
         self.assertEqual("compile_candidate_build_failed", metadata["status"])
-        self.assertEqual(len(result["error"].encode("utf-8")), metadata["error_size"])
+        self.assertEqual(len(raw_error.encode("utf-8")), metadata["failure_size"])
         self.assertEqual(
-            "sha256:" + hashlib.sha256(result["error"].encode("utf-8")).hexdigest(),
-            metadata["error_sha256"],
+            "sha256:" + hashlib.sha256(raw_error.encode("utf-8")).hexdigest(),
+            metadata["failure_sha256"],
         )
         serialized = json.dumps(metadata, sort_keys=True)
         self.assertNotIn(ir_path.as_posix(), serialized)
         self.assertNotIn("compiler-payload", serialized)
-        self.assertNotIn("error", metadata)
+        self.assertNotIn("error", result)
+
+    def test_compile_candidate_raising_adapter_returns_bounded_failure(self) -> None:
+        adapter = load_harbor_agent_with_stubs()
+        agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
+        raw_error = "root command failed with private stdout"
+
+        async def exec_root(self, environment, *, command):
+            raise RuntimeError(raw_error)
+
+        agent.exec_as_root = types.MethodType(exec_root, agent)
+        result = asyncio.run(
+            agent._freeze_rule_compile_candidate(
+                object(), iteration=3, ir_path="/mutable/worker-ir.json"
+            )
+        )
+        metadata = agent._rule_compile_candidate_metadata(result)
+        self.assertEqual("compile_candidate_execution_failed", result["status"])
+        self.assertEqual("RuntimeError", metadata["failure_type"])
+        self.assertEqual(len(raw_error.encode("utf-8")), metadata["failure_size"])
+        self.assertNotIn(raw_error, json.dumps(result, sort_keys=True))
+
+    def test_semantic_compile_failure_seals_ir_and_descriptor_for_qa(self) -> None:
+        from tests.test_corridor_kit import TypedRuleCompilerTests
+
+        adapter = load_harbor_agent_with_stubs()
+        agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
+
+        async def exec_root(self, environment, *, command):
+            completed = subprocess.run(
+                command, shell=True, text=True, capture_output=True, check=False
+            )
+            return types.SimpleNamespace(
+                return_code=completed.returncode,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            )
+
+        agent.exec_as_root = types.MethodType(exec_root, agent)
+        value = TypedRuleCompilerTests._v4_ir()
+        value["rules"][0]["semantics"]["rule_kind"] = "temporal_conditional"
+        value["rules"][0]["semantics"]["conditions"][0][
+            "condition_kind"
+        ] = "temporal"
+        with tempfile.TemporaryDirectory() as directory:
+            runtime_root = Path(directory) / "runtime"
+            ir_path = Path(directory) / "worker-ir.json"
+            ir_path.write_text(json.dumps(value), encoding="utf-8")
+            with (
+                mock.patch.object(adapter, "RUNTIME_ROOT", runtime_root.as_posix()),
+                mock.patch.object(adapter, "SDK_ROOT", REPOSITORY_ROOT.as_posix()),
+            ):
+                result = asyncio.run(
+                    agent._freeze_rule_compile_candidate(
+                        object(), iteration=1, ir_path=ir_path.as_posix()
+                    )
+                )
+            frozen_ir = Path(result["typed_rule_ir_path"])
+            descriptor_path = Path(result["failure_descriptor_path"])
+            descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+            frozen_ir_bytes = frozen_ir.read_bytes()
+            descriptor_bytes = descriptor_path.read_bytes()
+            frozen_ir_mode = stat.S_IMODE(frozen_ir.stat().st_mode)
+            descriptor_mode = stat.S_IMODE(descriptor_path.stat().st_mode)
+
+        self.assertFalse(result["ok"])
+        self.assertEqual("compile_candidate_semantic_rejected", result["status"])
+        self.assertEqual(result["failed_candidate_id"], descriptor["failed_candidate_id"])
+        self.assertEqual(
+            result["typed_rule_ir_sha256"],
+            "sha256:" + hashlib.sha256(frozen_ir_bytes).hexdigest(),
+        )
+        self.assertEqual(
+            result["failure_descriptor_sha256"],
+            "sha256:" + hashlib.sha256(descriptor_bytes).hexdigest(),
+        )
+        self.assertEqual(0o444, frozen_ir_mode)
+        self.assertEqual(0o444, descriptor_mode)
+        serialized = json.dumps(
+            agent._rule_compile_candidate_metadata(result), sort_keys=True
+        )
+        self.assertNotIn(ir_path.as_posix(), serialized)
+        self.assertNotIn("requires a temporal witness operator", serialized)
 
     def test_root_json_writer_reports_transport_failure_and_cleans_staging(self) -> None:
         adapter = load_harbor_agent_with_stubs()
@@ -2472,6 +2554,51 @@ class FullMethodContractTests(unittest.TestCase):
             contract.validate_graph_compile_audit(value, **arguments),
         )
 
+    def test_compiler_rejection_qa_is_identity_bound_and_cannot_pass(self) -> None:
+        value = {
+            "schema_version": contract.RULE_COMPILE_FAILURE_AUDIT_SCHEMA,
+            "study_profile_digest": "sha256:" + "1" * 64,
+            "failed_candidate_id": "sha256:" + "2" * 64,
+            "typed_rule_ir_digest": "sha256:" + "3" * 64,
+            "failure_descriptor_digest": "sha256:" + "4" * 64,
+            "outcome": "fail",
+            "findings": ["COND-1 omits the required temporal boundary witness."],
+            "scope_limitations": [],
+        }
+        arguments = {
+            "study_profile_digest": "sha256:" + "1" * 64,
+            "failed_candidate_id": "sha256:" + "2" * 64,
+            "typed_rule_ir_digest": "sha256:" + "3" * 64,
+            "failure_descriptor_digest": "sha256:" + "4" * 64,
+        }
+        self.assertEqual(
+            [], contract.validate_graph_compile_failure_audit(value, **arguments)
+        )
+        value["outcome"] = "pass"
+        value["findings"] = []
+        errors = contract.validate_graph_compile_failure_audit(value, **arguments)
+        self.assertIn("RULE_COMPILE_FAILURE_AUDIT_OUTCOME", errors)
+        self.assertIn("RULE_COMPILE_FAILURE_AUDIT_FINDINGS", errors)
+
+        prompt = contract.graph_compile_failure_qa_prompt(
+            "Complete the task.",
+            arm="neutral",
+            study_profile_digest=arguments["study_profile_digest"],
+            failed_candidate_id=arguments["failed_candidate_id"],
+            remaining_seconds=300,
+            method_text=None,
+            typed_rule_ir_path="/audit/failed/TYPED-RULE-IR.json",
+            typed_rule_ir_digest=arguments["typed_rule_ir_digest"],
+            typed_rule_ir_size=123,
+            failure_descriptor_path="/audit/failed/TYPED-RULE-COMPILE.json",
+            failure_descriptor_digest=arguments["failure_descriptor_digest"],
+            failure_descriptor_size=456,
+            qa_output_path="/audit/qa.json",
+            audit_iteration=1,
+        )
+        self.assertIn("can never PASS", prompt)
+        self.assertIn("rules compile /audit/failed/TYPED-RULE-IR.json", prompt)
+
     def test_execution_test_qa_is_identity_bound_and_advisory(self) -> None:
         value = {
             "schema_version": contract.EXECUTION_TEST_AUDIT_SCHEMA,
@@ -2509,11 +2636,9 @@ class FullMethodContractTests(unittest.TestCase):
         adapter = load_harbor_agent_with_stubs()
         method = object.__new__(adapter.ChartingLoopGraphKernelMethodAgent)
         neutral = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
-        # The public doctor freezes the experiment condition at 1.2.0. The
-        # post-Direction evidence records extend that frozen profile without
-        # silently changing its declared task/model/runtime condition.
-        self.assertEqual(method.version(), "1.2.0")
-        self.assertEqual(neutral.version(), "1.2.0")
+        # Compiler-rejection custody changes the frozen orchestration condition.
+        self.assertEqual(method.version(), "1.2.1")
+        self.assertEqual(neutral.version(), "1.2.1")
         self.assertEqual(method.ROLE_SEQUENCE, ("worker", "qa"))
         self.assertEqual(neutral.ROLE_SEQUENCE, ("worker", "qa"))
         self.assertIn("Worker compile", method.ORCHESTRATION_MESSAGE)
@@ -2650,6 +2775,19 @@ class FullMethodContractTests(unittest.TestCase):
         async def freeze_compile(self, environment, *, iteration, ir_path):
             state["compile_iteration"] = iteration
             events.append(f"compile-candidate-{iteration}")
+            if iteration == 1:
+                return {
+                    "ok": False,
+                    "iteration": iteration,
+                    "status": "compile_candidate_semantic_rejected",
+                    "failed_candidate_id": "sha256:" + "a" * 64,
+                    "typed_rule_ir_path": "/audit/compile-1/TYPED-RULE-IR.json",
+                    "typed_rule_ir_sha256": "sha256:" + "e" * 64,
+                    "typed_rule_ir_size": 1234,
+                    "failure_descriptor_path": "/audit/compile-1/TYPED-RULE-COMPILE.json",
+                    "failure_descriptor_sha256": "sha256:" + "f" * 64,
+                    "failure_descriptor_size": 456,
+                }
             return {
                 "ok": True,
                 "iteration": iteration,
@@ -2851,7 +2989,6 @@ class FullMethodContractTests(unittest.TestCase):
                 "qa-report-frozen",
                 "qa-seal",
                 "compile-decision-1:False",
-                "rule-closure-1",
                 "worker-resume:worker-recompile-0002",
                 "compile-candidate-2",
                 "qa-open",
