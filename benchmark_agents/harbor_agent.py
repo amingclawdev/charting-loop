@@ -2538,7 +2538,7 @@ manifest = {
     "contract_digest": contract["body"]["contract_digest"],
     "fixtures": sorted(fixtures_by_identity.values(), key=lambda item: (item["source_path"], item["digest"])),
 }
-Path(__MANIFEST_PATH__).write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+Path(__MANIFEST_PATH__).write_text(json.dumps(manifest, sort_keys=True) + "\\n", encoding="utf-8")
 Path(__MANIFEST_PATH__).chmod(0o444)
 """.replace("__GRAPH_PATH__", repr(frozen_graph_path)).replace(
                 "__FREEZE_ROOT__", repr(revision_root.as_posix())

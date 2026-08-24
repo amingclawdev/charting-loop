@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import shlex
 import stat
 import subprocess
 import sys
@@ -2380,6 +2381,20 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertEqual("sha256:" + "2" * 64, report["acceptance_root"])
         self.assertEqual(contract_record_id, report["execution_test_contract_record_id"])
         self.assertTrue(any(contract_record_id in command for command in commands))
+        fixture_command = next(
+            command for command in commands if "EXECUTION-TEST-FIXTURES.json" in command
+        )
+        fixture_argv = shlex.split(fixture_command)
+        self.assertEqual(["python3", "-c"], fixture_argv[:2])
+        compile(
+            fixture_argv[2],
+            "<execution-test-fixture-freeze>",
+            "exec",
+        )
+        self.assertIn(
+            'json.dumps(manifest, sort_keys=True) + "\\n"',
+            fixture_argv[2],
+        )
         self.assertEqual(report["doctor_report_digest"], writes[0]["doctor_report_digest"])
 
     def test_graph_corridor_finalization_uses_the_contract_corridor_root(self) -> None:
