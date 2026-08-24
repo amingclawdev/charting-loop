@@ -95,13 +95,17 @@ from .graph import (
     GRAPH_RECORD_SCHEMA,
     GRAPH_RECORD_TYPES,
     GRAPH_REPLAY_SCHEMA,
+    GraphBuildSession,
     append_graph_record,
     graph_doctor,
     initialize_graph,
     load_graph,
+    load_graph_index,
+    query_graph,
     replay_graph,
     validate_graph_records,
 )
+from .graph_index import GraphIndex, canonical_dependency_edge
 
 __all__ = [
     "ACCEPTANCE_SCHEMA",
@@ -185,10 +189,15 @@ __all__ = [
     "GRAPH_RECORD_SCHEMA",
     "GRAPH_RECORD_TYPES",
     "GRAPH_REPLAY_SCHEMA",
+    "GraphBuildSession",
+    "GraphIndex",
     "append_graph_record",
+    "canonical_dependency_edge",
     "graph_doctor",
     "initialize_graph",
     "load_graph",
+    "load_graph_index",
+    "query_graph",
     "replay_graph",
     "validate_graph_records",
 ]

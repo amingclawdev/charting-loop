@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from corridor_kit import (
     ACCEPTANCE_SCHEMA,
@@ -18,6 +19,7 @@ from corridor_kit import (
     WITNESSES_SCHEMA,
     WORK_BACKLOG_SCHEMA,
     CorridorKitError,
+    GraphBuildSession,
     append_admitted_facts,
     append_graph_record,
     append_position_event,
@@ -28,8 +30,10 @@ from corridor_kit import (
     freeze_submission,
     graph_doctor,
     initialize_graph,
+    load_graph_index,
     list_submissions,
     public_world_inventory,
+    query_graph,
     regular_tree_manifest,
     replay_graph,
     restore_submission,
@@ -54,7 +58,7 @@ from corridor_kit.domain.binary import (
     elf_inventory,
 )
 from corridor_kit.runtime import load_position_timeline, project_position
-from corridor_kit.core import load_json
+from corridor_kit.core import MAX_JSON_BYTES, load_json
 from corridor_kit.acceptance import qa_assessment_decision
 from corridor_kit.runtime import validate_qa_assessment_path
 from corridor_kit.scaffold import validate_method_capsule
@@ -2120,6 +2124,24 @@ class TypedRuleCompilerTests(unittest.TestCase):
                 candidate["compile_report"]["typed_dependency_count"],
                 after["typed_dependency_count"],
             )
+            rule_id = candidate["compile_report"]["rule_bodies"][0]["rule_id"]
+            expected_closure = closure["rule_closure_digests"][rule_id]
+            indexed_closure = query_graph(
+                path,
+                kind="rule-closure",
+                ref=rule_id,
+                expected_digest=expected_closure,
+            )
+            self.assertEqual("successor_established", indexed_closure["status"])
+            self.assertTrue(indexed_closure["digest_matches"])
+            self.assertFalse(indexed_closure["authorizes_mutation"])
+            checklist_id = candidate["compile_report"]["checklist_templates"][0][
+                "checklist_item_id"
+            ]
+            source_trace = query_graph(path, kind="source-trace", ref=checklist_id)
+            self.assertEqual([rule_id], source_trace["rule_ids"])
+            self.assertTrue(source_trace["source_clause_ids"])
+            self.assertTrue(source_trace["source_ids"])
 
     def test_nonpassing_compile_qa_never_materializes_rule_closure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -2138,6 +2160,53 @@ class TypedRuleCompilerTests(unittest.TestCase):
             self.assertFalse(result["rule_closure_established"])
             self.assertEqual(0, replay["rule_closure_count"])
             self.assertEqual(0, replay["acceptance_checklist_item_count"])
+
+    def test_freeze_and_ratify_each_use_one_load_validation_and_write(self) -> None:
+        import corridor_kit.graph as graph_module
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+
+            def counted(action):
+                with (
+                    mock.patch.object(
+                        graph_module,
+                        "_read_graph_records",
+                        wraps=graph_module._read_graph_records,
+                    ) as reads,
+                    mock.patch.object(
+                        graph_module,
+                        "validate_graph_records",
+                        wraps=graph_module.validate_graph_records,
+                    ) as validations,
+                    mock.patch.object(
+                        graph_module,
+                        "atomic_write_bytes",
+                        wraps=graph_module.atomic_write_bytes,
+                    ) as writes,
+                ):
+                    result = action()
+                    self.assertEqual(1, reads.call_count)
+                    self.assertEqual(1, validations.call_count)
+                    self.assertEqual(1, writes.call_count)
+                    return result
+
+            candidate = counted(
+                lambda: freeze_rule_candidate(path, typed_rule_ir=self._v4_ir())
+            )
+            counted(
+                lambda: ratify_rule_candidate(
+                    path,
+                    candidate_report_record_id=candidate[
+                        "candidate_report_record_id"
+                    ],
+                    candidate_report_digest=candidate["candidate_report_digest"],
+                    outcome="pass",
+                    findings=[],
+                    ratifier_ref="runner:test-batch-counts",
+                )
+            )
 
     def test_v4_bidirectional_compile_has_no_implicit_cartesian_projection(self) -> None:
         report = compile_typed_rule_ir(self._v4_ir())
@@ -4484,6 +4553,181 @@ class GraphKernelTests(unittest.TestCase):
             invalid = graph_doctor(path)
             self.assertEqual("structurally_invalid", invalid["classification"])
             self.assertFalse(invalid["blocking_gate"])
+
+    def test_graph_index_normalizes_relationships_and_matches_doctor_topology(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            rule = self._ratified_rule(
+                path, "R-INDEX", "Run prerequisites in declared order.", "e"
+            )
+            for item_id in ("C-FIRST", "C-SECOND", "C-THIRD"):
+                self._checklist(
+                    path,
+                    item_id=item_id,
+                    rule_id="R-INDEX",
+                    rule_record_id=rule["record_id"],
+                    partitions=[item_id.lower()],
+                    required_partitions=[item_id.lower()],
+                )
+            for dependency in (
+                {
+                    "dependency_id": "DEP-REQUIRES",
+                    "dependency_kind": "work",
+                    "from_ref": "C-SECOND",
+                    "to_ref": "C-FIRST",
+                    "relationship": "requires",
+                    "source_rule_id": "R-INDEX",
+                    "source_rule_record_id": rule["record_id"],
+                },
+                {
+                    "dependency_id": "DEP-PRECONDITION",
+                    "dependency_kind": "work",
+                    "from_ref": "C-SECOND",
+                    "to_ref": "C-THIRD",
+                    "relationship": "precondition_for",
+                    "source_rule_id": "R-INDEX",
+                    "source_rule_record_id": rule["record_id"],
+                },
+                {
+                    "dependency_id": "DEP-INVALIDATES",
+                    "dependency_kind": "work",
+                    "from_ref": "C-FIRST",
+                    "to_ref": "C-THIRD",
+                    "relationship": "invalidates",
+                    "source_rule_id": "R-INDEX",
+                    "source_rule_record_id": rule["record_id"],
+                },
+                {
+                    "dependency_id": "DEP-CONFLICTS",
+                    "dependency_kind": "work",
+                    "from_ref": "C-FIRST",
+                    "to_ref": "C-THIRD",
+                    "relationship": "conflicts",
+                    "source_rule_id": "R-INDEX",
+                    "source_rule_record_id": rule["record_id"],
+                },
+            ):
+                self._append(path, "typed_dependency", dependency)
+
+            index = load_graph_index(path)
+            topology = index.topology()
+            self.assertLess(
+                topology["topological_order"].index("C-FIRST"),
+                topology["topological_order"].index("C-SECOND"),
+            )
+            self.assertLess(
+                topology["topological_order"].index("C-SECOND"),
+                topology["topological_order"].index("C-THIRD"),
+            )
+            self.assertEqual(
+                ["C-FIRST", "C-SECOND"],
+                index.prerequisite_closure("C-THIRD")["prerequisite_refs"],
+            )
+            self.assertEqual(
+                ["C-FIRST", "C-SECOND", "C-THIRD"],
+                index.path("C-FIRST", "C-THIRD")["path"],
+            )
+            impact = index.impact("C-FIRST")
+            self.assertEqual(["C-SECOND", "C-THIRD"], impact["dependant_refs"])
+            self.assertEqual(["C-THIRD"], impact["invalidated_refs"])
+            self.assertEqual(["C-THIRD"], impact["conflict_refs"])
+            self.assertEqual(
+                topology["topological_order"],
+                graph_doctor(path)["hard_dependency_topological_order"],
+            )
+            closure = index.rule_closure("R-INDEX")
+            self.assertEqual("legacy_ratified", closure["status"])
+            self.assertFalse(closure["authorizes_mutation"])
+            self.assertNotEqual(index.graph_digest, index.graph_bytes_digest)
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "corridor_kit",
+                    "graph",
+                    "query",
+                    str(path),
+                    "--kind",
+                    "path",
+                    "--ref",
+                    "C-FIRST",
+                    "--target-ref",
+                    "C-THIRD",
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            self.assertEqual(
+                ["C-FIRST", "C-SECOND", "C-THIRD"],
+                json.loads(completed.stdout)["path"],
+            )
+
+    def test_graph_build_session_validates_and_writes_once_with_zero_write_failures(self) -> None:
+        import corridor_kit.graph as graph_module
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            with (
+                mock.patch.object(
+                    graph_module,
+                    "_read_graph_records",
+                    wraps=graph_module._read_graph_records,
+                ) as read_records,
+                mock.patch.object(
+                    graph_module,
+                    "validate_graph_records",
+                    wraps=graph_module.validate_graph_records,
+                ) as validate_records,
+                mock.patch.object(
+                    graph_module,
+                    "atomic_write_bytes",
+                    wraps=graph_module.atomic_write_bytes,
+                ) as write_bytes,
+            ):
+                session = GraphBuildSession(path)
+                session.append(
+                    record_type="rule_proposal",
+                    actor="worker",
+                    body={
+                        "rule_id": "R-BATCH",
+                        "statement": "Build the whole candidate before committing.",
+                        "source_ref": "official-task:batch",
+                        "source_digest": "sha256:" + "f" * 64,
+                    },
+                )
+                committed = session.commit()
+                self.assertEqual(1, committed["record_count"])
+                self.assertEqual(1, read_records.call_count)
+                self.assertEqual(1, validate_records.call_count)
+                self.assertEqual(1, write_bytes.call_count)
+
+            before = path.read_bytes()
+            invalid = GraphBuildSession(path)
+            invalid.append(record_type="rule_proposal", actor="worker", body={})
+            with self.assertRaises(CorridorKitError):
+                invalid.commit()
+            self.assertEqual(before, path.read_bytes())
+
+            oversized = GraphBuildSession(path)
+            oversized.append(
+                record_type="rule_proposal",
+                actor="worker",
+                body={
+                    "rule_id": "R-OVERSIZED",
+                    "statement": "x" * MAX_JSON_BYTES,
+                    "source_ref": "official-task:oversized",
+                    "source_digest": "sha256:" + "a" * 64,
+                },
+            )
+            with self.assertRaisesRegex(CorridorKitError, "candidate exceeds"):
+                oversized.commit()
+            self.assertEqual(before, path.read_bytes())
 
 
 if __name__ == "__main__":

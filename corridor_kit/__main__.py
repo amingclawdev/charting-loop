@@ -43,7 +43,13 @@ from .submission import (
     restore_submission,
     verify_submission,
 )
-from .graph import append_graph_record, graph_doctor, initialize_graph, replay_graph
+from .graph import (
+    append_graph_record,
+    graph_doctor,
+    initialize_graph,
+    query_graph,
+    replay_graph,
+)
 
 
 def _emit(value: Any, output: Path | None = None) -> None:
@@ -198,6 +204,31 @@ def _parser() -> argparse.ArgumentParser:
         graph_command = graph_commands.add_parser(graph_command_name)
         graph_command.add_argument("path", type=Path)
         graph_command.add_argument("--output", type=Path)
+    graph_query = graph_commands.add_parser(
+        "query", help="inspect the immutable advisory graph index"
+    )
+    graph_query.add_argument("path", type=Path)
+    graph_query.add_argument(
+        "--kind",
+        required=True,
+        choices=(
+            "node",
+            "neighbors",
+            "prerequisites",
+            "dependants",
+            "impact",
+            "topology",
+            "frontier",
+            "path",
+            "source-trace",
+            "explain-blocked",
+            "rule-closure",
+        ),
+    )
+    graph_query.add_argument("--ref")
+    graph_query.add_argument("--target-ref")
+    graph_query.add_argument("--expected-digest")
+    graph_query.add_argument("--output", type=Path)
 
     manifest = commands.add_parser("manifest", help="hash a closed regular-file tree")
     manifest.add_argument("root", type=Path)
@@ -380,6 +411,18 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             if args.graph_command == "doctor":
                 _emit(graph_doctor(args.path), args.output)
+                return 0
+            if args.graph_command == "query":
+                _emit(
+                    query_graph(
+                        args.path,
+                        kind=args.kind,
+                        ref=args.ref,
+                        target_ref=args.target_ref,
+                        expected_digest=args.expected_digest,
+                    ),
+                    args.output,
+                )
                 return 0
             report = replay_graph(args.path)
             if args.graph_command == "validate":

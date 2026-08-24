@@ -7,8 +7,6 @@ but deliberately does not decide task truth, correctness, completion, or PASS.
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -37,6 +35,7 @@ from .compiler import (
     validate_source_bundle,
     validate_source_clause_inventory_v3,
 )
+from .graph_index import GraphIndex
 
 RULE_RATIFICATION_SCHEMA_V2 = "charting-loop/rule-ratification/v2"
 RULE_CANDIDATE_REPORT_SCHEMA = "charting-loop/rule-candidate-report/v1"
@@ -205,8 +204,8 @@ def _record_id(payload: Mapping[str, Any]) -> str:
     return sha256_json(payload)
 
 
-def load_graph(path: Path) -> list[dict[str, Any]]:
-    """Load and verify every byte in a graph chain without following symlinks."""
+def _read_graph_records(path: Path) -> list[dict[str, Any]]:
+    """Parse exact graph bytes; callers validate the complete candidate once."""
 
     if path.is_symlink() or not path.is_file():
         raise CorridorKitError(f"graph must be a regular non-symlink file: {path}")
@@ -221,6 +220,13 @@ def load_graph(path: Path) -> list[dict[str, Any]]:
         if not raw.strip():
             raise CorridorKitError(f"graph contains a blank line at {index}")
         records.append(_strict_object(raw, line_number=index))
+    return records
+
+
+def load_graph(path: Path) -> list[dict[str, Any]]:
+    """Load and verify every byte in a graph chain without following symlinks."""
+
+    records = _read_graph_records(path)
     validate_graph_records(records)
     return records
 
@@ -1855,6 +1861,13 @@ def graph_doctor(path: Path) -> dict[str, Any]:
         return report
 
     projection = _graph_projection(records)
+    graph_index = GraphIndex.build(
+        projection=projection,
+        records=records,
+        graph_digest=sha256_json(records),
+        graph_bytes_digest=graph_bytes_digest or sha256_bytes(b""),
+        head_record_id=validation["head_record_id"],
+    )
     checklist_items: dict[str, dict[str, Any]] = projection["checklist_items"]
     dependencies: dict[str, dict[str, Any]] = projection["dependencies"]
     source_artifacts: dict[str, dict[str, Any]] = projection["source_artifacts"]
@@ -2062,7 +2075,7 @@ def graph_doctor(path: Path) -> dict[str, Any]:
             and dependency_id not in active_resolutions
         ):
             unresolved_conflicts.append(dependency_id)
-    topological_order = _topological_order(current_nodes, hard_edges)
+    topological_order = graph_index.topology()["topological_order"]
 
     positions: dict[str, dict[str, Any]] = projection["positions"]
     latest_position_ref = next(reversed(positions), None)
@@ -2357,6 +2370,12 @@ def graph_doctor(path: Path) -> dict[str, Any]:
             "missing_or_stale_rule_ids": stale_or_missing_rule_closures,
         },
         "hard_dependency_topological_order": topological_order,
+        "graph_index": {
+            "graph_digest": graph_index.graph_digest,
+            "graph_bytes_digest": graph_index.graph_bytes_digest,
+            "head_record_id": graph_index.head_record_id,
+            "advisory_only": True,
+        },
         "ready_item_ids": (
             list(latest_position.get("ready_item_ids", [])) if latest_position else []
         ),
@@ -2399,17 +2418,127 @@ def initialize_graph(path: Path) -> dict[str, Any]:
     return replay_graph(path)
 
 
-def _staged_graph_path(path: Path) -> Path:
-    """Create a same-directory staging file for an all-or-nothing graph mutation."""
+class GraphBuildSession:
+    """Build one candidate graph in memory and commit it with one validation/write."""
 
-    descriptor, raw_path = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".staging", dir=path.parent
+    def __init__(self, path: Path):
+        self.path = path
+        self._records = _read_graph_records(path)
+        self._content_ids = {
+            record.get("content_id"): record
+            for record in self._records
+            if isinstance(record.get("content_id"), str)
+        }
+        self._dirty = False
+
+    @property
+    def records(self) -> tuple[dict[str, Any], ...]:
+        return tuple(self._records)
+
+    def append(
+        self, *, record_type: str, actor: str, body: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Canonicalize and link one record without touching persistent bytes."""
+
+        if record_type not in GRAPH_RECORD_TYPES:
+            raise CorridorKitError(f"unknown graph record type: {record_type}")
+        if actor not in GRAPH_ACTORS:
+            raise CorridorKitError(f"unknown graph actor: {actor}")
+        if not isinstance(body, Mapping):
+            raise CorridorKitError("graph body must be an object")
+        canonical_body = json.loads(canonical_json_bytes(dict(body)).decode("utf-8"))
+        content_id = _content_id(record_type, actor, canonical_body)
+        existing = self._content_ids.get(content_id)
+        if existing is not None:
+            return {
+                "ok": True,
+                "idempotent": True,
+                "appended": False,
+                "record": existing,
+            }
+        previous = self._records[-1]["record_id"] if self._records else None
+        payload = _identity_payload(
+            sequence=len(self._records) + 1,
+            record_type=record_type,
+            actor=actor,
+            body=canonical_body,
+            previous=previous,
+        )
+        record = {
+            **payload,
+            "content_id": content_id,
+            "record_id": _record_id(payload),
+        }
+        self._records.append(record)
+        self._content_ids[content_id] = record
+        self._dirty = True
+        return {
+            "ok": True,
+            "idempotent": False,
+            "appended": True,
+            "record": record,
+        }
+
+    def append_many(
+        self, records: Iterable[tuple[str, str, Mapping[str, Any]]]
+    ) -> list[dict[str, Any]]:
+        return [
+            self.append(record_type=record_type, actor=actor, body=body)
+            for record_type, actor, body in records
+        ]
+
+    def commit(self) -> dict[str, Any]:
+        """Validate the complete graph and atomically replace bytes once."""
+
+        encoded = b"".join(
+            canonical_json_bytes(record) + b"\n" for record in self._records
+        )
+        if len(encoded) > MAX_JSON_BYTES:
+            raise CorridorKitError(
+                f"graph candidate exceeds {MAX_JSON_BYTES} bytes: {self.path}"
+            )
+        report = validate_graph_records(self._records)
+        if self._dirty:
+            atomic_write_bytes(self.path, encoded, mode=0o600)
+            self._dirty = False
+        return {
+            **report,
+            "graph_digest": sha256_json(self._records),
+            "graph_bytes_digest": sha256_bytes(encoded),
+            "records": list(self._records),
+        }
+
+
+def load_graph_index(path: Path) -> GraphIndex:
+    """Load one validated graph into a digest-bound immutable advisory index."""
+
+    records = load_graph(path)
+    encoded = path.read_bytes()
+    return GraphIndex.build(
+        projection=_graph_projection(records),
+        records=records,
+        graph_digest=sha256_json(records),
+        graph_bytes_digest=sha256_bytes(encoded),
+        head_record_id=(records[-1]["record_id"] if records else None),
     )
-    os.close(descriptor)
-    staged = Path(raw_path)
-    staged.write_bytes(path.read_bytes())
-    staged.chmod(0o600)
-    return staged
+
+
+def query_graph(
+    path: Path,
+    *,
+    kind: str,
+    ref: str | None = None,
+    target_ref: str | None = None,
+    expected_digest: str | None = None,
+) -> dict[str, Any]:
+    """Run one task-neutral, non-authoritative graph query."""
+
+    return load_graph_index(path).query(
+        kind,
+        ref=ref,
+        target_ref=target_ref,
+        expected_digest=expected_digest,
+    )
 
 
 def freeze_rule_candidate(
@@ -2422,51 +2551,43 @@ def freeze_rule_candidate(
     no rejected interpretation can silently become Rule authority.
     """
 
-    if load_graph(path):
+    session = GraphBuildSession(path)
+    if session.records:
         raise CorridorKitError("Rule candidate freeze requires an empty graph")
     report = compile_typed_rule_ir(typed_rule_ir)
-    staged = _staged_graph_path(path)
-    try:
-        snapshot = append_graph_record(
-            staged,
-            record_type="authority_snapshot",
-            actor="runner",
-            body=report["authority_snapshot_template"],
+    snapshot = session.append(
+        record_type="authority_snapshot",
+        actor="runner",
+        body=report["authority_snapshot_template"],
+    )["record"]
+    for body in report["source_artifact_templates"]:
+        session.append(
+            record_type="task_source_artifact", actor="runner", body=body
+        )
+    for body in report["source_clause_templates"]:
+        session.append(record_type="source_clause", actor="worker", body=body)
+    rule_record_ids: dict[str, str] = {}
+    for body in report["rule_bodies"]:
+        record = session.append(
+            record_type="rule_proposal", actor="worker", body=body
         )["record"]
-        for body in report["source_artifact_templates"]:
-            append_graph_record(
-                staged, record_type="task_source_artifact", actor="runner", body=body
-            )
-        for body in report["source_clause_templates"]:
-            append_graph_record(
-                staged, record_type="source_clause", actor="worker", body=body
-            )
-        rule_record_ids: dict[str, str] = {}
-        for body in report["rule_bodies"]:
-            record = append_graph_record(
-                staged, record_type="rule_proposal", actor="worker", body=body
-            )["record"]
-            rule_record_ids[body["rule_id"]] = record["record_id"]
-        candidate_body = {
-            "schema_version": RULE_CANDIDATE_REPORT_SCHEMA,
-            "authority_snapshot_record_id": snapshot["record_id"],
-            "typed_rule_ir": dict(typed_rule_ir),
-            "compile_report": report,
-            "rule_record_ids": rule_record_ids,
-        }
-        candidate = append_graph_record(
-            staged,
-            record_type="rule_candidate_report",
-            actor="runner",
-            body={
-                **candidate_body,
-                "candidate_report_digest": sha256_json(candidate_body),
-            },
-        )["record"]
-        final_report = replay_graph(staged)
-        atomic_write_bytes(path, staged.read_bytes(), mode=0o600)
-    finally:
-        staged.unlink(missing_ok=True)
+        rule_record_ids[body["rule_id"]] = record["record_id"]
+    candidate_body = {
+        "schema_version": RULE_CANDIDATE_REPORT_SCHEMA,
+        "authority_snapshot_record_id": snapshot["record_id"],
+        "typed_rule_ir": dict(typed_rule_ir),
+        "compile_report": report,
+        "rule_record_ids": rule_record_ids,
+    }
+    candidate = session.append(
+        record_type="rule_candidate_report",
+        actor="runner",
+        body={
+            **candidate_body,
+            "candidate_report_digest": sha256_json(candidate_body),
+        },
+    )["record"]
+    final_report = session.commit()
     return {
         "ok": True,
         "candidate_report_record_id": candidate["record_id"],
@@ -2494,7 +2615,8 @@ def ratify_rule_candidate(
     Non-passing assessments are retained without creating RuleClosure.
     """
 
-    records = load_graph(path)
+    session = GraphBuildSession(path)
+    records = session.records
     candidate = next(
         (
             record
@@ -2515,90 +2637,80 @@ def ratify_rule_candidate(
         "findings": finding_list,
     }
     assessment_body["assessment_digest"] = sha256_json(assessment_body)
-    staged = _staged_graph_path(path)
-    try:
-        assessment = append_graph_record(
-            staged,
-            record_type="rule_qa_assessment",
-            actor="qa",
-            body=assessment_body,
-        )["record"]
-        if outcome == "pass":
-            report = candidate["body"]["compile_report"]
-            rule_record_ids = candidate["body"]["rule_record_ids"]
-            for rule_body in report["rule_bodies"]:
-                rule_id = rule_body["rule_id"]
-                closure_inputs = {
+    assessment = session.append(
+        record_type="rule_qa_assessment",
+        actor="qa",
+        body=assessment_body,
+    )["record"]
+    if outcome == "pass":
+        report = candidate["body"]["compile_report"]
+        rule_record_ids = candidate["body"]["rule_record_ids"]
+        for rule_body in report["rule_bodies"]:
+            rule_id = rule_body["rule_id"]
+            closure_inputs = {
+                "rule_id": rule_id,
+                "rule_record_id": rule_record_ids[rule_id],
+                "candidate_report_record_id": candidate_report_record_id,
+                "candidate_report_digest": candidate_report_digest,
+                "candidate_revision_digest": report["candidate_revision_digest"],
+                "authority_snapshot_digest": report["authority_snapshot_digest"],
+                "reverse_projection_digest": report[
+                    "reverse_semantic_projection_digest"
+                ],
+                "semantic_delta_digest": report["semantic_delta_digest"],
+                "qa_assessment_ref": assessment["record_id"],
+                "qa_assessment_digest": assessment_body["assessment_digest"],
+                "ratifier_ref": ratifier_ref,
+            }
+            session.append(
+                record_type="rule_ratification",
+                actor="runner",
+                body={
                     "rule_id": rule_id,
                     "rule_record_id": rule_record_ids[rule_id],
-                    "candidate_report_record_id": candidate_report_record_id,
-                    "candidate_report_digest": candidate_report_digest,
-                    "candidate_revision_digest": report["candidate_revision_digest"],
-                    "authority_snapshot_digest": report["authority_snapshot_digest"],
-                    "reverse_projection_digest": report[
-                        "reverse_semantic_projection_digest"
+                    "authority_ref": rule_body["source_ref"],
+                    "authority_digest": rule_body["source_digest"],
+                    "receipt_ref": f"{ratifier_ref}:{rule_id}",
+                    "ratification_schema": RULE_RATIFICATION_SCHEMA_V2,
+                    **{
+                        key: value
+                        for key, value in closure_inputs.items()
+                        if key not in {"rule_id", "rule_record_id"}
+                    },
+                    "rule_closure_digest": sha256_json(closure_inputs),
+                },
+            )
+        for template in report["checklist_templates"]:
+            rule_id = template["source_rule_id"]
+            session.append(
+                record_type="acceptance_checklist_item",
+                actor="runner",
+                body={
+                    **template,
+                    "source_rule_record_id": rule_record_ids[rule_id],
+                },
+            )
+        for template in report["rule_dependency_templates"]:
+            session.append(
+                record_type="rule_dependency",
+                actor="runner",
+                body=template,
+            )
+        for template in report["typed_dependency_templates"]:
+            session.append(
+                record_type="typed_dependency",
+                actor="runner",
+                body={
+                    **template,
+                    "source_rule_record_id": rule_record_ids[
+                        template["source_rule_id"]
                     ],
-                    "semantic_delta_digest": report["semantic_delta_digest"],
-                    "qa_assessment_ref": assessment["record_id"],
-                    "qa_assessment_digest": assessment_body["assessment_digest"],
-                    "ratifier_ref": ratifier_ref,
-                }
-                append_graph_record(
-                    staged,
-                    record_type="rule_ratification",
-                    actor="runner",
-                    body={
-                        "rule_id": rule_id,
-                        "rule_record_id": rule_record_ids[rule_id],
-                        "authority_ref": rule_body["source_ref"],
-                        "authority_digest": rule_body["source_digest"],
-                        "receipt_ref": f"{ratifier_ref}:{rule_id}",
-                        "ratification_schema": RULE_RATIFICATION_SCHEMA_V2,
-                        **{
-                            key: value
-                            for key, value in closure_inputs.items()
-                            if key not in {"rule_id", "rule_record_id"}
-                        },
-                        "rule_closure_digest": sha256_json(closure_inputs),
-                    },
-                )
-            for template in report["checklist_templates"]:
-                rule_id = template["source_rule_id"]
-                append_graph_record(
-                    staged,
-                    record_type="acceptance_checklist_item",
-                    actor="runner",
-                    body={
-                        **template,
-                        "source_rule_record_id": rule_record_ids[rule_id],
-                    },
-                )
-            for template in report["rule_dependency_templates"]:
-                append_graph_record(
-                    staged,
-                    record_type="rule_dependency",
-                    actor="runner",
-                    body=template,
-                )
-            for template in report["typed_dependency_templates"]:
-                append_graph_record(
-                    staged,
-                    record_type="typed_dependency",
-                    actor="runner",
-                    body={
-                        **template,
-                        "source_rule_record_id": rule_record_ids[
-                            template["source_rule_id"]
-                        ],
-                        "target_rule_record_id": rule_record_ids[
-                            template["target_rule_id"]
-                        ],
-                    },
-                )
-        final_report = replay_graph(staged)
-        atomic_write_bytes(path, staged.read_bytes(), mode=0o600)
-    finally:
-        staged.unlink(missing_ok=True)
+                    "target_rule_record_id": rule_record_ids[
+                        template["target_rule_id"]
+                    ],
+                },
+            )
+    final_report = session.commit()
     return {
         "ok": True,
         "outcome": outcome,
@@ -2621,33 +2733,7 @@ def append_graph_record(
 ) -> dict[str, Any]:
     """Append one valid record atomically; invalid input leaves bytes unchanged."""
 
-    if record_type not in GRAPH_RECORD_TYPES:
-        raise CorridorKitError(f"unknown graph record type: {record_type}")
-    if actor not in GRAPH_ACTORS:
-        raise CorridorKitError(f"unknown graph actor: {actor}")
-    if not isinstance(body, Mapping):
-        raise CorridorKitError("graph body must be an object")
-    canonical_body = json.loads(canonical_json_bytes(dict(body)).decode("utf-8"))
-    records = load_graph(path)
-    content_id = _content_id(record_type, actor, canonical_body)
-    for existing in records:
-        if existing["content_id"] == content_id:
-            return {"ok": True, "idempotent": True, "appended": False, "record": existing}
-    previous = records[-1]["record_id"] if records else None
-    payload = _identity_payload(
-        sequence=len(records) + 1,
-        record_type=record_type,
-        actor=actor,
-        body=canonical_body,
-        previous=previous,
-    )
-    record = {
-        **payload,
-        "content_id": content_id,
-        "record_id": _record_id(payload),
-    }
-    candidate = [*records, record]
-    validate_graph_records(candidate)
-    encoded = b"".join(canonical_json_bytes(item) + b"\n" for item in candidate)
-    atomic_write_bytes(path, encoded, mode=0o600)
-    return {"ok": True, "idempotent": False, "appended": True, "record": record}
+    session = GraphBuildSession(path)
+    result = session.append(record_type=record_type, actor=actor, body=body)
+    session.commit()
+    return result

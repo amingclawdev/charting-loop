@@ -1423,6 +1423,19 @@ Use:
 
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph replay {GRAPH_PATH}`
 
+Do not repeatedly rescan the JSONL chain to answer graph questions. Use the immutable,
+digest-bound advisory index, for example:
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph query {GRAPH_PATH} --kind topology`
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph query {GRAPH_PATH} --kind prerequisites --ref <checklist-or-rule-id>`
+
+`PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph query {GRAPH_PATH} --kind explain-blocked --ref <checklist-id>`
+
+The query result is guidance only. It reports its logical graph digest, exact byte
+digest, and head record ID; it cannot establish RuleClosure, choose Direction,
+authorize mutation, or create a Gate.
+
 Immediately before each submission freeze, run the deterministic read-only check:
 
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph doctor {GRAPH_PATH}`
@@ -1612,6 +1625,12 @@ There was no Builder. Read the byte-identical Graph Kernel, frozen Study profile
 Re-run the same read-only Doctor over those exact frozen bytes:
 
 `PYTHONPATH={SDK_ROOT} python3 -m corridor_kit graph doctor {graph_path}`
+
+Use `graph query` on the same frozen path for topology, prerequisite/dependant
+closure, source trace, blocked explanations, and RuleClosure digest checks. Confirm
+that every query reports the sealed graph digest and head record ID. These query
+surfaces are advisory and do not replace your independent review or runner-owned
+ratification.
 
 Audit the entire path: runner-owned AuthoritySnapshot manifest/receipt equality,
 source versus extraction-representation bytes,
