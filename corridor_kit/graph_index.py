@@ -264,6 +264,10 @@ class GraphIndex:
             if (
                 source_rule_id not in ratified_rules
                 or target_rule_id not in ratified_rules
+                or body.get("source_rule_record_id")
+                != current_rule_records.get(source_rule_id)
+                or body.get("target_rule_record_id")
+                != current_rule_records.get(target_rule_id)
             ):
                 return False
             source_provenance = provenance_digests.get(source_rule_id)

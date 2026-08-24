@@ -980,6 +980,24 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 raise CorridorKitError(f"unknown rule dependency relationship: {relationship}")
             if source not in rule_records or target not in rule_records or source == target:
                 raise CorridorKitError("rule dependency references an unknown or identical rule")
+            endpoint_record_fields = {
+                "source_rule_record_id",
+                "target_rule_record_id",
+            }.intersection(body)
+            if endpoint_record_fields and endpoint_record_fields != {
+                "source_rule_record_id",
+                "target_rule_record_id",
+            }:
+                raise CorridorKitError(
+                    "rule dependency must bind both endpoint Rule records"
+                )
+            if endpoint_record_fields and (
+                _text(body, "source_rule_record_id") != rule_records[source]
+                or _text(body, "target_rule_record_id") != rule_records[target]
+            ):
+                raise CorridorKitError(
+                    "rule dependency binds a stale endpoint Rule record"
+                )
             successor_fields = {
                 "edge_provenance",
                 "source_rule_provenance_digest",
@@ -1043,6 +1061,8 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             semantic_edges[edge_ref] = {
                 "from_rule_id": source,
                 "to_rule_id": target,
+                "source_rule_record_id": body.get("source_rule_record_id"),
+                "target_rule_record_id": body.get("target_rule_record_id"),
                 "declared_relationship": relationship,
             }
             if relationship in RULE_HARD_RELATIONSHIPS:
@@ -2125,20 +2145,36 @@ def graph_doctor(path: Path) -> dict[str, Any]:
                 f"{source_rule_id}:{semantic_dependency['relationship']}:"
                 f"{semantic_dependency['target_rule_id']}"
             )
+            matching_projections = [
+                item
+                for item in projection["rule_dependencies"]
+                if item["from_rule_id"] == source_rule_id
+                and item["to_rule_id"] == semantic_dependency["target_rule_id"]
+                and item["relationship"] == semantic_dependency["relationship"]
+            ]
             projected = next(
                 (
                     item
-                    for item in projection["rule_dependencies"]
-                    if item["from_rule_id"] == source_rule_id
-                    and item["to_rule_id"] == semantic_dependency["target_rule_id"]
-                    and item["relationship"] == semantic_dependency["relationship"]
+                    for item in reversed(matching_projections)
+                    if item.get("source_rule_record_id")
+                    == projection["rule_records"].get(source_rule_id)
+                    and item.get("target_rule_record_id")
+                    == projection["rule_records"].get(
+                        semantic_dependency["target_rule_id"]
+                    )
                 ),
-                None,
+                matching_projections[-1] if matching_projections else None,
             )
             if projected is None:
                 missing_rule_dependency_projections.append(identity)
             elif (
-                projected.get("source_rule_provenance_digest")
+                projected.get("source_rule_record_id")
+                != projection["rule_records"].get(source_rule_id)
+                or projected.get("target_rule_record_id")
+                != projection["rule_records"].get(
+                    semantic_dependency["target_rule_id"]
+                )
+                or projected.get("source_rule_provenance_digest")
                 != projection["rule_source_provenance_digests"].get(source_rule_id)
                 or projected.get("target_rule_provenance_digest")
                 != projection["rule_source_provenance_digests"].get(
@@ -2705,7 +2741,27 @@ class GraphBuildSession:
             raise CorridorKitError(f"unknown graph actor: {actor}")
         if not isinstance(body, Mapping):
             raise CorridorKitError("graph body must be an object")
-        canonical_body = json.loads(canonical_json_bytes(dict(body)).decode("utf-8"))
+        candidate_body = dict(body)
+        if record_type == "rule_dependency":
+            projection = _graph_projection(self._records)
+            source_rule_id = candidate_body.get("from_rule_id")
+            target_rule_id = candidate_body.get("to_rule_id")
+            current_rule_records = projection.get("rule_records", {})
+            endpoint_records = {
+                "source_rule_record_id": current_rule_records.get(source_rule_id),
+                "target_rule_record_id": current_rule_records.get(target_rule_id),
+            }
+            if all(isinstance(value, str) for value in endpoint_records.values()):
+                for field, value in endpoint_records.items():
+                    supplied = candidate_body.get(field)
+                    if supplied is not None and supplied != value:
+                        raise CorridorKitError(
+                            "rule dependency binds a stale endpoint Rule record"
+                        )
+                    candidate_body[field] = value
+        canonical_body = json.loads(
+            canonical_json_bytes(candidate_body).decode("utf-8")
+        )
         content_id = _content_id(record_type, actor, canonical_body)
         existing = self._content_ids.get(content_id)
         if existing is not None:

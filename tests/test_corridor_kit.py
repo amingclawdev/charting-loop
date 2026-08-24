@@ -3131,7 +3131,6 @@ class TypedRuleCompilerTests(unittest.TestCase):
             )
 
             revised_ir = self._v3_ir()
-            revised_ir["rules"][0]["statement"] += " Revised projection."
             revised_report = compile_typed_rule_ir(revised_ir)
             revised = next(
                 json.loads(json.dumps(body))
@@ -3267,6 +3266,45 @@ class TypedRuleCompilerTests(unittest.TestCase):
                     },
                 )
             self.assertEqual(before_stale_direction, path.read_bytes())
+
+            replacement = append_graph_record(
+                path,
+                record_type="rule_dependency",
+                actor="worker",
+                body=old_dependency,
+            )["record"]
+            self.assertEqual(
+                revised_record_id,
+                replacement["body"]["target_rule_record_id"],
+            )
+            dependency_history = [
+                record["body"]
+                for record in replay_graph(path)["records"]
+                if record["record_type"] == "rule_dependency"
+            ]
+            self.assertEqual(2, len(dependency_history))
+            self.assertEqual(
+                rule_records["R-EXIST"],
+                dependency_history[0]["target_rule_record_id"],
+            )
+            self.assertEqual(
+                revised_record_id,
+                dependency_history[1]["target_rule_record_id"],
+            )
+            repaired_index = load_graph_index(path)
+            repaired_active = repaired_index.active_context()
+            self.assertIn(stale_edge_id, repaired_active["semantic_edge_ids"])
+            self.assertNotIn(
+                stale_edge_id, repaired_active["stale_semantic_edge_ids"]
+            )
+            self.assertEqual(
+                revised_record_id,
+                repaired_index.edge_source_trace(stale_edge_id)[
+                    "semantic_edge"
+                ][
+                    "to_rule_record_id"
+                ],
+            )
 
     def test_compiler_projects_every_subject_condition_cell_and_freezes_probe(self) -> None:
         report = compile_typed_rule_ir(self._ir())
