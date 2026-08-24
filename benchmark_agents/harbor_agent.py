@@ -2767,7 +2767,7 @@ Path(__MANIFEST_PATH__).chmod(0o444)
                 f"    r.update({{'typed_rule_ir_path':{candidate_ir_path!r},'typed_rule_report_path':{candidate_report_path!r}}})",
                 "except CorridorKitError as exc:",
                 "    failure_bytes=str(exc).encode('utf-8')",
-                "    identity={'schema_version':'charting-loop/rule-compile-failure/v1','status':'compile_candidate_semantic_rejected','failure_classification':'semantic_compile_rejected','failure_type':type(exc).__name__,'failure_size':len(failure_bytes),'failure_sha256':sha256_bytes(failure_bytes),'typed_rule_ir_size':len(ir_bytes),'typed_rule_ir_sha256':sha256_bytes(ir_bytes)}",
+                f"    identity={{'schema_version':'charting-loop/rule-compile-failure/v1','status':'compile_candidate_semantic_rejected','iteration':{iteration!r},'failure_classification':'semantic_compile_rejected','failure_type':type(exc).__name__,'failure_size':len(failure_bytes),'failure_sha256':sha256_bytes(failure_bytes),'typed_rule_ir_size':len(ir_bytes),'typed_rule_ir_sha256':sha256_bytes(ir_bytes)}}",
                 "    failed_candidate_id=sha256_json(identity)",
                 "    descriptor={**identity,'failed_candidate_id':failed_candidate_id}",
                 "    descriptor_bytes=canonical_json_bytes(descriptor)",

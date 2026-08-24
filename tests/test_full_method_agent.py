@@ -397,9 +397,19 @@ class FullMethodContractTests(unittest.TestCase):
                         object(), iteration=1, ir_path=ir_path.as_posix()
                     )
                 )
+                second_result = asyncio.run(
+                    agent._freeze_rule_compile_candidate(
+                        object(), iteration=2, ir_path=ir_path.as_posix()
+                    )
+                )
             frozen_ir = Path(result["typed_rule_ir_path"])
             descriptor_path = Path(result["failure_descriptor_path"])
             descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+            second_descriptor = json.loads(
+                Path(second_result["failure_descriptor_path"]).read_text(
+                    encoding="utf-8"
+                )
+            )
             frozen_ir_bytes = frozen_ir.read_bytes()
             descriptor_bytes = descriptor_path.read_bytes()
             frozen_ir_mode = stat.S_IMODE(frozen_ir.stat().st_mode)
@@ -407,7 +417,16 @@ class FullMethodContractTests(unittest.TestCase):
 
         self.assertFalse(result["ok"])
         self.assertEqual("compile_candidate_semantic_rejected", result["status"])
+        self.assertEqual(1, descriptor["iteration"])
+        self.assertEqual(2, second_descriptor["iteration"])
         self.assertEqual(result["failed_candidate_id"], descriptor["failed_candidate_id"])
+        self.assertEqual(
+            second_result["failed_candidate_id"],
+            second_descriptor["failed_candidate_id"],
+        )
+        self.assertNotEqual(
+            result["failed_candidate_id"], second_result["failed_candidate_id"]
+        )
         self.assertEqual(
             result["typed_rule_ir_sha256"],
             "sha256:" + hashlib.sha256(frozen_ir_bytes).hexdigest(),
