@@ -4668,6 +4668,7 @@ class GraphKernelTests(unittest.TestCase):
                 self._append(path, "typed_dependency", dependency)
 
             index = load_graph_index(path)
+            graph_bytes_before_queries = path.read_bytes()
             topology = index.topology()
             self.assertLess(
                 topology["topological_order"].index("C-FIRST"),
@@ -4746,6 +4747,7 @@ class GraphKernelTests(unittest.TestCase):
                 ["C-FIRST", "C-SECOND", "C-THIRD"],
                 json.loads(completed.stdout)["path"],
             )
+            self.assertEqual(graph_bytes_before_queries, path.read_bytes())
 
     def test_rule_closure_diff_and_revision_invalidation_impact(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
