@@ -39,6 +39,7 @@ from corridor_kit import (
     replay_graph,
     restore_submission,
     runtime_guide,
+    semantic_edge_id,
     sha256_bytes,
     sha256_json,
     starter_witnesses,
@@ -3170,6 +3171,98 @@ class TypedRuleCompilerTests(unittest.TestCase):
             self.assertFalse(
                 any(edge["source"] == "rule_dependency" for edge in indexed_edges)
             )
+            stale_edge_id = semantic_edge_id(
+                from_rule_id=old_dependency["from_rule_id"],
+                to_rule_id=old_dependency["to_rule_id"],
+                declared_relationship=old_dependency["relationship"],
+            )
+            active = index.active_context()
+            self.assertNotIn(stale_edge_id, active["semantic_edge_ids"])
+            self.assertIn(stale_edge_id, active["stale_semantic_edge_ids"])
+            self.assertIn(stale_edge_id, active["unresolved_mismatch_ids"])
+            self.assertNotIn(
+                report["typed_dependency_templates"][0]["dependency_id"],
+                active["compact_hard_constraint_ids"]["typed_expansion_ids"],
+            )
+            with self.assertRaisesRegex(
+                CorridorKitError, "unknown semantic edge"
+            ):
+                index.edge_source_trace(stale_edge_id)
+
+            current_checklist_ids = active["related_checklist_item_ids"]
+            position = append_graph_record(
+                path,
+                record_type="position_checkpoint",
+                actor="worker",
+                body={
+                    "position_id": "P-AFTER-RULE-REVISION",
+                    "previous_position_ref": None,
+                    "task_identity": {"task_ref": "public/v3-stale-edge"},
+                    "scope": {"working_set": ["/workspace"]},
+                    "role_assignments": {"executor": "worker", "reviewer": "qa"},
+                    "rule_record_ids": sorted(
+                        [revised_record_id, rule_records["R-VERIFY"]]
+                    ),
+                    "fact_receipt_ids": [],
+                    "artifact_record_ids": [],
+                    "checkpoint_kind": "row_progress",
+                    "checklist_item_ids": current_checklist_ids,
+                    "ready_item_ids": current_checklist_ids,
+                    "blocked_item_ids": [],
+                    "unresolved_checklist_item_ids": current_checklist_ids,
+                    "checklist_assessments": {
+                        item_id: {
+                            "status": "unknown",
+                            "applicability_status": "applicable",
+                            "witness_fact_receipt_ids": [],
+                        }
+                        for item_id in current_checklist_ids
+                    },
+                },
+            )["record"]
+            verify_checklist = next(
+                item
+                for item in report["checklist_templates"]
+                if item["source_rule_id"] == "R-VERIFY"
+                and item["checklist_item_id"] in current_checklist_ids
+            )
+            before_stale_direction = path.read_bytes()
+            with self.assertRaisesRegex(
+                CorridorKitError,
+                "semantic edge bindings do not match",
+            ):
+                append_graph_record(
+                    path,
+                    record_type="direction_proposal",
+                    actor="worker",
+                    body={
+                        "direction_id": "D-STALE-EDGE",
+                        "position_ref": position["record_id"],
+                        "statement": "Do not follow a stale dependency edge.",
+                        "rule_record_ids": sorted(
+                            [revised_record_id, rule_records["R-VERIFY"]]
+                        ),
+                        "fact_receipt_ids": [],
+                        "evidence_refs": [],
+                        "checklist_item_ids": current_checklist_ids,
+                        "ready_item_ids": current_checklist_ids,
+                        "blocked_item_ids": [],
+                        "unresolved_checklist_item_ids": current_checklist_ids,
+                        "semantic_bindings": [
+                            {
+                                "position_ref": position["record_id"],
+                                "rule_id": "R-VERIFY",
+                                "rule_record_id": rule_records["R-VERIFY"],
+                                "semantic_edge_ids": [stale_edge_id],
+                                "checklist_item_id": verify_checklist[
+                                    "checklist_item_id"
+                                ],
+                                "witness_obligation_ids": [],
+                            }
+                        ],
+                    },
+                )
+            self.assertEqual(before_stale_direction, path.read_bytes())
 
     def test_compiler_projects_every_subject_condition_cell_and_freezes_probe(self) -> None:
         report = compile_typed_rule_ir(self._ir())

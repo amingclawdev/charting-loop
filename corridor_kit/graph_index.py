@@ -109,6 +109,7 @@ class GraphIndex:
     _nodes: Mapping[str, Mapping[str, Any]]
     _edges: tuple[Mapping[str, Any], ...]
     _semantic_edges: Mapping[str, Mapping[str, Any]]
+    _stale_semantic_edges: Mapping[str, Mapping[str, Any]]
     _witness_obligations: Mapping[str, Mapping[str, Any]]
     _dependencies: Mapping[str, frozenset[str]]
     _dependants: Mapping[str, frozenset[str]]
@@ -247,6 +248,7 @@ class GraphIndex:
             ).items()
         }
         semantic_edges: dict[str, Mapping[str, Any]] = {}
+        stale_semantic_edges: dict[str, Mapping[str, Any]] = {}
         projected_relationships = {
             "precedes": "precondition_for",
             "requires": "requires",
@@ -255,6 +257,72 @@ class GraphIndex:
             "conflicts": "conflicts",
         }
         typed_dependencies = projection.get("dependencies", {})
+
+        def current_rule_dependency(body: Mapping[str, Any]) -> bool:
+            source_rule_id = body.get("from_rule_id")
+            target_rule_id = body.get("to_rule_id")
+            if (
+                source_rule_id not in ratified_rules
+                or target_rule_id not in ratified_rules
+            ):
+                return False
+            source_provenance = provenance_digests.get(source_rule_id)
+            if source_provenance is None:
+                return True
+            if (
+                body.get("source_rule_provenance_digest") != source_provenance
+                or body.get("target_rule_provenance_digest")
+                != provenance_digests.get(target_rule_id)
+            ):
+                return False
+            expected_dependency = next(
+                (
+                    item
+                    for item in projection.get("rule_semantics", {})
+                    .get(source_rule_id, {})
+                    .get("dependencies", [])
+                    if item.get("relationship") == body.get("relationship")
+                    and item.get("target_rule_id") == target_rule_id
+                ),
+                None,
+            )
+            return bool(
+                expected_dependency is not None
+                and body.get("edge_provenance")
+                == expected_dependency.get("provenance")
+                and (
+                    "alignment" not in expected_dependency
+                    or body.get("relationship_alignment")
+                    == expected_dependency.get("alignment")
+                )
+            )
+
+        def current_typed_dependency(body: Mapping[str, Any]) -> bool:
+            source_rule_id = body.get("source_rule_id")
+            target_rule_id = body.get("target_rule_id")
+            if (
+                current_rule_records.get(source_rule_id)
+                != body.get("source_rule_record_id")
+                or current_rule_records.get(target_rule_id)
+                != body.get("target_rule_record_id")
+                or provenance_digests.get(source_rule_id)
+                != body.get("source_rule_provenance_digest")
+                or provenance_digests.get(target_rule_id)
+                != body.get("target_rule_provenance_digest")
+            ):
+                return False
+            checklist_items = projection.get("checklist_items", {})
+            for checklist_ref in (body.get("from_ref"), body.get("to_ref")):
+                checklist = checklist_items.get(checklist_ref)
+                if not isinstance(checklist, Mapping):
+                    return False
+                checklist_rule_id = checklist.get("source_rule_id")
+                if (
+                    checklist.get("source_rule_record_id")
+                    != current_rule_records.get(checklist_rule_id)
+                ):
+                    return False
+            return True
         for body in projection.get("rule_dependencies", []):
             from_rule_id = body.get("from_rule_id")
             to_rule_id = body.get("to_rule_id")
@@ -283,6 +351,17 @@ class GraphIndex:
                 to_rule_id=str(to_rule_id),
                 declared_relationship=relationship,
             )
+            if not current_rule_dependency(body):
+                stale_semantic_edges[edge_ref] = MappingProxyType(
+                    {
+                        "semantic_edge_id": edge_ref,
+                        "from_rule_id": from_rule_id,
+                        "to_rule_id": to_rule_id,
+                        "declared_relationship": relationship,
+                        "status": "stale_endpoint_generation",
+                    }
+                )
+                continue
             projected_relationship = projected_relationships.get(relationship)
             typed_expansion_ids = sorted(
                 dependency_id
@@ -290,6 +369,7 @@ class GraphIndex:
                 if dependency.get("source_rule_id") == from_rule_id
                 and dependency.get("target_rule_id") == to_rule_id
                 and dependency.get("relationship") == projected_relationship
+                and current_typed_dependency(dependency)
             )
             endpoint_rules = (str(from_rule_id), str(to_rule_id))
             semantic_edges[edge_ref] = MappingProxyType(
@@ -352,6 +432,8 @@ class GraphIndex:
                     "typed_expansion_ids": typed_expansion_ids,
                 }
             )
+        for edge_ref in semantic_edges:
+            stale_semantic_edges.pop(edge_ref, None)
         for index, body in enumerate(projection.get("rule_dependencies", []), start=1):
             historical_edge = canonical_dependency_edge(
                 edge_id=str(body.get("dependency_id") or f"rule-dependency:{index}"),
@@ -371,36 +453,8 @@ class GraphIndex:
                 continue
             source_rule_id = str(body["from_rule_id"])
             target_rule_id = str(body["to_rule_id"])
-            source_provenance = provenance_digests.get(source_rule_id)
-            target_provenance = provenance_digests.get(target_rule_id)
-            if source_provenance is not None:
-                if (
-                    body.get("source_rule_provenance_digest") != source_provenance
-                    or body.get("target_rule_provenance_digest") != target_provenance
-                ):
-                    continue
-                expected_dependency = next(
-                    (
-                        item
-                        for item in projection.get("rule_semantics", {})
-                        .get(source_rule_id, {})
-                        .get("dependencies", [])
-                        if item.get("relationship") == body.get("relationship")
-                        and item.get("target_rule_id") == target_rule_id
-                    ),
-                    None,
-                )
-                if (
-                    expected_dependency is None
-                    or body.get("edge_provenance")
-                    != expected_dependency.get("provenance")
-                    or (
-                        "alignment" in expected_dependency
-                        and body.get("relationship_alignment")
-                        != expected_dependency.get("alignment")
-                    )
-                ):
-                    continue
+            if not current_rule_dependency(body):
+                continue
             edge_id = str(body.get("dependency_id") or f"rule-dependency:{index}")
             edges.append(
                 MappingProxyType(
@@ -503,6 +557,7 @@ class GraphIndex:
             _nodes=MappingProxyType(nodes),
             _edges=tuple(edges),
             _semantic_edges=MappingProxyType(semantic_edges),
+            _stale_semantic_edges=MappingProxyType(stale_semantic_edges),
             _witness_obligations=MappingProxyType(witness_obligations),
             _dependencies=MappingProxyType(
                 {key: frozenset(value) for key, value in dependencies.items()}
@@ -760,6 +815,11 @@ class GraphIndex:
             for edge_id, edge in self._semantic_edges.items()
             if edge["from_rule_id"] in rule_ids or edge["to_rule_id"] in rule_ids
         )
+        stale_semantic_edge_ids = sorted(
+            edge_id
+            for edge_id, edge in self._stale_semantic_edges.items()
+            if edge["from_rule_id"] in rule_ids or edge["to_rule_id"] in rule_ids
+        )
         witness_obligation_ids = sorted(
             obligation_id
             for obligation_id, obligation in self._witness_obligations.items()
@@ -781,13 +841,16 @@ class GraphIndex:
             }
         )
         unresolved_mismatch_ids = sorted(
-            edge_id
-            for edge_id in semantic_edge_ids
-            if self._semantic_edges[edge_id][
-                "relationship_expectation_status"
-            ]
-            == "unresolved"
-            or not self._semantic_edges[edge_id]["typed_expansion_ids"]
+            set(stale_semantic_edge_ids)
+            | {
+                edge_id
+                for edge_id in semantic_edge_ids
+                if self._semantic_edges[edge_id][
+                    "relationship_expectation_status"
+                ]
+                == "unresolved"
+                or not self._semantic_edges[edge_id]["typed_expansion_ids"]
+            }
         )
         detail_candidates: list[tuple[str, dict[str, Any]]] = []
         for edge_id in semantic_edge_ids:
@@ -856,6 +919,7 @@ class GraphIndex:
             related_checklist_item_ids=sorted(related_checklist_ids),
             rule_ids=rule_ids,
             semantic_edge_ids=semantic_edge_ids,
+            stale_semantic_edge_ids=stale_semantic_edge_ids,
             witness_obligation_ids=witness_obligation_ids,
             compact_hard_constraint_ids={
                 "semantic_edge_ids": hard_semantic_edge_ids,

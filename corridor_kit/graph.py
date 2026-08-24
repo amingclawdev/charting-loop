@@ -779,6 +779,11 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 rule_source_bindings.pop(rule_id, None)
             ratified_rules.pop(rule_id, None)
             ratified_rule_closures.pop(rule_id, None)
+            semantic_edges = {
+                edge_ref: edge
+                for edge_ref, edge in semantic_edges.items()
+                if rule_id not in {edge["from_rule_id"], edge["to_rule_id"]}
+            }
         elif record_type == "rule_candidate_report":
             if actor != "runner":
                 raise CorridorKitError("Rule candidate report must be frozen by the runner")
@@ -1500,6 +1505,28 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                     if dependency["source_rule_id"] in ratified_rules
                     and rule_records.get(dependency["source_rule_id"])
                     == dependency["source_rule_record_id"]
+                    and (
+                        dependency.get("target_rule_id") is None
+                        or (
+                            dependency.get("target_rule_id") in ratified_rules
+                            and rule_records.get(dependency.get("target_rule_id"))
+                            == dependency.get("target_rule_record_id")
+                        )
+                    )
+                    and (
+                        dependency["source_rule_id"]
+                        not in rule_source_provenance_digests
+                        or (
+                            rule_source_provenance_digests.get(
+                                dependency["source_rule_id"]
+                            )
+                            == dependency.get("source_rule_provenance_digest")
+                            and rule_source_provenance_digests.get(
+                                dependency.get("target_rule_id")
+                            )
+                            == dependency.get("target_rule_provenance_digest")
+                        )
+                    )
                 }
                 active_dependency_resolutions = {
                     dependency_id
@@ -1673,6 +1700,33 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                             and dependency.get("relationship")
                             == projected_relationships.get(
                                 edge["declared_relationship"]
+                            )
+                            and dependency.get("source_rule_record_id")
+                            == rule_records.get(edge["from_rule_id"])
+                            and dependency.get("target_rule_record_id")
+                            == rule_records.get(edge["to_rule_id"])
+                            and dependency.get("source_rule_provenance_digest")
+                            == rule_source_provenance_digests.get(
+                                edge["from_rule_id"]
+                            )
+                            and dependency.get("target_rule_provenance_digest")
+                            == rule_source_provenance_digests.get(
+                                edge["to_rule_id"]
+                            )
+                            and all(
+                                isinstance(checklist_items.get(checklist_ref), dict)
+                                and checklist_items[checklist_ref].get(
+                                    "source_rule_record_id"
+                                )
+                                == rule_records.get(
+                                    checklist_items[checklist_ref].get(
+                                        "source_rule_id"
+                                    )
+                                )
+                                for checklist_ref in (
+                                    dependency.get("from_ref"),
+                                    dependency.get("to_ref"),
+                                )
                             )
                             for dependency in typed_dependencies.values()
                         )
