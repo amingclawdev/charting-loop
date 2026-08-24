@@ -8,6 +8,7 @@ import unittest
 from decimal import Decimal
 from pathlib import Path
 
+from corridor_kit import KIT_VERSION
 from tools.terminal_bench_doctor import (
     AGENT_VERSION,
     BUN_SOURCEMAP_TASK_CACHE_DIGEST,
@@ -48,6 +49,7 @@ class FakeRunner:
         codex_runtime_bound: bool = True,
         frozen_corridor_unchanged: bool = True,
         task_digest_override: str | None = None,
+        corridor_sdk_version_override: str | None = None,
     ) -> None:
         self.job_name = job_name
         self.jobs_dir = jobs_dir
@@ -57,6 +59,7 @@ class FakeRunner:
         self.codex_runtime_bound = codex_runtime_bound
         self.frozen_corridor_unchanged = frozen_corridor_unchanged
         self.task_digest_override = task_digest_override
+        self.corridor_sdk_version_override = corridor_sdk_version_override
         self.calls: list[list[str]] = []
 
     def run(self, args, *, cwd=None, env=None, timeout=60):
@@ -149,7 +152,10 @@ class FakeRunner:
                     0,
                     json.dumps(
                         {
-                            "kit_version": CORRIDOR_SDK_VERSION,
+                            "kit_version": (
+                                self.corridor_sdk_version_override
+                                or CORRIDOR_SDK_VERSION
+                            ),
                             "tree_digest": "sha256:" + "a" * 64,
                             "paths": [
                                 "__main__.py",
@@ -410,6 +416,7 @@ class TerminalBenchDoctorTests(unittest.TestCase):
         self.assertEqual(
             report["condition"]["corridor_sdk_version"], CORRIDOR_SDK_VERSION
         )
+        self.assertEqual(CORRIDOR_SDK_VERSION, KIT_VERSION)
         self.assertTrue(all(check["passed"] for check in report["checks"]))
         print_calls = [
             call
@@ -435,6 +442,21 @@ class TerminalBenchDoctorTests(unittest.TestCase):
                 for call in git_show_calls
             )
         )
+
+    def test_stale_corridor_sdk_version_fails_closed(self) -> None:
+        report, _ = self.run_fake(
+            self.config(), corridor_sdk_version_override="0.7.0"
+        )
+
+        self.assertFalse(report["ready"])
+        immutable = next(
+            check
+            for check in report["checks"]
+            if check["check_id"] == "immutable_inputs"
+        )
+        self.assertFalse(immutable["passed"])
+        self.assertEqual(immutable["details"]["corridor_sdk_version"], "0.7.0")
+        self.assertIn(f"Corridor SDK v{KIT_VERSION}", immutable["repair"])
 
     def test_method_and_neutral_arms_only_change_the_agent_profile(self) -> None:
         method_report, method_runner = self.run_fake(

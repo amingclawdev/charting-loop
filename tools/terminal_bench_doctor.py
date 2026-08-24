@@ -25,6 +25,12 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+REPO_IMPORT_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_IMPORT_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_IMPORT_ROOT))
+
+from corridor_kit import KIT_VERSION
+
 
 SCHEMA_VERSION = "charting-loop/terminal-bench-doctor/v2"
 DATASET = "terminal-bench/terminal-bench@3.0.0"
@@ -64,7 +70,7 @@ NEUTRAL_AGENT_IMPORT = (
 )
 AGENT_IMPORT = METHOD_AGENT_IMPORT
 AGENT_VERSION = "1.2.0"
-CORRIDOR_SDK_VERSION = "0.7.0"
+CORRIDOR_SDK_VERSION = KIT_VERSION
 MODEL = "openai/gpt-5.6-sol"
 REASONING_EFFORT = "max"
 METHOD_VERSION_ID = "charting-loop-method-v8"
@@ -572,7 +578,7 @@ def _check_git_and_method(
         return _failed(
             "immutable_inputs",
             "Frozen method or agent bytes do not match the declared condition.",
-            f"Restore the frozen v8 method, Graph Agent v{AGENT_VERSION}, and Corridor SDK v0.7.0 before running.",
+            f"Restore the frozen v8 method, Graph Agent v{AGENT_VERSION}, and Corridor SDK v{CORRIDOR_SDK_VERSION} before running.",
             {
                 "head": actual_head,
                 "method_version_id": METHOD_VERSION_ID,
