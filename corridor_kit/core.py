@@ -98,13 +98,23 @@ def _validate_json_strings(value: Any) -> None:
             pending.extend(child)
 
 
-def load_json(path: Path) -> Any:
-    """Load strict JSON without following a symlink or accepting duplicate keys."""
+def load_json(path: Path, *, max_bytes: int = MAX_JSON_BYTES) -> Any:
+    """Load strict JSON within an explicit bounded size limit."""
+
+    if (
+        isinstance(max_bytes, bool)
+        or not isinstance(max_bytes, int)
+        or not 0 < max_bytes <= MAX_RULE_CANDIDATE_DECODE_BYTES
+    ):
+        raise CorridorKitError(
+            "JSON max_bytes must be a positive integer no greater than "
+            f"{MAX_RULE_CANDIDATE_DECODE_BYTES}"
+        )
 
     if path.is_symlink() or not path.is_file():
         raise CorridorKitError(f"JSON input must be a regular non-symlink file: {path}")
-    if path.stat().st_size > MAX_JSON_BYTES:
-        raise CorridorKitError(f"JSON input exceeds {MAX_JSON_BYTES} bytes: {path}")
+    if path.stat().st_size > max_bytes:
+        raise CorridorKitError(f"JSON input exceeds {max_bytes} bytes: {path}")
     try:
         value = json.loads(
             path.read_text(encoding="utf-8"),

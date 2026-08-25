@@ -298,6 +298,27 @@ class AcceptanceLedgerTests(unittest.TestCase):
             with self.assertRaises(CorridorKitError):
                 load_json(link)
 
+    def test_json_loader_preserves_default_limit_and_allows_only_bounded_override(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "parallel-compiler-product.json"
+            value = {"payload": "x" * (MAX_JSON_BYTES + 1024)}
+            path.write_bytes(canonical_json_bytes(value))
+            self.assertGreater(path.stat().st_size, MAX_JSON_BYTES)
+            self.assertLess(path.stat().st_size, MAX_RULE_CANDIDATE_DECODE_BYTES)
+
+            with self.assertRaisesRegex(CorridorKitError, str(MAX_JSON_BYTES)):
+                load_json(path)
+            self.assertEqual(
+                value,
+                load_json(path, max_bytes=MAX_RULE_CANDIDATE_DECODE_BYTES),
+            )
+            with self.assertRaisesRegex(CorridorKitError, "JSON input exceeds"):
+                load_json(path, max_bytes=MAX_JSON_BYTES + 512)
+            for invalid in (False, 0, -1, MAX_RULE_CANDIDATE_DECODE_BYTES + 1):
+                with self.subTest(max_bytes=invalid):
+                    with self.assertRaisesRegex(CorridorKitError, "max_bytes"):
+                        load_json(path, max_bytes=invalid)
+
 
 class ScaffoldTests(unittest.TestCase):
     def test_scaffold_is_atomic_task_neutral_and_honestly_unresolved(self) -> None:

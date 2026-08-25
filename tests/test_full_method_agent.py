@@ -120,6 +120,101 @@ def complete_assessment(
 
 
 class FullMethodContractTests(unittest.TestCase):
+    def test_parallel_assembler_strictly_loads_rule_product_above_generic_limit(self) -> None:
+        from corridor_kit import canonical_json_bytes, sha256_json
+        from corridor_kit.compiler import validate_source_partition_product
+        from corridor_kit.core import MAX_JSON_BYTES, MAX_RULE_CANDIDATE_DECODE_BYTES
+        from tests.test_corridor_kit import TypedRuleCompilerTests
+
+        adapter = load_harbor_agent_with_stubs()
+        agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
+
+        async def exec_root(self, environment, *, command):
+            completed = subprocess.run(
+                command,
+                shell=True,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            return types.SimpleNamespace(
+                return_code=completed.returncode,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            )
+
+        agent.exec_as_root = types.MethodType(exec_root, agent)
+        ir = TypedRuleCompilerTests._v5_ir()
+        ir["rules"][0]["semantics"]["guidance"][0]["action"] = (
+            "source-bound compiler evidence "
+            + "x" * (MAX_JSON_BYTES + 64 * 1024)
+        )
+        partition = validate_source_partition_product(
+            {
+                "schema_version": "charting-loop/source-partition-product/v1",
+                **{
+                    key: ir[key]
+                    for key in (
+                        "source_bundle",
+                        "source_clause_inventory",
+                        "revision",
+                        "method_digest",
+                        "compiler_config_digest",
+                        "partition_manifest",
+                    )
+                },
+            }
+        )
+        partition_digest = sha256_json(partition)
+        rule_product = {
+            "schema_version": "charting-loop/rule-lane-product/v1",
+            "partition_product_digest": partition_digest,
+            **{
+                key: ir[key]
+                for key in (
+                    "source_bundle",
+                    "source_clause_inventory",
+                    "revision",
+                    "method_digest",
+                    "compiler_config_digest",
+                    "partition_manifest",
+                    "rule_lane_bindings",
+                    "rules",
+                )
+            },
+        }
+        witness_product = {
+            "schema_version": "charting-loop/witness-lane-product/v1",
+            "partition_product_digest": partition_digest,
+            "partition_manifest_digest": sha256_json(ir["partition_manifest"]),
+            "authority_snapshot_digest": sha256_json(ir["source_bundle"]),
+            "witness_lane_packages": ir["witness_lane_packages"],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            partition_path = root / "SOURCE-PARTITION.json"
+            rule_path = root / "RULE-LANES-FIRST.json"
+            witness_path = root / "WITNESS-LANES-FIRST.json"
+            partition_path.write_bytes(canonical_json_bytes(partition))
+            rule_path.write_bytes(canonical_json_bytes(rule_product))
+            witness_path.write_bytes(canonical_json_bytes(witness_product))
+            self.assertGreater(rule_path.stat().st_size, MAX_JSON_BYTES)
+            self.assertLess(rule_path.stat().st_size, MAX_RULE_CANDIDATE_DECODE_BYTES)
+            with mock.patch.object(adapter, "SDK_ROOT", REPOSITORY_ROOT.as_posix()):
+                result = asyncio.run(
+                    agent._assemble_parallel_compile(
+                        object(),
+                        source_partition_path=partition_path.as_posix(),
+                        rule_product_path=rule_path.as_posix(),
+                        witness_product_path=witness_path.as_posix(),
+                        ir_path=(root / "TYPED-RULE-IR.json").as_posix(),
+                        report_path=(root / "TYPED-RULE-COMPILE.json").as_posix(),
+                        assembly_path=(root / "PARALLEL-ASSEMBLY.json").as_posix(),
+                    )
+                )
+            self.assertTrue(result["ok"], result)
+            self.assertTrue(result["compilation_complete"], result)
+
     def test_root_json_writer_streams_large_canonical_payload_with_bounded_argv(self) -> None:
         adapter = load_harbor_agent_with_stubs()
         agent = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
