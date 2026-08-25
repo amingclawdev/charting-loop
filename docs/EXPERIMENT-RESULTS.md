@@ -71,8 +71,8 @@ as evidence for either frozen probe.
 
 ### Frozen-v5 end-to-end regression custody
 
-Four same-task `data-anonymization` runs test the frozen Graph Agent 1.3.0 / Corridor
-Kit 0.8.0 engineering path. They are private adaptive regressions, not result-index
+Five same-task `data-anonymization` runs test successive frozen Graph Agent / Corridor
+Kit engineering identities. They are private adaptive regressions, not result-index
 entries, matched experiments, or leaderboard submissions. Attempts 001 and 002 reached
 the harness but exposed task-neutral SDK intake defects. Attempt 003 started from zero
 after those fixes, but Harbor stopped during remote agent installation with
@@ -99,6 +99,19 @@ classifies this as a noncounting SDK product-ownership defect—not a task score
 a recurrence of the official-verifier semantic mismatch recorded by DC-044. It also
 records the observed critical path: 703.744 seconds for source partitioning followed by
 about 1,040 seconds for the two concurrent compiler lanes.
+
+Attempt 005 used the independently checked source-ownership correction in Graph Agent
+1.3.1 / Corridor Kit 0.8.1. It advanced beyond Attempt 004's `revision` mismatch: the
+14-lane source partition and both parallel products completed, and the Rule product
+kept source-owned identity out of the model-authored surface. Assembly then exposed a
+later exact contract mismatch. The Witness prompt named a schema without listing its
+field vocabulary, so the model emitted `witness_id`, `witness_class`, and
+`expected_outcome` while the parser required `witness_ref`, `kind`,
+`expected_relation`, and `boundary_relation`. The [CL-151 audit](../exogenous/local/cl151-data-anonymization-v5-kit081-e2e/AUDIT.md)
+preserves this as a noncounting SDK prompt/parser failure. It was not a timeout: failure
+occurred with roughly 32 minutes of the task clock remaining. Compile QA, Worker, QA,
+repair, and meaningful task-semantic verification still did not start, and the final
+verifier `0.0` again reflects only the absent `/app/anon.py` deliverable.
 
 ## Publication and participation status
 

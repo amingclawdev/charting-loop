@@ -718,7 +718,7 @@ class PublicReleaseTests(unittest.TestCase):
 
         for marker in (
             "### Frozen-v5 end-to-end regression custody",
-            "Four same-task `data-anonymization` runs",
+            "Five same-task `data-anonymization` runs",
             "`AgentSetupTimeoutError` after 360 seconds",
             "compiler, graph, Worker, QA, repair, and official verifier never started",
             "**not an official task score**",
@@ -732,6 +732,11 @@ class PublicReleaseTests(unittest.TestCase):
             "observed only the missing deliverable rather than task semantics",
             "noncounting SDK product-ownership defect",
             "not a recurrence of the official-verifier semantic mismatch recorded by DC-044",
+            "Attempt 005 used the independently checked source-ownership correction",
+            "`witness_id`, `witness_class`, and",
+            "`witness_ref`, `kind`,",
+            "roughly 32 minutes of the task clock remaining",
+            "noncounting SDK prompt/parser failure",
         ):
             self.assertIn(marker, index_words)
 
@@ -814,6 +819,53 @@ class PublicReleaseTests(unittest.TestCase):
                 "trial/verifier/test-stdout.txt",
                 "trial/verifier/ctrf.json",
             ],
+        )
+
+        cl151_root = (
+            REPOSITORY_ROOT
+            / "exogenous"
+            / "local"
+            / "cl151-data-anonymization-v5-kit081-e2e"
+        )
+        cl151_result = json.loads((cl151_root / "RESULT.json").read_text(encoding="utf-8"))
+        cl151_graph = json.loads(
+            (cl151_root / "GRAPH-SUMMARY.json").read_text(encoding="utf-8")
+        )
+        cl151_run = json.loads(
+            (cl151_root / "RUN-MANIFEST.json").read_text(encoding="utf-8")
+        )
+        cl151_evidence = json.loads(
+            (cl151_root / "EVIDENCE-MANIFEST.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            cl151_result["classification"],
+            "unscored_sdk_witness_schema_contract_failure",
+        )
+        self.assertEqual(cl151_result["retry_count"], 0)
+        self.assertTrue(cl151_result["verifier_invoked"])
+        self.assertEqual(cl151_result["official_reward"], 0.0)
+        self.assertFalse(cl151_result["semantic_task_verification_reached"])
+        self.assertEqual(
+            cl151_result["phase_outcomes"]["deterministic_assembly"],
+            "rejected_witness_field_contract_mismatch",
+        )
+        self.assertEqual(cl151_result["phase_outcomes"]["worker"], "not_started")
+        self.assertGreater(
+            cl151_result["timing"]["estimated_remaining_seconds_at_failure"], 1800
+        )
+        self.assertEqual(cl151_result["compiler_products"]["rule_lane"]["rules"], 26)
+        self.assertEqual(
+            cl151_result["compiler_products"]["witness_lane"]["witnesses"], 338
+        )
+        self.assertTrue(cl151_graph["graph_kernel_initialized"])
+        self.assertFalse(cl151_graph["graph_revision_frozen"])
+        self.assertEqual(cl151_graph["counts"]["directions"], 0)
+        self.assertEqual(
+            cl151_run["terminal_state"],
+            "parallel_product_assembly_rejected_witness_field_contract_mismatch",
+        )
+        self.assertFalse(
+            cl151_evidence["verifier_boundary"]["semantic_task_verification_reached"]
         )
 
         publication_markers = (
