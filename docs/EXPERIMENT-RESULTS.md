@@ -91,7 +91,10 @@ froze a 14-lane, 160-clause source partition, then completed parallel Rule and w
 products. Deterministic assembly correctly rejected a duplicated source-owned
 `revision`: the partition said `SOURCE.PARTITION.FIRST`, while the Rule product said
 `RULE.LANES.FIRST`. Compile QA, RuleClosure, Worker, result QA, repair, and meaningful
-official verification did not start. The [CL-148 audit](../exogenous/local/cl148-data-anonymization-v5-kit080-e2e/AUDIT.md)
+task-semantic verification did not start. Harbor nevertheless invoked the official
+verifier after the agent exception; it returned `0.0` because `/app/anon.py` did not
+exist, so it observed only the missing deliverable rather than task semantics. The
+[CL-148 audit](../exogenous/local/cl148-data-anonymization-v5-kit080-e2e/AUDIT.md)
 classifies this as a noncounting SDK product-ownership defect—not a task score and not
 a recurrence of the official-verifier semantic mismatch recorded by DC-044. It also
 records the observed critical path: 703.744 seconds for source partitioning followed by

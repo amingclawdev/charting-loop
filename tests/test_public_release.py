@@ -727,6 +727,9 @@ class PublicReleaseTests(unittest.TestCase):
             "Attempt 004 made that setup-only correction",
             "`SOURCE.PARTITION.FIRST`",
             "`RULE.LANES.FIRST`",
+            "Harbor nevertheless invoked the official verifier",
+            "`0.0` because `/app/anon.py` did not exist",
+            "observed only the missing deliverable rather than task semantics",
             "noncounting SDK product-ownership defect",
             "not a recurrence of the official-verifier semantic mismatch recorded by DC-044",
         ):
@@ -762,9 +765,17 @@ class PublicReleaseTests(unittest.TestCase):
         cl148_graph = json.loads(
             (cl148_root / "GRAPH-SUMMARY.json").read_text(encoding="utf-8")
         )
+        cl148_run = json.loads(
+            (cl148_root / "RUN-MANIFEST.json").read_text(encoding="utf-8")
+        )
+        cl148_evidence = json.loads(
+            (cl148_root / "EVIDENCE-MANIFEST.json").read_text(encoding="utf-8")
+        )
         self.assertEqual(cl148_result["classification"], "unscored_sdk_assembly_failure")
-        self.assertIsNone(cl148_result["official_reward"])
-        self.assertFalse(cl148_result["official_verifier_reached"])
+        self.assertTrue(cl148_result["verifier_invoked"])
+        self.assertEqual(cl148_result["official_reward"], 0.0)
+        self.assertFalse(cl148_result["semantic_task_verification_reached"])
+        self.assertNotIn("official_verifier_reached", cl148_result)
         self.assertFalse(cl148_result["harbor_summary_mean_is_task_score"])
         self.assertEqual(cl148_result["retry_count"], 0)
         self.assertEqual(
@@ -772,12 +783,38 @@ class PublicReleaseTests(unittest.TestCase):
             "rejected_revision_mismatch",
         )
         self.assertEqual(cl148_result["phase_outcomes"]["worker"], "not_started")
+        self.assertEqual(
+            cl148_result["phase_outcomes"]["official_verifier"],
+            "invoked_missing_deliverable_only",
+        )
         self.assertEqual(cl148_result["compiler_products"]["source_partition"]["lanes"], 14)
         self.assertEqual(cl148_result["compiler_products"]["rule_lane"]["rules"], 37)
         self.assertEqual(cl148_result["compiler_products"]["witness_lane"]["witnesses"], 441)
         self.assertTrue(cl148_graph["graph_created"])
+        self.assertTrue(cl148_graph["verifier_invoked"])
+        self.assertEqual(cl148_graph["official_reward"], 0.0)
+        self.assertFalse(cl148_graph["semantic_task_verification_reached"])
         self.assertEqual(cl148_graph["counts"]["ratified_rules"], 0)
         self.assertEqual(cl148_graph["counts"]["directions"], 0)
+        self.assertTrue(cl148_run["verifier_outcome"]["invoked"])
+        self.assertEqual(cl148_run["verifier_outcome"]["official_reward"], 0.0)
+        self.assertFalse(
+            cl148_run["verifier_outcome"]["semantic_task_verification_reached"]
+        )
+        self.assertTrue(cl148_evidence["verifier_boundary"]["invoked"])
+        self.assertEqual(cl148_evidence["verifier_boundary"]["official_reward"], 0.0)
+        self.assertFalse(
+            cl148_evidence["verifier_boundary"]["semantic_task_verification_reached"]
+        )
+        self.assertEqual(
+            cl148_evidence["verifier_boundary"]["evidence_paths"],
+            [
+                "trial/result.json",
+                "trial/verifier/reward.txt",
+                "trial/verifier/test-stdout.txt",
+                "trial/verifier/ctrf.json",
+            ],
+        )
 
         publication_markers = (
             "## Publication and participation status",
