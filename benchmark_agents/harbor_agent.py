@@ -98,7 +98,7 @@ from benchmark_agents.contract import (
 
 
 AGENT_VERSION = "0.9.0"
-GRAPH_AGENT_VERSION = "1.3.1"
+GRAPH_AGENT_VERSION = "1.3.2"
 METHOD_SOURCE_COMMIT = "3c3813444a7d43d0a56837e9cb960be86ce26d06"
 METHOD_SOURCE_PATH = "method-paper/METHOD.md"
 METHOD_SCOPE_PATH = "method-paper/SCOPE-DATUM.md"

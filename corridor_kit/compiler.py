@@ -43,6 +43,17 @@ SOURCE_DEPENDENCY_STUB_SCHEMA = "charting-loop/source-dependency-stub/v1"
 RULE_LANE_BINDING_SCHEMA = "charting-loop/rule-lane-binding/v1"
 WITNESS_LANE_PACKAGE_SCHEMA = "charting-loop/witness-lane-package/v1"
 SOURCE_WITNESS_SCHEMA = "charting-loop/source-witness/v1"
+SOURCE_WITNESS_FIELDS = (
+    "schema_version",
+    "witness_ref",
+    "kind",
+    "source_clause_ids",
+    "source_slice_ids",
+    "operator",
+    "input_case",
+    "expected_relation",
+    "boundary_relation",
+)
 TYPED_PREDICATE_SCHEMA = "charting-loop/typed-predicate/v1"
 INTEGRATOR_MANIFEST_SCHEMA = "charting-loop/rule-integrator-manifest/v1"
 RULE_LANE_PRODUCT_SCHEMA = "charting-loop/rule-lane-product/v2"
@@ -1754,17 +1765,7 @@ def _validate_witness_lane_packages(
                 raise CorridorKitError("source witness must be an object")
             _exact_keys(
                 witness,
-                {
-                    "schema_version",
-                    "witness_ref",
-                    "kind",
-                    "source_clause_ids",
-                    "source_slice_ids",
-                    "operator",
-                    "input_case",
-                    "expected_relation",
-                    "boundary_relation",
-                },
+                set(SOURCE_WITNESS_FIELDS),
                 label="source witness",
             )
             if witness.get("schema_version") != SOURCE_WITNESS_SCHEMA:

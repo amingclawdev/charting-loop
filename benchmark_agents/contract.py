@@ -23,6 +23,11 @@ from corridor_kit.acceptance import (
 )
 from corridor_kit.scaffold import method_capsule
 from corridor_kit.core import regular_tree_digest, regular_tree_manifest
+from corridor_kit.compiler import (
+    SOURCE_WITNESS_FIELDS,
+    SOURCE_WITNESS_KINDS,
+    SOURCE_WITNESS_SCHEMA,
+)
 
 
 RUNTIME_ROOT = "/tmp/charting-loop"
@@ -1430,6 +1435,8 @@ def graph_witness_lane_prompt(
     """Derive source-only positive, negative, and boundary witnesses independently."""
 
     condition = _graph_condition_block(arm, method_text)
+    witness_fields = ", ".join(f"`{field}`" for field in SOURCE_WITNESS_FIELDS)
+    witness_kinds = ", ".join(f"`{kind}`" for kind in sorted(SOURCE_WITNESS_KINDS))
     return f"""You are the independent source-witness compiler. You do not solve the
 task and you must not inspect any Rule/checklist/candidate/witness output from another
 role.
@@ -1459,7 +1466,10 @@ uses `charting-loop/witness-lane-package/v1` and exactly records `schema_version
 `candidate_witness_visible: false`, and `input_envelope_digest`. Recompute that digest
 from the canonical `charting-loop/source-witness-input-envelope/v1` object containing
 the partition-manifest digest, AuthoritySnapshot digest, lane ID, and sorted source
-clause/slice IDs. Source witnesses use `charting-loop/source-witness/v1`. Do not
+clause/slice IDs. Every source witness uses `{SOURCE_WITNESS_SCHEMA}` and has exactly
+these fields: {witness_fields}. `kind` is exactly one of {witness_kinds}; every lane
+must contain all three kinds. Do not substitute aliases such as `witness_id`,
+`witness_class`, or `expected_outcome`. Do not
 implement, test, or mutate the official task. About {remaining_seconds} seconds remain.
 Return promptly after all witness lanes are complete.
 """

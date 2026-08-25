@@ -2184,6 +2184,11 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("must not inspect any Rule", witness)
         self.assertIn("positive, negative, and boundary", witness)
         self.assertIn("input_envelope_digest", witness)
+        for field in contract.SOURCE_WITNESS_FIELDS:
+            self.assertIn(f"`{field}`", witness)
+        for kind in contract.SOURCE_WITNESS_KINDS:
+            self.assertIn(f"`{kind}`", witness)
+        self.assertIn("Do not substitute aliases", witness)
         qa = contract.graph_parallel_compile_qa_prompt(
             "Repair the public task.",
             arm="method",
@@ -2882,8 +2887,8 @@ class FullMethodContractTests(unittest.TestCase):
         method = object.__new__(adapter.ChartingLoopGraphKernelMethodAgent)
         neutral = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
         # Compiler-rejection custody changes the frozen orchestration condition.
-        self.assertEqual(method.version(), "1.3.1")
-        self.assertEqual(neutral.version(), "1.3.1")
+        self.assertEqual(method.version(), "1.3.2")
+        self.assertEqual(neutral.version(), "1.3.2")
         expected_roles = (
             "source-partitioner",
             "rule-compiler",

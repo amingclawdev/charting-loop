@@ -499,14 +499,27 @@ Claw and does not present that implementation as the method's required architect
 
 ## Freezing and integration
 
-The source-authority ownership correction sets `KIT_VERSION` to `0.8.1`. Rule lane
+`KIT_VERSION` 0.8.2 makes the v5 source-witness contract a single source of truth.
+The compiler exports the exact nine source-witness fields and three required kinds;
+the benchmark prompt renders those same values and the parser validates them. This
+closes the CL-151 failure where a plausible model response used `witness_id`,
+`witness_class`, and `expected_outcome` while the parser required `witness_ref`,
+`kind`, and `expected_relation`. The parser remains strict; the prompt now tells the
+model the exact contract instead of naming only its schema URI.
+
+Run `python3 demos/corridor-kit-v5-four-stage/run_demo.py` for a deterministic local
+exercise of Worker compile, compile QA/RuleClosure, Worker implementation freeze, and
+result QA/graph doctor. The Demo is synthetic and offline. It validates protocol
+wiring, not model capability, benchmark performance, or a causal Method claim.
+
+The preceding source-authority ownership correction set `KIT_VERSION` to `0.8.1`. Rule lane
 products use `charting-loop/rule-lane-product/v2` and contain only their frozen
 partition digest plus lane-owned bindings and Rules. After validating that digest,
 the deterministic assembler derives the AuthoritySnapshot, clause inventory,
 revision, Method/config identity, and partition manifest from the frozen source
 partition. Extra source-owned fields are rejected instead of becoming a second
-model-authored authority. The witness lane and whole-ledger QA semantics are
-unchanged from the parallel compiler release in `0.8.0`.
+model-authored authority. The witness-lane and whole-ledger QA semantics otherwise
+remain unchanged from the parallel compiler release in `0.8.0`.
 
 `KIT_VERSION` identifies the API, while the exact Git commit plus
 `python3 -m corridor_kit manifest corridor_kit` tree digest identifies the bytes.

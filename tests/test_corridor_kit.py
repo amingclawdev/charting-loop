@@ -2735,6 +2735,22 @@ class TypedRuleCompilerTests(unittest.TestCase):
         self.assertEqual("complete", report["integrator_manifest"]["whole_ledger_status"])
         self.assertEqual(2, len(report["lane_packages"]))
         self.assertTrue(report["normalized_predicate_digest"].startswith("sha256:"))
+        legacy_witness_product = json.loads(json.dumps(witness_product))
+        legacy_witness = legacy_witness_product["witness_lane_packages"][0][
+            "witnesses"
+        ][0]
+        legacy_witness["witness_id"] = legacy_witness.pop("witness_ref")
+        legacy_witness["witness_class"] = legacy_witness.pop("kind")
+        legacy_witness["expected_outcome"] = legacy_witness.pop(
+            "expected_relation"
+        )
+        with self.assertRaisesRegex(
+            CorridorKitError,
+            "source witness has unknown or missing fields.*witness_ref.*witness_id",
+        ):
+            assemble_parallel_rule_ir(
+                partition_product, rule_product, legacy_witness_product
+            )
         self.assertEqual(
             partition_product["revision"],
             assembled["typed_rule_ir"]["revision"],
@@ -2827,6 +2843,39 @@ class TypedRuleCompilerTests(unittest.TestCase):
                 ):
                     self.assertTrue(body[field].startswith("sha256:"))
             self.assertTrue(replay_graph(path)["structurally_valid"])
+
+    def test_v5_four_stage_local_demo_completes(self) -> None:
+        repository_root = Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(
+                    repository_root
+                    / "demos"
+                    / "corridor-kit-v5-four-stage"
+                    / "run_demo.py"
+                ),
+            ],
+            cwd=repository_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["legacy_cl151_shape_rejected"])
+        self.assertFalse(payload["benchmark_result"])
+        self.assertFalse(payload["paid_compute_used"])
+        self.assertEqual(
+            ["worker_compile", "compile_qa", "worker_implementation", "result_qa"],
+            [stage["stage"] for stage in payload["stages"]],
+        )
+        self.assertTrue(all(stage["status"] == "passed" for stage in payload["stages"]))
+        self.assertEqual(
+            "acceptance_assessed_complete",
+            payload["stages"][-1]["graph_classification"],
+        )
 
     def test_v5_task_neutral_semantic_mutations_fail_closed(self) -> None:
         erased = self._v5_ir()
