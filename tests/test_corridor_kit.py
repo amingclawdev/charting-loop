@@ -36,6 +36,7 @@ from corridor_kit import (
     graph_doctor,
     initialize_graph,
     load_graph_index,
+    load_json,
     list_submissions,
     public_world_inventory,
     project_witness_obligation_templates,
@@ -69,7 +70,6 @@ from corridor_kit.core import (
     MAX_JSON_BYTES,
     MAX_RULE_CANDIDATE_DECODE_BYTES,
     canonical_json_bytes,
-    load_json,
 )
 from corridor_kit.acceptance import qa_assessment_decision
 from corridor_kit.runtime import validate_qa_assessment_path
