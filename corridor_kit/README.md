@@ -499,7 +499,15 @@ Claw and does not present that implementation as the method's required architect
 
 ## Freezing and integration
 
-The parallel Rule/source-witness compiler release sets `KIT_VERSION` to `0.8.0`.
+The source-authority ownership correction sets `KIT_VERSION` to `0.8.1`. Rule lane
+products use `charting-loop/rule-lane-product/v2` and contain only their frozen
+partition digest plus lane-owned bindings and Rules. After validating that digest,
+the deterministic assembler derives the AuthoritySnapshot, clause inventory,
+revision, Method/config identity, and partition manifest from the frozen source
+partition. Extra source-owned fields are rejected instead of becoming a second
+model-authored authority. The witness lane and whole-ledger QA semantics are
+unchanged from the parallel compiler release in `0.8.0`.
+
 `KIT_VERSION` identifies the API, while the exact Git commit plus
 `python3 -m corridor_kit manifest corridor_kit` tree digest identifies the bytes.
 A source-tree manifest excludes interpreter-created `__pycache__`, `.pyc`, and `.pyo`

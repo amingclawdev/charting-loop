@@ -1405,14 +1405,16 @@ retain distinct event and transition time variables plus before/after/chain outc
 Preserve open domains, negative applicability, quantifiers, exceptions, ordering,
 and cross-lane dependencies. Do not read or invent source-witness lane output.
 
-Write exactly one `charting-loop/rule-lane-product/v1` object to `{output_path}` with
-exactly: `schema_version`, `partition_product_digest`, `source_bundle`,
-`source_clause_inventory`, `revision`, `method_digest`, `compiler_config_digest`,
-`partition_manifest`, `rule_lane_bindings`, and `rules`. Bind
+Write exactly one `charting-loop/rule-lane-product/v2` object to `{output_path}` with
+exactly: `schema_version`, `partition_product_digest`, `rule_lane_bindings`, and
+`rules`. Bind
 `partition_product_digest` to the canonical JSON digest of the frozen partition.
-Every lane has exactly one binding and every Rule exactly one owner. Do not implement,
-test, or mutate the official task. About {remaining_seconds} seconds remain. Return
-promptly after all Rule lanes are complete.
+The runner, not this role, owns and derives the frozen source identity from that
+digest-bound partition. Do not copy `source_bundle`, `source_clause_inventory`,
+`revision`, `method_digest`, `compiler_config_digest`, or `partition_manifest` into
+this product. Every lane has exactly one binding and every Rule exactly one owner. Do
+not implement, test, or mutate the official task. About {remaining_seconds} seconds
+remain. Return promptly after all Rule lanes are complete.
 """
 
 
@@ -1534,10 +1536,13 @@ def graph_rule_lane_repair_prompt(
 
 Read sealed QA `{qa_path}` and prior Rule product `{prior_product_path}`. Reproduce
 findings against public source. Repair only lanes {json.dumps(impact_lane_ids)} and
-their complete declared impact Rules; copy every unaffected lane and source identity
-unchanged. Write a complete replacement `charting-loop/rule-lane-product/v1` to
-`{output_path}`. Do not inspect witness-lane output, implement the task, or overwrite
-prior custody. About {remaining_seconds} seconds remain.
+their complete declared impact Rules; copy every unaffected lane-owned binding and
+Rule unchanged. Write a complete replacement
+`charting-loop/rule-lane-product/v2` to `{output_path}` with only
+`schema_version`, `partition_product_digest`, `rule_lane_bindings`, and `rules`.
+Frozen source identity remains runner-owned and must not be copied into this product.
+Do not inspect witness-lane output, implement the task, or overwrite prior custody.
+About {remaining_seconds} seconds remain.
 """
 
 

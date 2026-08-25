@@ -71,7 +71,7 @@ NEUTRAL_AGENT_IMPORT = (
     "benchmark_agents.harbor_agent:ChartingLoopGraphKernelNeutralAgent"
 )
 AGENT_IMPORT = METHOD_AGENT_IMPORT
-AGENT_VERSION = "1.3.0"
+AGENT_VERSION = "1.3.1"
 CORRIDOR_SDK_VERSION = KIT_VERSION
 MODEL = "openai/gpt-5.6-sol"
 REASONING_EFFORT = "max"

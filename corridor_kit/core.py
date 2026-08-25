@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
-KIT_VERSION = "0.8.0"
+KIT_VERSION = "0.8.1"
 MANIFEST_SCHEMA = "charting-loop/corridor-kit-tree-manifest/v1"
 WORLD_INVENTORY_SCHEMA = "charting-loop/corridor-kit-world-inventory/v1"
 CAPTURE_SCHEMA = "charting-loop/corridor-kit-command-capture/v1"

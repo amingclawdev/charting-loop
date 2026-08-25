@@ -45,7 +45,7 @@ WITNESS_LANE_PACKAGE_SCHEMA = "charting-loop/witness-lane-package/v1"
 SOURCE_WITNESS_SCHEMA = "charting-loop/source-witness/v1"
 TYPED_PREDICATE_SCHEMA = "charting-loop/typed-predicate/v1"
 INTEGRATOR_MANIFEST_SCHEMA = "charting-loop/rule-integrator-manifest/v1"
-RULE_LANE_PRODUCT_SCHEMA = "charting-loop/rule-lane-product/v1"
+RULE_LANE_PRODUCT_SCHEMA = "charting-loop/rule-lane-product/v2"
 WITNESS_LANE_PRODUCT_SCHEMA = "charting-loop/witness-lane-product/v1"
 PARALLEL_RULE_ASSEMBLY_SCHEMA = "charting-loop/parallel-rule-assembly/v1"
 SOURCE_WITNESS_REPAIR_ENVELOPE_SCHEMA = (
@@ -4142,12 +4142,6 @@ def assemble_parallel_rule_ir(
         {
             "schema_version",
             "partition_product_digest",
-            "source_bundle",
-            "source_clause_inventory",
-            "revision",
-            "method_digest",
-            "compiler_config_digest",
-            "partition_manifest",
             "rule_lane_bindings",
             "rules",
         },
@@ -4176,18 +4170,6 @@ def assemble_parallel_rule_ir(
         raise CorridorKitError(
             "parallel products do not bind the frozen source partition"
         )
-    for field in (
-        "source_bundle",
-        "source_clause_inventory",
-        "revision",
-        "method_digest",
-        "compiler_config_digest",
-        "partition_manifest",
-    ):
-        if rule_product.get(field) != source_partition[field]:
-            raise CorridorKitError(
-                f"Rule product changed frozen source partition field: {field}"
-            )
     partition_manifest = source_partition["partition_manifest"]
     source_bundle = source_partition["source_bundle"]
     if witness_product.get("partition_manifest_digest") != sha256_json(

@@ -167,17 +167,11 @@ class FullMethodContractTests(unittest.TestCase):
         )
         partition_digest = sha256_json(partition)
         rule_product = {
-            "schema_version": "charting-loop/rule-lane-product/v1",
+            "schema_version": "charting-loop/rule-lane-product/v2",
             "partition_product_digest": partition_digest,
             **{
                 key: ir[key]
                 for key in (
-                    "source_bundle",
-                    "source_clause_inventory",
-                    "revision",
-                    "method_digest",
-                    "compiler_config_digest",
-                    "partition_manifest",
                     "rule_lane_bindings",
                     "rules",
                 )
@@ -2181,6 +2175,12 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("dependency_stubs", partition)
         self.assertIn("never future Rule IDs", partition)
         self.assertIn("typed predicate", rule.lower())
+        self.assertIn("charting-loop/rule-lane-product/v2", rule)
+        self.assertIn("Do not copy `source_bundle`", rule)
+        self.assertNotIn(
+            "exactly: `schema_version`, `partition_product_digest`, `source_bundle`",
+            rule,
+        )
         self.assertIn("must not inspect any Rule", witness)
         self.assertIn("positive, negative, and boundary", witness)
         self.assertIn("input_envelope_digest", witness)
@@ -2217,6 +2217,18 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertIn("/audit/SOURCE-ONLY-REPAIR.json", witness_repair)
         self.assertIn("excludes QA messages", witness_repair)
         self.assertNotIn("sealed QA", witness_repair)
+        rule_repair = contract.graph_rule_lane_repair_prompt(
+            "Repair the public task.",
+            arm="method",
+            qa_path="/audit/QA.json",
+            prior_product_path="/audit/RULE.json",
+            output_path="/audit/RULE-REPAIRED.json",
+            impact_lane_ids=["LANE-ONE"],
+            remaining_seconds=600,
+            method_text=method_text,
+        )
+        self.assertIn("charting-loop/rule-lane-product/v2", rule_repair)
+        self.assertIn("Frozen source identity remains runner-owned", rule_repair)
         value = {
             "schema_version": contract.RULE_COMPILE_AUDIT_SCHEMA_V2,
             "study_profile_digest": digest,
@@ -2870,8 +2882,8 @@ class FullMethodContractTests(unittest.TestCase):
         method = object.__new__(adapter.ChartingLoopGraphKernelMethodAgent)
         neutral = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
         # Compiler-rejection custody changes the frozen orchestration condition.
-        self.assertEqual(method.version(), "1.3.0")
-        self.assertEqual(neutral.version(), "1.3.0")
+        self.assertEqual(method.version(), "1.3.1")
+        self.assertEqual(neutral.version(), "1.3.1")
         expected_roles = (
             "source-partitioner",
             "rule-compiler",

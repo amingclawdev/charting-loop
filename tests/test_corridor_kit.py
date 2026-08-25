@@ -2710,17 +2710,11 @@ class TypedRuleCompilerTests(unittest.TestCase):
         partition_product = validate_source_partition_product(partition_product)
         partition_digest = sha256_json(partition_product)
         rule_product = {
-            "schema_version": "charting-loop/rule-lane-product/v1",
+            "schema_version": "charting-loop/rule-lane-product/v2",
             "partition_product_digest": partition_digest,
             **{
                 key: ir[key]
                 for key in (
-                    "source_bundle",
-                    "source_clause_inventory",
-                    "revision",
-                    "method_digest",
-                    "compiler_config_digest",
-                    "partition_manifest",
                     "rule_lane_bindings",
                     "rules",
                 )
@@ -2741,6 +2735,22 @@ class TypedRuleCompilerTests(unittest.TestCase):
         self.assertEqual("complete", report["integrator_manifest"]["whole_ledger_status"])
         self.assertEqual(2, len(report["lane_packages"]))
         self.assertTrue(report["normalized_predicate_digest"].startswith("sha256:"))
+        self.assertEqual(
+            partition_product["revision"],
+            assembled["typed_rule_ir"]["revision"],
+        )
+        second_authority = json.loads(json.dumps(rule_product))
+        second_authority["revision"] = {"revision_id": "MODEL-REWROTE-SOURCE"}
+        with self.assertRaisesRegex(CorridorKitError, "extra=\\['revision'\\]"):
+            assemble_parallel_rule_ir(
+                partition_product, second_authority, witness_product
+            )
+        wrong_rule_partition = json.loads(json.dumps(rule_product))
+        wrong_rule_partition["partition_product_digest"] = "sha256:" + "0" * 64
+        with self.assertRaisesRegex(CorridorKitError, "frozen source partition"):
+            assemble_parallel_rule_ir(
+                partition_product, wrong_rule_partition, witness_product
+            )
         wrong_partition = json.loads(json.dumps(witness_product))
         wrong_partition["partition_product_digest"] = "sha256:" + "0" * 64
         with self.assertRaisesRegex(CorridorKitError, "frozen source partition"):
