@@ -15,7 +15,7 @@ The command exits nonzero unless all four stages finish:
 
 1. **Worker compile** — the real v5 assembler accepts the canonical source-witness
    schema and rejects the observed CL-151 aliases (`witness_id`, `witness_class`, and
-   `expected_outcome`).
+   `expected_outcome`) together with its omitted canonical `boundary_relation` field.
 2. **Compile QA** — the real Graph API freezes the candidate and a QA pass establishes
    digest-bound RuleClosure.
 3. **Worker implementation** — execution-test probes are frozen before mutation, QA

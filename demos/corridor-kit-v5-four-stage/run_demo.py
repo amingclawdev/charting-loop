@@ -373,6 +373,7 @@ def run_demo() -> dict[str, Any]:
     legacy["witness_id"] = legacy.pop("witness_ref")
     legacy["witness_class"] = legacy.pop("kind")
     legacy["expected_outcome"] = legacy.pop("expected_relation")
+    legacy.pop("boundary_relation")
     try:
         assemble_parallel_rule_ir(partition, rule_product, legacy_product)
     except CorridorKitError as error:

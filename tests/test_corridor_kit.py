@@ -2744,9 +2744,10 @@ class TypedRuleCompilerTests(unittest.TestCase):
         legacy_witness["expected_outcome"] = legacy_witness.pop(
             "expected_relation"
         )
+        legacy_witness.pop("boundary_relation")
         with self.assertRaisesRegex(
             CorridorKitError,
-            "source witness has unknown or missing fields.*witness_ref.*witness_id",
+            "source witness has unknown or missing fields.*boundary_relation.*witness_id",
         ):
             assemble_parallel_rule_ir(
                 partition_product, rule_product, legacy_witness_product

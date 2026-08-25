@@ -504,8 +504,9 @@ The compiler exports the exact nine source-witness fields and three required kin
 the benchmark prompt renders those same values and the parser validates them. This
 closes the CL-151 failure where a plausible model response used `witness_id`,
 `witness_class`, and `expected_outcome` while the parser required `witness_ref`,
-`kind`, and `expected_relation`. The parser remains strict; the prompt now tells the
-model the exact contract instead of naming only its schema URI.
+`kind`, and `expected_relation`, and also omitted canonical `boundary_relation`. The
+parser remains strict; the prompt now tells the model the exact contract instead of
+naming only its schema URI.
 
 Run `python3 demos/corridor-kit-v5-four-stage/run_demo.py` for a deterministic local
 exercise of Worker compile, compile QA/RuleClosure, Worker implementation freeze, and
