@@ -79,6 +79,15 @@ from corridor_kit.graph import (
     ratify_rule_candidate,
     read_rule_candidate_payload,
 )
+from corridor_kit.compiler import (
+    assemble_parallel_rule_ir,
+    build_source_witness_repair_envelope,
+    validate_source_partition_product,
+)
+from corridor_kit.graph_index import (
+    compile_repair_impact_set,
+    compile_repairs_are_disjoint,
+)
 
 
 def valid_ledger() -> dict[str, object]:
@@ -1967,6 +1976,180 @@ class TypedRuleCompilerTests(unittest.TestCase):
                 }
         return value
 
+    @classmethod
+    def _v5_ir(cls) -> dict:
+        value = json.loads(json.dumps(cls._v4_ir()))
+        value["schema_version"] = "charting-loop/typed-rule-ir/v5"
+        for rule in value["rules"]:
+            rule["semantics"]["schema_version"] = (
+                "charting-loop/typed-rule-semantics/v5"
+            )
+            primary_slice = rule["source_slices"][0]["slice_id"]
+            for condition in rule["semantics"]["conditions"]:
+                condition["predicate_spec"] = {
+                    "schema_version": "charting-loop/typed-predicate/v1",
+                    "predicate_id": f"PRED-{rule['rule_id']}-{condition['condition_id']}",
+                    "operator": condition["required_witness_operators"][0],
+                    "inputs": [
+                        {
+                            "variable_id": f"input-{rule['rule_id']}",
+                            "value_type": "string",
+                            "source_slice_ids": [primary_slice],
+                        }
+                    ],
+                    "outputs": [
+                        {
+                            "variable_id": f"output-{rule['rule_id']}",
+                            "value_type": "boolean",
+                            "source_slice_ids": [primary_slice],
+                        }
+                    ],
+                    "producer_refs": [primary_slice],
+                    "precondition_rule_ids": (
+                        ["R-EXIST"] if rule["rule_id"] == "R-VERIFY" else []
+                    ),
+                    "dependency_refs": (
+                        ["R-EXIST"] if rule["rule_id"] == "R-VERIFY" else []
+                    ),
+                    "semantic_fields": {"source_meaning": condition["predicate"]},
+                }
+        authority_digest = sha256_json(value["source_bundle"])
+        value["partition_manifest"] = {
+            "schema_version": "charting-loop/source-partition-manifest/v1",
+            "partition_id": "PARTITION-001",
+            "authority_snapshot_digest": authority_digest,
+            "lanes": [
+                {
+                    "lane_id": "LANE-EXIST",
+                    "owner_clause_ids": ["CLAUSE-EXIST"],
+                    "boundary_clause_ids": ["CLAUSE-VERIFY"],
+                    "lane_kind": "local",
+                },
+                {
+                    "lane_id": "LANE-GLOBAL",
+                    "owner_clause_ids": ["CLAUSE-VERIFY"],
+                    "boundary_clause_ids": ["CLAUSE-EXIST"],
+                    "lane_kind": "global",
+                },
+            ],
+            "dependency_stubs": [
+                {
+                    "schema_version": "charting-loop/source-dependency-stub/v1",
+                    "dependency_ref": "SRC-DEP-VERIFY-EXIST",
+                    "from_lane_id": "LANE-GLOBAL",
+                    "to_lane_id": "LANE-EXIST",
+                    "from_clause_ids": ["CLAUSE-VERIFY"],
+                    "to_clause_ids": ["CLAUSE-EXIST"],
+                    "relationship": "requires",
+                }
+            ],
+            "global_lane_id": "LANE-GLOBAL",
+            "unresolved_clause_ids": [],
+        }
+        value["rule_lane_bindings"] = [
+            {
+                "schema_version": "charting-loop/rule-lane-binding/v1",
+                "lane_id": "LANE-EXIST",
+                "rule_ids": ["R-EXIST"],
+            },
+            {
+                "schema_version": "charting-loop/rule-lane-binding/v1",
+                "lane_id": "LANE-GLOBAL",
+                "rule_ids": ["R-VERIFY"],
+            },
+        ]
+        clauses = {
+            clause["clause_id"]: clause
+            for clause in value["source_clause_inventory"]
+        }
+
+        def witness_package(lane_id: str, clause_id: str) -> dict:
+            slice_ids = sorted(
+                item["slice_id"] for item in clauses[clause_id]["source_slices"]
+            )
+            witnesses = []
+            for kind in ("positive", "negative", "boundary"):
+                witnesses.append(
+                    {
+                        "schema_version": "charting-loop/source-witness/v1",
+                        "witness_ref": f"WIT-{lane_id}-{kind}",
+                        "kind": kind,
+                        "source_clause_ids": [clause_id],
+                        "source_slice_ids": slice_ids,
+                        "operator": "exists",
+                        "input_case": {
+                            "subject_id": "declared-items",
+                            "domain_kind": "source_defined",
+                            "case_kind": kind,
+                        },
+                        "expected_relation": f"source requires the {kind} relation",
+                        "boundary_relation": "source boundary remains explicit",
+                    }
+                )
+            source_envelope = {
+                "schema_version": "charting-loop/source-witness-input-envelope/v1",
+                "partition_manifest_digest": sha256_json(
+                    value["partition_manifest"]
+                ),
+                "authority_snapshot_digest": authority_digest,
+                "lane_id": lane_id,
+                "source_clause_ids": [clause_id],
+                "source_slice_ids": slice_ids,
+            }
+            return {
+                "schema_version": "charting-loop/witness-lane-package/v1",
+                "lane_id": lane_id,
+                "role_session_ref": f"source-witness:test:{lane_id}",
+                "visibility": {
+                    "source_only": True,
+                    "candidate_rule_visible": False,
+                    "candidate_checklist_visible": False,
+                    "candidate_witness_visible": False,
+                    "input_envelope_digest": sha256_json(source_envelope),
+                },
+                "source_clause_ids": [clause_id],
+                "source_slice_ids": slice_ids,
+                "witnesses": witnesses,
+            }
+
+        value["witness_lane_packages"] = [
+            witness_package("LANE-EXIST", "CLAUSE-EXIST"),
+            witness_package("LANE-GLOBAL", "CLAUSE-VERIFY"),
+        ]
+        value["revision"]["revision_id"] = "IR-REV-V5"
+        return value
+
+    @staticmethod
+    def _refresh_v5_witness_envelopes(value: dict) -> None:
+        product = validate_source_partition_product(
+            {
+                "schema_version": "charting-loop/source-partition-product/v1",
+                **{
+                    key: value[key]
+                    for key in (
+                        "source_bundle",
+                        "source_clause_inventory",
+                        "revision",
+                        "method_digest",
+                        "compiler_config_digest",
+                        "partition_manifest",
+                    )
+                },
+            }
+        )
+        partition_digest = sha256_json(product["partition_manifest"])
+        authority_digest = sha256_json(product["source_bundle"])
+        for package in value["witness_lane_packages"]:
+            envelope = {
+                "schema_version": "charting-loop/source-witness-input-envelope/v1",
+                "partition_manifest_digest": partition_digest,
+                "authority_snapshot_digest": authority_digest,
+                "lane_id": package["lane_id"],
+                "source_clause_ids": sorted(package["source_clause_ids"]),
+                "source_slice_ids": sorted(package["source_slice_ids"]),
+            }
+            package["visibility"]["input_envelope_digest"] = sha256_json(envelope)
+
     @staticmethod
     def _refresh_v4_snapshot(snapshot: dict) -> None:
         manifest = {
@@ -2490,6 +2673,364 @@ class TypedRuleCompilerTests(unittest.TestCase):
                 obligation["witness_families"] == ["declared_condition"]
                 for obligation in report["witness_obligation_templates"]
             )
+        )
+
+    def test_v5_parallel_rule_witness_assembly_and_closure_are_digest_bound(self) -> None:
+        ir = self._v5_ir()
+        partition_product = {
+            "schema_version": "charting-loop/source-partition-product/v1",
+            "source_bundle": ir["source_bundle"],
+            "source_clause_inventory": ir["source_clause_inventory"],
+            "revision": ir["revision"],
+            "method_digest": ir["method_digest"],
+            "compiler_config_digest": ir["compiler_config_digest"],
+            "partition_manifest": ir["partition_manifest"],
+        }
+        partition_product = validate_source_partition_product(partition_product)
+        partition_digest = sha256_json(partition_product)
+        rule_product = {
+            "schema_version": "charting-loop/rule-lane-product/v1",
+            "partition_product_digest": partition_digest,
+            **{
+                key: ir[key]
+                for key in (
+                    "source_bundle",
+                    "source_clause_inventory",
+                    "revision",
+                    "method_digest",
+                    "compiler_config_digest",
+                    "partition_manifest",
+                    "rule_lane_bindings",
+                    "rules",
+                )
+            },
+        }
+        witness_product = {
+            "schema_version": "charting-loop/witness-lane-product/v1",
+            "partition_product_digest": partition_digest,
+            "partition_manifest_digest": sha256_json(ir["partition_manifest"]),
+            "authority_snapshot_digest": sha256_json(ir["source_bundle"]),
+            "witness_lane_packages": ir["witness_lane_packages"],
+        }
+        assembled = assemble_parallel_rule_ir(
+            partition_product, rule_product, witness_product
+        )
+        report = assembled["compile_report"]
+        self.assertTrue(report["compilation_complete"], report["compile_issues"])
+        self.assertEqual("complete", report["integrator_manifest"]["whole_ledger_status"])
+        self.assertEqual(2, len(report["lane_packages"]))
+        self.assertTrue(report["normalized_predicate_digest"].startswith("sha256:"))
+        wrong_partition = json.loads(json.dumps(witness_product))
+        wrong_partition["partition_product_digest"] = "sha256:" + "0" * 64
+        with self.assertRaisesRegex(CorridorKitError, "frozen source partition"):
+            assemble_parallel_rule_ir(
+                partition_product, rule_product, wrong_partition
+            )
+        forged_rule = json.loads(json.dumps(rule_product))
+        forged_witness = json.loads(json.dumps(witness_product))
+        forged_digest = "sha256:" + "f" * 64
+        forged_rule["partition_product_digest"] = forged_digest
+        forged_witness["partition_product_digest"] = forged_digest
+        with self.assertRaisesRegex(CorridorKitError, "frozen source partition"):
+            assemble_parallel_rule_ir(
+                partition_product, forged_rule, forged_witness
+            )
+        envelope = build_source_witness_repair_envelope(
+            partition_product,
+            witness_product,
+            affected_lane_ids=["LANE-EXIST"],
+            source_refs=["CLAUSE-EXIST", "SL-EXIST"],
+        )
+        self.assertEqual(["LANE-EXIST"], envelope["affected_lane_ids"])
+        with self.assertRaisesRegex(CorridorKitError, "lane escapes"):
+            build_source_witness_repair_envelope(
+                partition_product,
+                witness_product,
+                affected_lane_ids=["QA-SEMANTIC-LEAK"],
+                source_refs=[],
+            )
+        with self.assertRaisesRegex(CorridorKitError, "ref escapes"):
+            build_source_witness_repair_envelope(
+                partition_product,
+                witness_product,
+                affected_lane_ids=["LANE-EXIST"],
+                source_refs=["QA-SEMANTIC-LEAK"],
+            )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GRAPH.jsonl"
+            initialize_graph(path)
+            candidate = freeze_rule_candidate(path, typed_rule_ir=ir)
+            closure = ratify_rule_candidate(
+                path,
+                candidate_report_record_id=candidate["candidate_report_record_id"],
+                candidate_report_digest=candidate["candidate_report_digest"],
+                outcome="pass",
+                findings=[],
+                ratifier_ref="runner:test-v5",
+            )
+            self.assertTrue(closure["rule_closure_established"])
+            records = [
+                json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
+            ]
+            ratifications = [
+                item["body"]
+                for item in records
+                if item["record_type"] == "rule_ratification"
+            ]
+            self.assertTrue(ratifications)
+            for body in ratifications:
+                self.assertEqual(
+                    "charting-loop/rule-ratification/v3",
+                    body["ratification_schema"],
+                )
+                for field in (
+                    "normalized_predicate_digest",
+                    "operator_schema_digest",
+                    "source_witness_set_digest",
+                    "source_witness_bindings_digest",
+                    "dependency_closure_digest",
+                    "lane_packages_digest",
+                    "integrator_digest",
+                    "compiler_implementation_digest",
+                    "method_digest",
+                ):
+                    self.assertTrue(body[field].startswith("sha256:"))
+            self.assertTrue(replay_graph(path)["structurally_valid"])
+
+    def test_v5_task_neutral_semantic_mutations_fail_closed(self) -> None:
+        erased = self._v5_ir()
+        semantics = erased["rules"][0]["semantics"]
+        semantics["rule_kind"] = "temporal_conditional"
+        condition = semantics["conditions"][0]
+        condition["condition_kind"] = "temporal"
+        condition["required_witness_operators"] = ["ordered_before"]
+        condition["predicate_spec"]["operator"] = "ordered_before"
+        condition["predicate_spec"]["semantic_fields"] = {
+            "event_time_variable": "missing-event-time",
+            "transition_time_variable": "missing-transition-time",
+            "before_outcome": "state-a",
+            "after_outcome": "state-b",
+            "chain_outcome": "state-c",
+        }
+        with self.assertRaisesRegex(CorridorKitError, "must name an input variable"):
+            compile_typed_rule_ir(erased)
+
+        collapsed = self._v5_ir()
+        semantics = collapsed["rules"][0]["semantics"]
+        semantics["rule_kind"] = "temporal_conditional"
+        condition = semantics["conditions"][0]
+        condition["condition_kind"] = "temporal"
+        condition["required_witness_operators"] = ["ordered_before"]
+        condition["predicate_spec"]["operator"] = "ordered_before"
+        condition["predicate_spec"]["inputs"] = [
+            {
+                "variable_id": "event-time",
+                "value_type": "timestamp",
+                "source_slice_ids": condition["predicate_spec"]["inputs"][0][
+                    "source_slice_ids"
+                ],
+            },
+            {
+                "variable_id": "transition-time",
+                "value_type": "timestamp",
+                "source_slice_ids": condition["predicate_spec"]["inputs"][0][
+                    "source_slice_ids"
+                ],
+            },
+        ]
+        condition["predicate_spec"]["semantic_fields"] = {
+            "event_time_variable": "event-time",
+            "transition_time_variable": "transition-time",
+            "before_outcome": "same-state",
+            "after_outcome": "same-state",
+            "chain_outcome": "same-state",
+        }
+        with self.assertRaisesRegex(CorridorKitError, "cannot collapse"):
+            compile_typed_rule_ir(collapsed)
+
+        false_closed = self._v5_ir()
+        false_closed["rules"][0]["semantics"]["quantifier"][
+            "domain_kind"
+        ] = "closed_enumeration"
+        false_closed["rules"][0]["semantics"]["applicability"] = {
+            "mode": "conditional",
+            "predicate": "the declared item applies",
+        }
+        report = compile_typed_rule_ir(false_closed)
+        self.assertFalse(report["compilation_complete"])
+        self.assertIn(
+            "source_witness_domain_mismatch",
+            {
+                issue.get("error_type")
+                for item in report["parallel_lane_integration_issues"]
+                for issue in [item]
+            },
+        )
+
+        dropped_edge = self._v5_ir()
+        dropped_edge["partition_manifest"]["dependency_stubs"] = []
+        self._refresh_v5_witness_envelopes(dropped_edge)
+        report = compile_typed_rule_ir(dropped_edge)
+        self.assertFalse(report["compilation_complete"])
+        self.assertIn(
+            "cross_lane_dependency_stub_missing",
+            {item.get("error_type") for item in report["parallel_lane_integration_issues"]},
+        )
+
+        wrong_relationship = self._v5_ir()
+        wrong_relationship["partition_manifest"]["dependency_stubs"][0][
+            "relationship"
+        ] = "conflicts"
+        self._refresh_v5_witness_envelopes(wrong_relationship)
+        report = compile_typed_rule_ir(wrong_relationship)
+        self.assertFalse(report["compilation_complete"])
+        self.assertIn(
+            "cross_lane_dependency_relationship_mismatch",
+            {item.get("error_type") for item in report["parallel_lane_integration_issues"]},
+        )
+
+        extra_stub = self._v5_ir()
+        extra_stub["partition_manifest"]["dependency_stubs"].append(
+            {
+                "schema_version": "charting-loop/source-dependency-stub/v1",
+                "dependency_ref": "SRC-DEP-EXIST-VERIFY",
+                "from_lane_id": "LANE-EXIST",
+                "to_lane_id": "LANE-GLOBAL",
+                "from_clause_ids": ["CLAUSE-EXIST"],
+                "to_clause_ids": ["CLAUSE-VERIFY"],
+                "relationship": "requires",
+            }
+        )
+        self._refresh_v5_witness_envelopes(extra_stub)
+        report = compile_typed_rule_ir(extra_stub)
+        self.assertFalse(report["compilation_complete"])
+        self.assertIn(
+            "source_dependency_stub_without_rule_edge",
+            {item.get("error_type") for item in report["parallel_lane_integration_issues"]},
+        )
+
+        copied = self._v5_ir()
+        copied["witness_lane_packages"][0]["visibility"][
+            "candidate_rule_visible"
+        ] = True
+        with self.assertRaisesRegex(CorridorKitError, "source-only"):
+            compile_typed_rule_ir(copied)
+
+        forged_envelope = self._v5_ir()
+        forged_envelope["witness_lane_packages"][0]["visibility"][
+            "input_envelope_digest"
+        ] = "sha256:" + "0" * 64
+        with self.assertRaisesRegex(CorridorKitError, "input envelope"):
+            compile_typed_rule_ir(forged_envelope)
+
+        duplicate_owner = self._v5_ir()
+        duplicate_owner["partition_manifest"]["lanes"][1][
+            "owner_clause_ids"
+        ].append("CLAUSE-EXIST")
+        with self.assertRaisesRegex(CorridorKitError, "duplicate lane ownership"):
+            compile_typed_rule_ir(duplicate_owner)
+
+        dangling = self._v5_ir()
+        dangling["rules"][0]["semantics"]["conditions"][0]["predicate_spec"][
+            "dependency_refs"
+        ] = ["R-MISSING"]
+        report = compile_typed_rule_ir(dangling)
+        self.assertFalse(report["compilation_complete"])
+        self.assertIn(
+            "typed_predicate_dangling_rule_ref",
+            {item.get("error_type") for item in report["parallel_lane_integration_issues"]},
+        )
+
+        type_conflict = self._v5_ir()
+        type_conflict["rules"][1]["semantics"]["conditions"][0][
+            "predicate_spec"
+        ]["outputs"][0]["value_type"] = "string"
+        report = compile_typed_rule_ir(type_conflict)
+        self.assertFalse(report["compilation_complete"])
+        self.assertIn(
+            "typed_operator_signature_conflict",
+            {item.get("error_type") for item in report["parallel_lane_integration_issues"]},
+        )
+
+    def test_v5_complete_repair_impact_sets_control_parallelism(self) -> None:
+        report = compile_typed_rule_ir(self._v5_ir())
+        impact = compile_repair_impact_set(report, ["R-EXIST"])
+        self.assertEqual(["R-EXIST", "R-VERIFY"], impact["affected_rule_ids"])
+        self.assertEqual(["LANE-EXIST", "LANE-GLOBAL"], impact["affected_lane_ids"])
+        self.assertTrue(impact["requires_integrator_rerun"])
+        decision = compile_repairs_are_disjoint(
+            report, [["R-EXIST"], ["R-VERIFY"]]
+        )
+        self.assertFalse(decision["parallel_safe"])
+        self.assertTrue(decision["overlaps"])
+
+    def test_v5_repair_impact_is_a_complete_order_independent_fixed_point(self) -> None:
+        def edge(edge_id: str, source: str, target: str, relationship: str) -> dict:
+            return {
+                "semantic_edge_id": edge_id,
+                "from_rule_id": source,
+                "to_rule_id": target,
+                "declared_relationship": relationship,
+            }
+
+        edges = [
+            edge("EDGE-B-C", "R-B", "R-C", "invalidates"),
+            edge("EDGE-C-D", "R-C", "R-D", "conflicts"),
+        ]
+        report = {
+            "rule_bodies": [
+                {"rule_id": rule_id, "semantics": {"conditions": []}}
+                for rule_id in ("R-A", "R-B", "R-C", "R-D")
+            ],
+            "lane_packages": [
+                {
+                    "lane_id": lane_id,
+                    "rule_ids": [rule_id],
+                    "incident_cross_lane_edges": [
+                        item
+                        for item in edges
+                        if rule_id in {item["from_rule_id"], item["to_rule_id"]}
+                    ],
+                }
+                for lane_id, rule_id in (
+                    ("LANE-A", "R-A"),
+                    ("LANE-B", "R-B"),
+                    ("LANE-C", "R-C"),
+                    ("LANE-D", "R-D"),
+                )
+            ]
+            + [
+                {
+                    "lane_id": "LANE-GLOBAL",
+                    "rule_ids": [],
+                    "incident_cross_lane_edges": [],
+                }
+            ],
+            "hard_dependency_closure": {
+                "R-A": [],
+                "R-B": ["R-A"],
+                "R-C": [],
+                "R-D": [],
+            },
+            "semantic_edge_templates": edges,
+            "partition_manifest": {"global_lane_id": "LANE-GLOBAL"},
+            "integrator_digest": "sha256:" + "9" * 64,
+        }
+        impact = compile_repair_impact_set(report, ["R-A"])
+        self.assertEqual(["R-A"], impact["changed_rule_ids"])
+        self.assertEqual(["R-A", "R-B", "R-C", "R-D"], impact["affected_rule_ids"])
+        self.assertEqual(["R-B"], impact["hard_dependant_rule_ids"])
+        self.assertEqual(["R-C"], impact["invalidated_rule_ids"])
+        self.assertEqual(
+            ["R-C", "R-D"], impact["conflict_overlap_component_rule_ids"]
+        )
+        reordered = json.loads(json.dumps(report))
+        reordered["semantic_edge_templates"].reverse()
+        for lane in reordered["lane_packages"]:
+            lane["incident_cross_lane_edges"].reverse()
+        self.assertEqual(
+            impact,
+            compile_repair_impact_set(reordered, ["R-A"]),
         )
 
     def test_v4_active_context_reverse_edge_and_direction_witness_bindings(self) -> None:

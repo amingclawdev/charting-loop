@@ -89,9 +89,33 @@ RuleClosure. The
 probe is not injected into the scored Worker; a same-task probe after verifier-informed
 changes is regression evidence, not fresh efficacy or transfer.
 
-The v1 through v3 compilers remain readable for historical custody. Missing v4
+The v1 through v4 compilers remain readable for historical custody. Missing successor
 semantics remain explicitly legacy/unassessed and are never backfilled. New integrated
-runs use v4.
+runs use v5; frozen v4 runs keep their original meaning.
+
+V5 partitions public source once, then lets a Rule-lane compiler and an independent
+source-witness compiler work concurrently. Every source clause has exactly one owner
+lane (or remains explicitly unresolved); boundary clauses are read-only context, and
+cross-lane dependencies plus a global lane are explicit. Witness lanes record a
+source-only role/session/input-envelope identity and cannot see candidate Rules,
+checklists, or candidate witnesses. Each lane retains positive, negative, and boundary
+source cases.
+
+The deterministic v5 assembler rejects ownership holes, duplicate Rules, dangling
+references, typed-predicate/operator mismatches, false domain closure exposed by
+source witnesses, dropped cross-lane dependency declarations, temporal variable or
+before/after collapse, and incomplete whole-ledger integration. RuleClosure binds the
+normalized predicates, operator schema, source witnesses and bindings, hard dependency
+closure, lane packages, integrator, compiler implementation, Method, frozen candidate,
+and independent QA digests. These bindings prove identity and reconstruction, not task
+truth.
+
+V5 QA findings name lanes, Rules, source and witness refs, an error type, a complete
+impact set, and minimal rerun lanes. Differential repair is parallel-safe only when
+complete impact sets are disjoint; the impact includes hard dependants, invalidations,
+incident cross-lane edges and both endpoints, conflict/overlap components,
+temporal/global owners, and the integrator. Independent QA still rechecks the whole
+ledger after every repair. The graph and QA remain advisory and non-Gating.
 
 Typed Rule IR makes the semantic compilation boundary explicit. Each Rule declares a
 required/optional level, applicability predicate, kind, quantifier, source-defined
@@ -475,8 +499,8 @@ Claw and does not present that implementation as the method's required architect
 
 ## Freezing and integration
 
-The bounded Rule-candidate custody release sets `KIT_VERSION` to `0.7.1`. `KIT_VERSION` identifies
-the API, while the exact Git commit plus
+The parallel Rule/source-witness compiler release sets `KIT_VERSION` to `0.8.0`.
+`KIT_VERSION` identifies the API, while the exact Git commit plus
 `python3 -m corridor_kit manifest corridor_kit` tree digest identifies the bytes.
 A source-tree manifest excludes interpreter-created `__pycache__`, `.pyc`, and `.pyo`
 files under a declared, digest-bound policy. The runner removes those derived caches

@@ -2017,11 +2017,15 @@ class FullMethodContractTests(unittest.TestCase):
             self.assertFalse(profile["builder_present"])
             self.assertTrue(profile["qa_can_recommend_repair"])
             self.assertFalse(profile["qa_can_repair"])
-            self.assertEqual(profile["repair_actor"], "same_worker_session")
-            self.assertEqual(profile["roles"], ["worker", "qa"])
-            self.assertEqual(profile["task_clock_roles"], ["worker", "qa"])
+            self.assertEqual(profile["repair_actor"], "same_rule_compiler_session")
             self.assertEqual(
-                profile["qa_schedule"], "compile_candidate_then_each_worker_freeze"
+                profile["roles"],
+                ["source-partitioner", "rule-compiler", "witness-compiler", "qa"],
+            )
+            self.assertEqual(profile["task_clock_roles"], profile["roles"])
+            self.assertEqual(
+                profile["qa_schedule"],
+                "parallel_compile_candidate_then_each_worker_freeze",
             )
             self.assertFalse(profile["qa_budget_is_separate"])
             self.assertIsNone(profile["phase_time_allocations"])
@@ -2049,6 +2053,106 @@ class FullMethodContractTests(unittest.TestCase):
         self.assertEqual(
             control["condition"]["digest"],
             contract.NEUTRAL_GRAPH_INSTRUCTION_SHA256,
+        )
+
+    def test_v5_parallel_compile_prompts_and_machine_qa_contract(self) -> None:
+        method_text = (REPOSITORY_ROOT / "method-paper" / "METHOD.md").read_text(
+            encoding="utf-8"
+        )
+        digest = "sha256:" + "8" * 64
+        partition = contract.graph_source_partition_prompt(
+            "Repair the public task.",
+            arm="method",
+            study_profile_digest=digest,
+            remaining_seconds=1700,
+            method_text=method_text,
+        )
+        rule = contract.graph_rule_lane_prompt(
+            "Repair the public task.",
+            arm="method",
+            study_profile_digest=digest,
+            remaining_seconds=1500,
+            method_text=method_text,
+        )
+        witness = contract.graph_witness_lane_prompt(
+            "Repair the public task.",
+            arm="method",
+            study_profile_digest=digest,
+            remaining_seconds=1500,
+            method_text=method_text,
+        )
+        self.assertIn("exactly one owner lane", partition)
+        self.assertIn(contract.SOURCE_PARTITION_PATH, partition)
+        self.assertIn("dependency_stubs", partition)
+        self.assertIn("never future Rule IDs", partition)
+        self.assertIn("typed predicate", rule.lower())
+        self.assertIn("must not inspect any Rule", witness)
+        self.assertIn("positive, negative, and boundary", witness)
+        self.assertIn("input_envelope_digest", witness)
+        qa = contract.graph_parallel_compile_qa_prompt(
+            "Repair the public task.",
+            arm="method",
+            study_profile_digest=digest,
+            graph_digest="sha256:" + "1" * 64,
+            candidate_report_record_id="sha256:" + "2" * 64,
+            candidate_report_digest="sha256:" + "3" * 64,
+            remaining_seconds=900,
+            method_text=method_text,
+            graph_path="/audit/GRAPH.jsonl",
+            typed_rule_ir_path="/audit/IR.json",
+            typed_rule_ir_digest="sha256:" + "4" * 64,
+            typed_rule_report_path="/audit/REPORT.json",
+            typed_rule_report_digest="sha256:" + "5" * 64,
+            qa_output_path="/audit/QA.json",
+            audit_iteration=1,
+        )
+        self.assertIn("whole-ledger", qa)
+        self.assertIn("minimal_rerun_lanes", qa)
+        self.assertIn(contract.RULE_COMPILE_AUDIT_SCHEMA_V2, qa)
+        witness_repair = contract.graph_witness_lane_repair_prompt(
+            "Repair the public task.",
+            arm="method",
+            repair_envelope_path="/audit/SOURCE-ONLY-REPAIR.json",
+            prior_product_path="/audit/WITNESS.json",
+            output_path="/audit/WITNESS-REPAIRED.json",
+            impact_lane_ids=["LANE-ONE"],
+            remaining_seconds=600,
+            method_text=method_text,
+        )
+        self.assertIn("/audit/SOURCE-ONLY-REPAIR.json", witness_repair)
+        self.assertIn("excludes QA messages", witness_repair)
+        self.assertNotIn("sealed QA", witness_repair)
+        value = {
+            "schema_version": contract.RULE_COMPILE_AUDIT_SCHEMA_V2,
+            "study_profile_digest": digest,
+            "graph_digest": "sha256:" + "1" * 64,
+            "candidate_report_record_id": "sha256:" + "2" * 64,
+            "candidate_report_digest": "sha256:" + "3" * 64,
+            "outcome": "fail",
+            "findings": [
+                {
+                    "finding_id": "F-001",
+                    "lane_id": "LANE-A",
+                    "rule_refs": ["R-A"],
+                    "source_refs": ["CLAUSE-A"],
+                    "witness_refs": ["WIT-A-negative"],
+                    "error_type": "temporal_collapse",
+                    "impact_rule_refs": ["R-A", "R-B"],
+                    "minimal_rerun_lanes": ["LANE-A", "LANE-GLOBAL"],
+                    "message": "Before and after outcomes were collapsed.",
+                }
+            ],
+            "scope_limitations": [],
+        }
+        self.assertEqual(
+            [],
+            contract.validate_graph_compile_audit(
+                value,
+                study_profile_digest=digest,
+                graph_digest="sha256:" + "1" * 64,
+                candidate_report_record_id="sha256:" + "2" * 64,
+                candidate_report_digest="sha256:" + "3" * 64,
+            ),
         )
 
     def test_graph_prompts_have_no_builder_and_use_in_clock_witnessed_repair(self) -> None:
@@ -2671,11 +2775,17 @@ class FullMethodContractTests(unittest.TestCase):
         method = object.__new__(adapter.ChartingLoopGraphKernelMethodAgent)
         neutral = object.__new__(adapter.ChartingLoopGraphKernelNeutralAgent)
         # Compiler-rejection custody changes the frozen orchestration condition.
-        self.assertEqual(method.version(), "1.2.1")
-        self.assertEqual(neutral.version(), "1.2.1")
-        self.assertEqual(method.ROLE_SEQUENCE, ("worker", "qa"))
-        self.assertEqual(neutral.ROLE_SEQUENCE, ("worker", "qa"))
-        self.assertIn("Worker compile", method.ORCHESTRATION_MESSAGE)
+        self.assertEqual(method.version(), "1.3.0")
+        self.assertEqual(neutral.version(), "1.3.0")
+        expected_roles = (
+            "source-partitioner",
+            "rule-compiler",
+            "witness-compiler",
+            "qa",
+        )
+        self.assertEqual(method.ROLE_SEQUENCE, expected_roles)
+        self.assertEqual(neutral.ROLE_SEQUENCE, expected_roles)
+        self.assertIn("parallel Rule/source-witness compile", method.ORCHESTRATION_MESSAGE)
         self.assertIn("RuleClosure", method.ORCHESTRATION_MESSAGE)
         self.assertIn("same-Worker", method.ORCHESTRATION_MESSAGE)
         self.assertIn("official scoring", method.ORCHESTRATION_MESSAGE)
@@ -2690,8 +2800,12 @@ class FullMethodContractTests(unittest.TestCase):
             "_freeze_graph_revision(",
             'self._resume_role(\n                        "qa"',
             'self._resume_role(\n                "worker"',
-            "graph_compile_qa_prompt(",
-            "graph_compile_repair_prompt(",
+            "graph_parallel_compile_qa_prompt(",
+            "graph_rule_lane_repair_prompt(",
+            "graph_witness_lane_repair_prompt(",
+            "build_source_witness_repair_envelope",
+            "_run_parallel_new_roles(",
+            "_assemble_parallel_compile(",
             "graph_execution_test_plan_prompt(",
             "graph_execution_test_qa_prompt(",
             "_append_execution_test_qa_assessment(",
@@ -2719,7 +2833,12 @@ class FullMethodContractTests(unittest.TestCase):
             "kit_version": "0.7.0",
             "tree_digest": "sha256:" + "7" * 64,
         }
-        roles = {"worker": object(), "qa": object()}
+        roles = {
+            "source-partitioner": object(),
+            "rule-compiler": object(),
+            "witness-compiler": object(),
+            "qa": object(),
+        }
         agent._child_agent = lambda role: roles[role]
         test_case = self
         events: list[str] = []
@@ -2745,13 +2864,28 @@ class FullMethodContractTests(unittest.TestCase):
                 "quiescent": True,
             }
 
+        async def run_parallel(self, role_specs, environment, *, deadline):
+            result = {}
+            for role, child, prompt in role_specs:
+                events.append(f"{role}-parallel-new")
+                result[role] = (
+                    adapter.AgentContext(),
+                    {
+                        "phase": role,
+                        "role": role,
+                        "status": "completed",
+                        "quiescent": True,
+                    },
+                )
+            return result
+
         async def resume(self, role, child, prompt, environment, *, phase, deadline):
             events.append(f"{role}-resume:{phase}")
-            if role == "worker" and phase.startswith("worker-recompile-"):
+            if role == "rule-compiler" and phase.startswith("rule-lane-recompile-"):
                 test_case.assertFalse(state["rule_closure_established"])
                 test_case.assertIsNone(state["position_ref"])
                 test_case.assertIsNone(state["direction_digest"])
-            if role == "worker" and phase == "worker-execution-test-plan":
+            if role == "rule-compiler" and phase == "worker-execution-test-plan":
                 test_case.assertTrue(state["rule_closure_established"])
                 test_case.assertIn("RuleClosure", prompt)
                 test_case.assertIn("position_checkpoint", prompt)
@@ -2761,22 +2895,22 @@ class FullMethodContractTests(unittest.TestCase):
                 events.append("position-checkpoint-created")
                 events.append("direction-proposal-created")
                 events.append("execution-test-contract-created")
-            if role == "worker" and phase.startswith(
+            if role == "rule-compiler" and phase.startswith(
                 "worker-execution-test-revision-"
             ):
                 test_case.assertIn("before implementation", prompt)
                 test_case.assertIn("source-grounded finding", prompt)
                 events.append("execution-test-contract-revised")
-            if role == "worker" and phase == "worker-implementation":
+            if role == "rule-compiler" and phase == "worker-implementation":
                 test_case.assertTrue(state["rule_closure_established"])
                 test_case.assertIn("execution test/probe contract", prompt)
                 test_case.assertIn("not_assessed", prompt)
                 state["worker_snapshot"] = "worker-000001-implemented"
-            if role == "worker" and phase == "repair-execution-test-plan-0001":
+            if role == "rule-compiler" and phase == "repair-execution-test-plan-0001":
                 test_case.assertIn("pre-repair execution choice", prompt)
                 test_case.assertIn("do not yet mutate", prompt)
                 events.append("repair-position-direction-contract-created")
-            if role == "worker" and phase == "repair-0001":
+            if role == "rule-compiler" and phase == "repair-0001":
                 test_case.assertIn("already-frozen", prompt)
                 test_case.assertIn("Do not create a", prompt)
                 state["worker_snapshot"] = "worker-000002-repaired"
@@ -2797,6 +2931,59 @@ class FullMethodContractTests(unittest.TestCase):
                 "available": True,
                 "snapshot_count": len(snapshots),
                 "snapshots": snapshots,
+            }
+
+        async def exec_root(self, environment, *, command):
+            if "validate_source_partition_product" in command:
+                return types.SimpleNamespace(
+                    return_code=0,
+                    stdout=json.dumps(
+                        {
+                            "ok": True,
+                            "partition_product_digest": "sha256:" + "7" * 64,
+                            "lane_ids": ["LANE-EXIST", "LANE-GLOBAL"],
+                            "byte_size": 2048,
+                        }
+                    ),
+                    stderr="",
+                )
+            return types.SimpleNamespace(return_code=0, stdout="", stderr="")
+
+        async def assemble_parallel(
+            self,
+            environment,
+            *,
+            source_partition_path,
+            rule_product_path,
+            witness_product_path,
+            ir_path,
+            report_path,
+            assembly_path,
+        ):
+            events.append(f"parallel-assembly:{Path(ir_path).name}")
+            return {
+                "ok": True,
+                "assembly_digest": "sha256:" + "8" * 64,
+                "compilation_complete": True,
+            }
+
+        async def freeze_witness_repair_envelope(
+            self,
+            environment,
+            *,
+            source_partition_path,
+            prior_witness_product_path,
+            output_path,
+            affected_lane_ids,
+            findings,
+        ):
+            test_case.assertNotIn("qa", output_path.lower())
+            return {
+                "ok": True,
+                "path": output_path,
+                "envelope_digest": "sha256:" + "6" * 64,
+                "affected_lane_ids": sorted(set(affected_lane_ids)),
+                "source_ref_count": 1,
             }
 
         async def graph_doctor_report(self, environment, *, graph_path):
@@ -2982,7 +3169,11 @@ class FullMethodContractTests(unittest.TestCase):
         for name, function in (
             ("_write_root_json", write_root_json),
             ("_run_new_role", run_new),
+            ("_run_parallel_new_roles", run_parallel),
             ("_resume_role", resume),
+            ("exec_as_root", exec_root),
+            ("_assemble_parallel_compile", assemble_parallel),
+            ("_freeze_witness_repair_envelope", freeze_witness_repair_envelope),
             ("_worker_revision_progress", progress),
             ("_graph_doctor_report", graph_doctor_report),
             ("_freeze_rule_compile_candidate", freeze_compile),
@@ -3016,14 +3207,19 @@ class FullMethodContractTests(unittest.TestCase):
             events,
             [
                 "study-frozen",
-                "worker-new",
+                "source-partitioner-new",
+                "rule-compiler-parallel-new",
+                "witness-compiler-parallel-new",
+                "parallel-assembly:TYPED-RULE-IR-FIRST.json",
                 "compile-candidate-1",
                 "qa-open",
                 "qa-new",
                 "qa-report-frozen",
                 "qa-seal",
                 "compile-decision-1:False",
-                "worker-resume:worker-recompile-0002",
+                "rule-compiler-resume:rule-lane-recompile-0002",
+                "witness-compiler-resume:witness-lane-recompile-0002",
+                "parallel-assembly:typed-rule-ir-0002.json",
                 "compile-candidate-2",
                 "qa-open",
                 "qa-resume:compile-qa-0002",
@@ -3031,7 +3227,7 @@ class FullMethodContractTests(unittest.TestCase):
                 "qa-seal",
                 "compile-decision-2:True",
                 "rule-closure-2",
-                "worker-resume:worker-execution-test-plan",
+                "rule-compiler-resume:worker-execution-test-plan",
                 "position-checkpoint-created",
                 "direction-proposal-created",
                 "execution-test-contract-created",
@@ -3042,7 +3238,7 @@ class FullMethodContractTests(unittest.TestCase):
                 "qa-seal",
                 "execution-test-decision:fail",
                 "execution-test-assessment-appended",
-                "worker-resume:worker-execution-test-revision-0002",
+                "rule-compiler-resume:worker-execution-test-revision-0002",
                 "execution-test-contract-revised",
                 "graph-freeze-execution-test-2:execution-test-contract-0002",
                 "qa-open",
@@ -3051,14 +3247,14 @@ class FullMethodContractTests(unittest.TestCase):
                 "qa-seal",
                 "execution-test-decision:not_assessed",
                 "execution-test-assessment-appended",
-                "worker-resume:worker-implementation",
+                "rule-compiler-resume:worker-implementation",
                 "graph-freeze-result-1:worker-000001-implemented",
                 "qa-open",
                 "qa-resume:qa-audit-0001",
                 "qa-report-frozen",
                 "qa-seal",
                 "qa-decision:worker-000001-implemented:True",
-                "worker-resume:repair-execution-test-plan-0001",
+                "rule-compiler-resume:repair-execution-test-plan-0001",
                 "repair-position-direction-contract-created",
                 "graph-freeze-repair-execution-test-0001-1:repair-execution-test-contract-0001-0001",
                 "qa-open",
@@ -3067,7 +3263,7 @@ class FullMethodContractTests(unittest.TestCase):
                 "qa-seal",
                 "execution-test-decision:pass",
                 "execution-test-assessment-appended",
-                "worker-resume:repair-0001",
+                "rule-compiler-resume:repair-0001",
                 "graph-freeze-result-2:worker-000002-repaired",
                 "qa-open",
                 "qa-resume:qa-audit-0002",
@@ -3084,7 +3280,9 @@ class FullMethodContractTests(unittest.TestCase):
         )
         self.assertFalse(context.metadata["qa_budget_is_separate"])
         self.assertFalse(context.metadata["qa_can_repair"])
-        self.assertEqual(context.metadata["repair_actor"], "same_worker_session")
+        self.assertEqual(
+            context.metadata["repair_actor"], "same_rule_compiler_session"
+        )
         self.assertEqual(
             context.metadata["graph_revision_freezes"][0]["position_ref"],
             "sha256:" + "e" * 64,

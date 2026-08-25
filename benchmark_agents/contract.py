@@ -36,6 +36,10 @@ GRAPH_PATH = f"{CORRIDOR_PATH}/GRAPH.jsonl"
 STUDY_PROFILE_PATH = f"{CORRIDOR_PATH}/STUDY.json"
 TYPED_RULE_IR_PATH = f"{CORRIDOR_PATH}/TYPED-RULE-IR-FIRST.json"
 TYPED_RULE_REPORT_PATH = f"{CORRIDOR_PATH}/TYPED-RULE-COMPILE-FIRST.json"
+SOURCE_PARTITION_PATH = f"{CORRIDOR_PATH}/SOURCE-PARTITION-FIRST.json"
+RULE_LANE_PRODUCT_PATH = f"{CORRIDOR_PATH}/RULE-LANES-FIRST.json"
+WITNESS_LANE_PRODUCT_PATH = f"{CORRIDOR_PATH}/WITNESS-LANES-FIRST.json"
+PARALLEL_ASSEMBLY_PATH = f"{CORRIDOR_PATH}/PARALLEL-ASSEMBLY-FIRST.json"
 EXECUTION_TEST_ROOT = f"{RUNTIME_ROOT}/execution-tests"
 EXECUTION_TEST_QA_PATH = f"{RUNTIME_ROOT}/qa/execution-test-audit.json"
 ACCEPTANCE_PATH = f"{CORRIDOR_PATH}/ACCEPTANCE.json"
@@ -68,6 +72,7 @@ METHOD_SCOPE_SHA256 = (
 GRAPH_STUDY_SCHEMA = "charting-loop/method-guided-graph-study/v2"
 GRAPH_AUDIT_SCHEMA = "charting-loop/graph-path-audit/v2"
 RULE_COMPILE_AUDIT_SCHEMA = "charting-loop/rule-compile-audit/v1"
+RULE_COMPILE_AUDIT_SCHEMA_V2 = "charting-loop/rule-compile-audit/v2"
 RULE_COMPILE_FAILURE_AUDIT_SCHEMA = "charting-loop/rule-compile-failure-audit/v1"
 EXECUTION_TEST_AUDIT_SCHEMA = "charting-loop/execution-test-audit/v1"
 VERIFIER_ALIGNMENT_SCHEMA = "charting-loop/verifier-alignment/v1"
@@ -1196,14 +1201,24 @@ def graph_study_profile(
         "agent_version": agent_version,
         "kit_version": kit_version,
         "kit_tree_digest": kit_tree_digest,
-        "roles": ["worker", "qa"],
-        "task_clock_roles": ["worker", "qa"],
+        "roles": [
+            "source-partitioner",
+            "rule-compiler",
+            "witness-compiler",
+            "qa",
+        ],
+        "task_clock_roles": [
+            "source-partitioner",
+            "rule-compiler",
+            "witness-compiler",
+            "qa",
+        ],
         "builder_present": False,
-        "qa_schedule": "compile_candidate_then_each_worker_freeze",
+        "qa_schedule": "parallel_compile_candidate_then_each_worker_freeze",
         "qa_budget_is_separate": False,
         "qa_can_recommend_repair": True,
         "qa_can_repair": False,
-        "repair_actor": "same_worker_session",
+        "repair_actor": "same_rule_compiler_session",
         "phase_time_allocations": None,
         "submission_rule": "latest_valid_worker_freeze_before_official_verifier",
         "official_verifier_schedule": "after_agent_return",
@@ -1311,6 +1326,250 @@ Its IR is reviewed for compilation quality but is not injected into the later Wo
 If task-source interpretation or compiler bytes change after same-task verifier
 feedback, classify the later run as `same_task_regression`, not fresh efficacy or
 transfer evidence.
+"""
+
+
+def graph_source_partition_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    remaining_seconds: int,
+    method_text: str | None,
+) -> str:
+    """Freeze source identity and deterministic lane ownership before fan-out."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""You are the source-partition Worker. You do not solve the task.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+This is stage 1A under the single task deadline. Read every public normative source,
+freeze a complete `charting-loop/authority-snapshot/v3`, and enumerate every normative
+clause with stable order keys and exact ordered UTF-8 source slices. Then partition
+clauses into deterministic semantic lanes. Every clause has exactly one owner lane or
+is listed unresolved; boundary clauses are read-only context and do not create a
+second owner. Record source-clause/lane dependency stubs—never future Rule IDs or
+semantic-edge IDs—a global lane for coupled and cross-lane constraints, and the exact
+AuthoritySnapshot digest.
+
+Write exactly one JSON object to `{SOURCE_PARTITION_PATH}` with schema
+`charting-loop/source-partition-product/v1` and exactly: `schema_version`,
+`source_bundle`, `source_clause_inventory`, `revision`, `method_digest`,
+`compiler_config_digest`, and `partition_manifest`. The partition manifest uses
+`charting-loop/source-partition-manifest/v1` and exactly: `schema_version`,
+`partition_id`, `authority_snapshot_digest`, `lanes`, `dependency_stubs`,
+`global_lane_id`, and `unresolved_clause_ids`. Each lane has `lane_id`,
+`owner_clause_ids`, `boundary_clause_ids`, and `lane_kind`. Each dependency stub has
+exactly `schema_version: charting-loop/source-dependency-stub/v1`,
+`dependency_ref`, `from_lane_id`, `to_lane_id`, `from_clause_ids`,
+`to_clause_ids`, and `relationship`. Its clauses must be owned by the corresponding
+lane. The later deterministic integrator—not this role—maps final Rule edges back to
+these source stubs and rejects missing, extra, ambiguous, or relationship-mismatched
+mappings.
+
+Bind `method_digest` to `{METHOD_CONTENT_SHA256}` and the compiler config to the
+installed Kit tree identity. Use revision kind `first_attempt`. Do not create Rules,
+witnesses, tests, a Direction, or task mutations. About {remaining_seconds} seconds
+remain. Return immediately after the canonical source-partition product is complete.
+"""
+
+
+def graph_rule_lane_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    remaining_seconds: int,
+    method_text: str | None,
+    output_path: str = RULE_LANE_PRODUCT_PATH,
+) -> str:
+    """Compile source-owned Rule lanes without seeing independent witnesses."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""You are the Rule-lane compiler. You do not solve the task.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+Read the frozen source partition `{SOURCE_PARTITION_PATH}` and verify its canonical
+digest. Treat each lane's owner clauses as writable interpretation scope and boundary
+clauses as read-only dependency context. Compile every owned clause into source-bound
+Rules, complete checklist projections, typed dependencies, and executable typed
+predicate schemas. Typed predicates name inputs, outputs, producer refs,
+preconditions, dependency refs, and semantic fields. Temporal/state predicates must
+retain distinct event and transition time variables plus before/after/chain outcomes.
+Preserve open domains, negative applicability, quantifiers, exceptions, ordering,
+and cross-lane dependencies. Do not read or invent source-witness lane output.
+
+Write exactly one `charting-loop/rule-lane-product/v1` object to `{output_path}` with
+exactly: `schema_version`, `partition_product_digest`, `source_bundle`,
+`source_clause_inventory`, `revision`, `method_digest`, `compiler_config_digest`,
+`partition_manifest`, `rule_lane_bindings`, and `rules`. Bind
+`partition_product_digest` to the canonical JSON digest of the frozen partition.
+Every lane has exactly one binding and every Rule exactly one owner. Do not implement,
+test, or mutate the official task. About {remaining_seconds} seconds remain. Return
+promptly after all Rule lanes are complete.
+"""
+
+
+def graph_witness_lane_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    remaining_seconds: int,
+    method_text: str | None,
+    output_path: str = WITNESS_LANE_PRODUCT_PATH,
+) -> str:
+    """Derive source-only positive, negative, and boundary witnesses independently."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""You are the independent source-witness compiler. You do not solve the
+task and you must not inspect any Rule/checklist/candidate/witness output from another
+role.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+Read only the public authority and frozen source partition
+`{SOURCE_PARTITION_PATH}`. Verify the partition's canonical digest. For every lane,
+derive positive, negative, and boundary source witnesses directly from owned and
+read-only boundary clauses. A witness binds exact source slice IDs, one stable
+operator, an input case, and the source-stated expected outcome. For conditional
+closed domains, include both positive and negative classification for every declared
+subject. For temporal/state requirements, keep event time, transition time, and
+before/after/chain outcomes distinct. If the source cannot determine a witness,
+retain the lane as incomplete; do not copy or infer candidate Rule semantics.
+
+Write exactly one `charting-loop/witness-lane-product/v1` object to `{output_path}`
+with exactly: `schema_version`, `partition_product_digest`,
+`partition_manifest_digest`, `authority_snapshot_digest`, and
+`witness_lane_packages`. Bind all three digests to the frozen partition. Each package
+uses `charting-loop/witness-lane-package/v1` and exactly records `schema_version`,
+`lane_id`, `role_session_ref`, `visibility`, `source_clause_ids`,
+`source_slice_ids`, and `witnesses`. `visibility` has exactly `source_only: true`,
+`candidate_rule_visible: false`, `candidate_checklist_visible: false`,
+`candidate_witness_visible: false`, and `input_envelope_digest`. Recompute that digest
+from the canonical `charting-loop/source-witness-input-envelope/v1` object containing
+the partition-manifest digest, AuthoritySnapshot digest, lane ID, and sorted source
+clause/slice IDs. Source witnesses use `charting-loop/source-witness/v1`. Do not
+implement, test, or mutate the official task. About {remaining_seconds} seconds remain.
+Return promptly after all witness lanes are complete.
+"""
+
+
+def graph_parallel_compile_qa_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    study_profile_digest: str,
+    graph_digest: str,
+    candidate_report_record_id: str,
+    candidate_report_digest: str,
+    remaining_seconds: int,
+    method_text: str | None,
+    graph_path: str,
+    typed_rule_ir_path: str,
+    typed_rule_ir_digest: str,
+    typed_rule_report_path: str,
+    typed_rule_report_digest: str,
+    qa_output_path: str,
+    audit_iteration: int,
+) -> str:
+    """Audit v5 lane products and the deterministic whole-ledger assembly."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""You are the independent whole-ledger compilation QA reviewer.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+Audit sealed graph `{graph_path}` (`{graph_digest}`), IR `{typed_rule_ir_path}`
+(`{typed_rule_ir_digest}`), and compiler report `{typed_rule_report_path}`
+(`{typed_rule_report_digest}`). Bind candidate `{candidate_report_record_id}` /
+`{candidate_report_digest}`. Re-read public authority independently and reconstruct
+the partition, clause ownership, source-only witness coverage, typed predicates,
+operator schemas, dependency closure, cross-lane edges, lane packages, and final
+integrator manifest. A digest proves identity, never semantic truth. Reject temporal
+collapse, false closed applicability, missing negative/boundary witnesses, dependency
+holes, duplicate ownership, witness/Rule semantic copying, or incomplete integration.
+Do not use official verifier output and do not mutate or ratify anything.
+
+Write one `{RULE_COMPILE_AUDIT_SCHEMA_V2}` object to `{qa_output_path}` with exactly:
+`schema_version`, `study_profile_digest`, `graph_digest`,
+`candidate_report_record_id`, `candidate_report_digest`, `outcome`, `findings`, and
+`scope_limitations`. Each finding is an object with exactly `finding_id`, `lane_id`,
+`rule_refs`, `source_refs`, `witness_refs`, `error_type`, `impact_rule_refs`,
+`minimal_rerun_lanes`, and `message`. PASS has no findings; non-PASS has at least one.
+This is audit {audit_iteration}; always perform a final independent whole-ledger
+assessment, even after differential repair. About {remaining_seconds} seconds remain.
+"""
+
+
+def graph_rule_lane_repair_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    qa_path: str,
+    prior_product_path: str,
+    output_path: str,
+    impact_lane_ids: list[str],
+    remaining_seconds: int,
+    method_text: str | None,
+) -> str:
+    """Repair only QA-addressed Rule lanes while preserving all other bytes."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""Resume as the SAME Rule-lane compiler.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+Read sealed QA `{qa_path}` and prior Rule product `{prior_product_path}`. Reproduce
+findings against public source. Repair only lanes {json.dumps(impact_lane_ids)} and
+their complete declared impact Rules; copy every unaffected lane and source identity
+unchanged. Write a complete replacement `charting-loop/rule-lane-product/v1` to
+`{output_path}`. Do not inspect witness-lane output, implement the task, or overwrite
+prior custody. About {remaining_seconds} seconds remain.
+"""
+
+
+def graph_witness_lane_repair_prompt(
+    task_instruction: str,
+    *,
+    arm: str,
+    repair_envelope_path: str,
+    prior_product_path: str,
+    output_path: str,
+    impact_lane_ids: list[str],
+    remaining_seconds: int,
+    method_text: str | None,
+) -> str:
+    """Repair only QA-addressed source-witness lanes under source-only visibility."""
+
+    condition = _graph_condition_block(arm, method_text)
+    return f"""Resume as the SAME independent source-witness compiler.
+
+{_task_block(task_instruction)}
+
+{condition}
+
+Read only source-safe repair envelope `{repair_envelope_path}`, public authority,
+frozen partition, and prior witness product `{prior_product_path}`. The envelope may
+contain only partition/prior-product identity, affected lane IDs, and public source
+refs; it deliberately excludes QA messages, Rule refs, checklists, predicates, and
+candidate semantics. Repair only lanes {json.dumps(impact_lane_ids)}; copy every
+unaffected source-witness lane unchanged. You still may not inspect the complete QA,
+Rule, checklist, candidate, or other-role witness outputs. Write one complete
+replacement `charting-loop/witness-lane-product/v1` to `{output_path}` without
+overwriting prior custody. About {remaining_seconds} seconds remain.
 """
 
 
@@ -2113,7 +2372,11 @@ def validate_graph_compile_audit(
     }
     if set(value) != expected_keys:
         errors.append("RULE_COMPILE_AUDIT_FIELDS")
-    if value.get("schema_version") != RULE_COMPILE_AUDIT_SCHEMA:
+    schema_version = value.get("schema_version")
+    if schema_version not in {
+        RULE_COMPILE_AUDIT_SCHEMA,
+        RULE_COMPILE_AUDIT_SCHEMA_V2,
+    }:
         errors.append("RULE_COMPILE_AUDIT_SCHEMA")
     for field, expected in (
         ("study_profile_digest", study_profile_digest),
@@ -2127,8 +2390,47 @@ def validate_graph_compile_audit(
     if outcome not in {"pass", "fail", "not_assessed"}:
         errors.append("RULE_COMPILE_AUDIT_OUTCOME")
     findings = value.get("findings")
-    if not isinstance(findings, list) or any(
-        not isinstance(item, str) or not item.strip() for item in findings
+    finding_fields = {
+        "finding_id",
+        "lane_id",
+        "rule_refs",
+        "source_refs",
+        "witness_refs",
+        "error_type",
+        "impact_rule_refs",
+        "minimal_rerun_lanes",
+        "message",
+    }
+    v2_findings_valid = bool(
+        isinstance(findings, list)
+        and all(
+            isinstance(item, dict)
+            and set(item) == finding_fields
+            and all(
+                isinstance(item.get(field), str) and item[field].strip()
+                for field in ("finding_id", "lane_id", "error_type", "message")
+            )
+            and all(
+                isinstance(item.get(field), list)
+                and all(isinstance(ref, str) and ref.strip() for ref in item[field])
+                for field in (
+                    "rule_refs",
+                    "source_refs",
+                    "witness_refs",
+                    "impact_rule_refs",
+                    "minimal_rerun_lanes",
+                )
+            )
+            for item in findings
+        )
+    )
+    v1_findings_valid = bool(
+        isinstance(findings, list)
+        and all(isinstance(item, str) and item.strip() for item in findings)
+    )
+    if not (
+        (schema_version == RULE_COMPILE_AUDIT_SCHEMA_V2 and v2_findings_valid)
+        or (schema_version == RULE_COMPILE_AUDIT_SCHEMA and v1_findings_valid)
     ):
         errors.append("RULE_COMPILE_AUDIT_FINDINGS")
         findings = []

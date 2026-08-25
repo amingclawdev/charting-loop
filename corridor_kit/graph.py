@@ -28,6 +28,8 @@ from .compiler import (
     RULE_RELATIONSHIPS,
     TYPED_RULE_SEMANTICS_SCHEMA_V3,
     TYPED_RULE_SEMANTICS_SCHEMA_V4,
+    TYPED_RULE_SEMANTICS_SCHEMA_V5,
+    TYPED_RULE_COMPILATION_SCHEMA_V5,
     compile_typed_rule_ir,
     project_relationship_alignment,
     project_rule_checklist_templates,
@@ -44,6 +46,7 @@ from .compiler import (
 from .graph_index import GraphIndex
 
 RULE_RATIFICATION_SCHEMA_V2 = "charting-loop/rule-ratification/v2"
+RULE_RATIFICATION_SCHEMA_V3 = "charting-loop/rule-ratification/v3"
 RULE_CANDIDATE_REPORT_SCHEMA_V1 = "charting-loop/rule-candidate-report/v1"
 RULE_CANDIDATE_REPORT_SCHEMA = "charting-loop/rule-candidate-report/v2"
 RULE_CANDIDATE_ENVELOPE_SCHEMA = (
@@ -809,8 +812,11 @@ def _validate_successor_rule_source(
     provenance_digest = _digest(body, "rule_source_provenance_digest")
     if sha256_json(source_identity) != provenance_digest:
         raise CorridorKitError("successor Rule source provenance digest does not match")
-    is_v4 = body.get("semantics", {}).get("schema_version") == TYPED_RULE_SEMANTICS_SCHEMA_V4
-    if is_v4:
+    is_authority_snapshot_rule = body.get("semantics", {}).get("schema_version") in {
+        TYPED_RULE_SEMANTICS_SCHEMA_V4,
+        TYPED_RULE_SEMANTICS_SCHEMA_V5,
+    }
+    if is_authority_snapshot_rule:
         snapshot_digest = _digest(body, "source_digest")
         if authority_snapshot is None:
             raise CorridorKitError("v4 Rule requires a runner AuthoritySnapshot")
@@ -1071,6 +1077,7 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 if semantics_schema in {
                     TYPED_RULE_SEMANTICS_SCHEMA_V3,
                     TYPED_RULE_SEMANTICS_SCHEMA_V4,
+                    TYPED_RULE_SEMANTICS_SCHEMA_V5,
                 }:
                     provenance_digest = _validate_successor_rule_source(
                         body,
@@ -1096,6 +1103,7 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 if semantics.get("schema_version") in {
                     TYPED_RULE_SEMANTICS_SCHEMA_V3,
                     TYPED_RULE_SEMANTICS_SCHEMA_V4,
+                    TYPED_RULE_SEMANTICS_SCHEMA_V5,
                 }:
                     rule_source_provenance_digests[rule_id] = provenance_digest
                     rule_source_bindings[rule_id] = list(body["source_slices"])
@@ -1122,6 +1130,7 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 if semantics_schema in {
                     TYPED_RULE_SEMANTICS_SCHEMA_V3,
                     TYPED_RULE_SEMANTICS_SCHEMA_V4,
+                    TYPED_RULE_SEMANTICS_SCHEMA_V5,
                 }:
                     provenance_digest = _validate_successor_rule_source(
                         body,
@@ -1147,6 +1156,7 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 if semantics.get("schema_version") in {
                     TYPED_RULE_SEMANTICS_SCHEMA_V3,
                     TYPED_RULE_SEMANTICS_SCHEMA_V4,
+                    TYPED_RULE_SEMANTICS_SCHEMA_V5,
                 }:
                     rule_source_provenance_digests[rule_id] = provenance_digest
                     rule_source_bindings[rule_id] = list(body["source_slices"])
@@ -1256,13 +1266,34 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 "ratifier_ref",
                 "rule_closure_digest",
             }
-            present = successor_fields.intersection(body)
+            v5_closure_fields = {
+                "normalized_predicate_digest",
+                "operator_schema_digest",
+                "source_witness_set_digest",
+                "source_witness_bindings_digest",
+                "dependency_closure_digest",
+                "lane_packages_digest",
+                "integrator_digest",
+                "compiler_implementation_digest",
+                "method_digest",
+            }
+            known_successor_fields = successor_fields | v5_closure_fields
+            present = known_successor_fields.intersection(body)
             if present:
-                if present != successor_fields:
+                ratification_schema = body.get("ratification_schema")
+                expected_successor_fields = (
+                    known_successor_fields
+                    if ratification_schema == RULE_RATIFICATION_SCHEMA_V3
+                    else successor_fields
+                )
+                if present != expected_successor_fields:
                     raise CorridorKitError(
-                        "v2 Rule ratification has partial closure bindings"
+                        "successor Rule ratification has partial closure bindings"
                     )
-                if body.get("ratification_schema") != RULE_RATIFICATION_SCHEMA_V2:
+                if ratification_schema not in {
+                    RULE_RATIFICATION_SCHEMA_V2,
+                    RULE_RATIFICATION_SCHEMA_V3,
+                }:
                     raise CorridorKitError("Rule ratification has the wrong schema")
                 if actor not in {"runner", "operator"}:
                     raise CorridorKitError("QA and Worker cannot ratify Rule authority")
@@ -1281,8 +1312,14 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                     raise CorridorKitError(
                         "Rule ratification authority_digest differs from AuthoritySnapshot"
                     )
-                if rule_semantics.get(rule_id, {}).get("schema_version") != TYPED_RULE_SEMANTICS_SCHEMA_V4:
-                    raise CorridorKitError("v2 ratification requires a current v4 Rule candidate")
+                ratified_schema = rule_semantics.get(rule_id, {}).get("schema_version")
+                if ratified_schema not in {
+                    TYPED_RULE_SEMANTICS_SCHEMA_V4,
+                    TYPED_RULE_SEMANTICS_SCHEMA_V5,
+                }:
+                    raise CorridorKitError(
+                        "successor ratification requires a current v4 or v5 Rule candidate"
+                    )
                 candidate = candidate_reports.get(candidate_report_record_id)
                 if candidate is None or candidate[
                     "candidate_report_digest"
@@ -1301,6 +1338,45 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                     raise CorridorKitError(
                         "RuleClosure requires a complete zero-delta compile report"
                     )
+                v5_closure_inputs: dict[str, str] = {}
+                if ratified_schema == TYPED_RULE_SEMANTICS_SCHEMA_V5:
+                    if ratification_schema != RULE_RATIFICATION_SCHEMA_V3:
+                        raise CorridorKitError(
+                            "v5 RuleClosure requires v3 ratification bindings"
+                        )
+                    if (
+                        report.get("parallel_lane_integration_issues")
+                        or report.get("integrator_manifest", {}).get(
+                            "whole_ledger_status"
+                        )
+                        != "complete"
+                    ):
+                        raise CorridorKitError(
+                            "v5 RuleClosure requires complete whole-ledger integration"
+                        )
+                    report_binding_fields = {
+                        "normalized_predicate_digest": "normalized_predicate_digest",
+                        "operator_schema_digest": "operator_schema_digest",
+                        "source_witness_set_digest": "source_witness_set_digest",
+                        "source_witness_bindings_digest": "source_witness_bindings_digest",
+                        "dependency_closure_digest": "dependency_closure_digest",
+                        "lane_packages_digest": "lane_packages_digest",
+                        "integrator_digest": "integrator_digest",
+                        "compiler_implementation_digest": "compiler_implementation_digest",
+                    }
+                    for body_field, report_field in report_binding_fields.items():
+                        body_digest = _digest(body, body_field)
+                        if body_digest != report.get(report_field):
+                            raise CorridorKitError(
+                                f"v5 RuleClosure {body_field} differs from candidate report"
+                            )
+                        v5_closure_inputs[body_field] = body_digest
+                    method_digest = _digest(body, "method_digest")
+                    if method_digest != report["compile_probe_manifest"]["method_digest"]:
+                        raise CorridorKitError(
+                            "v5 RuleClosure method digest differs from compile manifest"
+                        )
+                    v5_closure_inputs["method_digest"] = method_digest
                 if (
                     candidate["rule_record_ids"].get(rule_id) != rule_record_id
                     or report["candidate_revision_digest"]
@@ -1338,6 +1414,7 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                         "qa_assessment_ref": qa_ref,
                         "qa_assessment_digest": qa_digest,
                         "ratifier_ref": ratifier_ref,
+                        **v5_closure_inputs,
                     }
                 )
                 closure_digest = _digest(body, "rule_closure_digest")
@@ -1385,7 +1462,10 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 }
                 if (
                     rule_semantics[source].get("schema_version")
-                    == TYPED_RULE_SEMANTICS_SCHEMA_V4
+                    in {
+                        TYPED_RULE_SEMANTICS_SCHEMA_V4,
+                        TYPED_RULE_SEMANTICS_SCHEMA_V5,
+                    }
                 ):
                     expected_successor_fields.add("relationship_alignment")
                 if successor_fields != expected_successor_fields:
@@ -1573,7 +1653,10 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 }
                 if (
                     rule_semantics[source_rule_id].get("schema_version")
-                    == TYPED_RULE_SEMANTICS_SCHEMA_V4
+                    in {
+                        TYPED_RULE_SEMANTICS_SCHEMA_V4,
+                        TYPED_RULE_SEMANTICS_SCHEMA_V5,
+                    }
                 ):
                     expected_fields.add("relationship_alignment")
                 if successor_fields != expected_fields:
@@ -1657,7 +1740,10 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                     )
                 if (
                     rule_semantics[source_rule_id].get("schema_version")
-                    == TYPED_RULE_SEMANTICS_SCHEMA_V4
+                    in {
+                        TYPED_RULE_SEMANTICS_SCHEMA_V4,
+                        TYPED_RULE_SEMANTICS_SCHEMA_V5,
+                    }
                 ):
                     source_cells = [
                         item
@@ -1845,6 +1931,7 @@ def validate_graph_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                         "charting-loop/typed-rule-semantics/v2",
                         TYPED_RULE_SEMANTICS_SCHEMA_V3,
                         TYPED_RULE_SEMANTICS_SCHEMA_V4,
+                        TYPED_RULE_SEMANTICS_SCHEMA_V5,
                     }
                     expected_assessment_fields = {
                         "status",
@@ -2893,6 +2980,7 @@ def graph_doctor(path: Path) -> dict[str, Any]:
         if semantics.get("schema_version") in {
             TYPED_RULE_SEMANTICS_SCHEMA_V3,
             TYPED_RULE_SEMANTICS_SCHEMA_V4,
+            TYPED_RULE_SEMANTICS_SCHEMA_V5,
         }
         and rule_id not in projection["rule_source_provenance_digests"]
     )
@@ -2930,6 +3018,7 @@ def graph_doctor(path: Path) -> dict[str, Any]:
         if semantics.get("schema_version") not in {
             TYPED_RULE_SEMANTICS_SCHEMA_V3,
             TYPED_RULE_SEMANTICS_SCHEMA_V4,
+            TYPED_RULE_SEMANTICS_SCHEMA_V5,
         }:
             continue
         for semantic_dependency in semantics["dependencies"]:
@@ -2980,7 +3069,8 @@ def graph_doctor(path: Path) -> dict[str, Any]:
             ):
                 stale_rule_dependency_projections.append(identity)
             if (
-                semantics.get("schema_version") == TYPED_RULE_SEMANTICS_SCHEMA_V4
+                semantics.get("schema_version")
+                in {TYPED_RULE_SEMANTICS_SCHEMA_V4, TYPED_RULE_SEMANTICS_SCHEMA_V5}
                 and "alignment" in semantic_dependency
                 and semantic_dependency["target_rule_id"]
                 in projection["rule_semantics"]
@@ -3089,7 +3179,8 @@ def graph_doctor(path: Path) -> dict[str, Any]:
     stale_or_missing_rule_closures = sorted(
         rule_id
         for rule_id, semantics in projection["rule_semantics"].items()
-        if semantics.get("schema_version") == TYPED_RULE_SEMANTICS_SCHEMA_V4
+        if semantics.get("schema_version")
+        in {TYPED_RULE_SEMANTICS_SCHEMA_V4, TYPED_RULE_SEMANTICS_SCHEMA_V5}
         and rule_id in projection["ratified_rules"]
         and rule_id not in projection["rule_closures"]
     )
@@ -3291,7 +3382,7 @@ def graph_doctor(path: Path) -> dict[str, Any]:
         item_id
         for item_id, item in checklist_items.items()
         if item.get("typed_rule_semantics_schema")
-        == TYPED_RULE_SEMANTICS_SCHEMA_V4
+        in {TYPED_RULE_SEMANTICS_SCHEMA_V4, TYPED_RULE_SEMANTICS_SCHEMA_V5}
     }
     if selected_direction is None:
         incomplete_reasons.append("no_direction_for_latest_position")
@@ -3940,6 +4031,23 @@ def ratify_rule_candidate(
     if outcome == "pass":
         report = candidate_compile_report
         rule_record_ids = candidate["body"]["rule_record_ids"]
+        v5_closure_inputs = {}
+        if report.get("schema_version") == TYPED_RULE_COMPILATION_SCHEMA_V5:
+            v5_closure_inputs = {
+                "normalized_predicate_digest": report["normalized_predicate_digest"],
+                "operator_schema_digest": report["operator_schema_digest"],
+                "source_witness_set_digest": report["source_witness_set_digest"],
+                "source_witness_bindings_digest": report[
+                    "source_witness_bindings_digest"
+                ],
+                "dependency_closure_digest": report["dependency_closure_digest"],
+                "lane_packages_digest": report["lane_packages_digest"],
+                "integrator_digest": report["integrator_digest"],
+                "compiler_implementation_digest": report[
+                    "compiler_implementation_digest"
+                ],
+                "method_digest": report["compile_probe_manifest"]["method_digest"],
+            }
         for rule_body in report["rule_bodies"]:
             rule_id = rule_body["rule_id"]
             closure_inputs = {
@@ -3956,6 +4064,7 @@ def ratify_rule_candidate(
                 "qa_assessment_ref": assessment["record_id"],
                 "qa_assessment_digest": assessment_body["assessment_digest"],
                 "ratifier_ref": ratifier_ref,
+                **v5_closure_inputs,
             }
             session.append(
                 record_type="rule_ratification",
@@ -3966,7 +4075,11 @@ def ratify_rule_candidate(
                     "authority_ref": rule_body["source_ref"],
                     "authority_digest": rule_body["source_digest"],
                     "receipt_ref": f"{ratifier_ref}:{rule_id}",
-                    "ratification_schema": RULE_RATIFICATION_SCHEMA_V2,
+                    "ratification_schema": (
+                        RULE_RATIFICATION_SCHEMA_V3
+                        if v5_closure_inputs
+                        else RULE_RATIFICATION_SCHEMA_V2
+                    ),
                     **{
                         key: value
                         for key, value in closure_inputs.items()

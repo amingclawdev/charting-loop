@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from .core import CorridorKitError, sha256_bytes, sha256_json
 
@@ -19,20 +19,38 @@ TYPED_RULE_IR_SCHEMA_V1 = "charting-loop/typed-rule-ir/v1"
 TYPED_RULE_IR_SCHEMA = "charting-loop/typed-rule-ir/v2"
 TYPED_RULE_IR_SCHEMA_V3 = "charting-loop/typed-rule-ir/v3"
 TYPED_RULE_IR_SCHEMA_V4 = "charting-loop/typed-rule-ir/v4"
+TYPED_RULE_IR_SCHEMA_V5 = "charting-loop/typed-rule-ir/v5"
 TYPED_RULE_COMPILATION_SCHEMA_V1 = "charting-loop/typed-rule-compilation/v1"
 TYPED_RULE_COMPILATION_SCHEMA = "charting-loop/typed-rule-compilation/v2"
 TYPED_RULE_COMPILATION_SCHEMA_V3 = "charting-loop/typed-rule-compilation/v3"
 TYPED_RULE_COMPILATION_SCHEMA_V4 = "charting-loop/typed-rule-compilation/v4"
+TYPED_RULE_COMPILATION_SCHEMA_V5 = "charting-loop/typed-rule-compilation/v5"
 COMPILE_PROBE_MANIFEST_SCHEMA_V1 = "charting-loop/compile-probe-manifest/v1"
 COMPILE_PROBE_MANIFEST_SCHEMA = "charting-loop/compile-probe-manifest/v2"
 COMPILE_PROBE_MANIFEST_SCHEMA_V3 = "charting-loop/compile-probe-manifest/v3"
 COMPILE_PROBE_MANIFEST_SCHEMA_V4 = "charting-loop/compile-probe-manifest/v4"
+COMPILE_PROBE_MANIFEST_SCHEMA_V5 = "charting-loop/compile-probe-manifest/v5"
 TASK_SOURCE_BUNDLE_SCHEMA = "charting-loop/task-source-bundle/v1"
 TASK_SOURCE_BUNDLE_SCHEMA_V2 = "charting-loop/task-source-bundle/v2"
 TASK_SOURCE_BUNDLE_SCHEMA_V3 = "charting-loop/authority-snapshot/v3"
 TYPED_RULE_SEMANTICS_SCHEMA = "charting-loop/typed-rule-semantics/v2"
 TYPED_RULE_SEMANTICS_SCHEMA_V3 = "charting-loop/typed-rule-semantics/v3"
 TYPED_RULE_SEMANTICS_SCHEMA_V4 = "charting-loop/typed-rule-semantics/v4"
+TYPED_RULE_SEMANTICS_SCHEMA_V5 = "charting-loop/typed-rule-semantics/v5"
+SOURCE_PARTITION_MANIFEST_SCHEMA = "charting-loop/source-partition-manifest/v1"
+SOURCE_PARTITION_PRODUCT_SCHEMA = "charting-loop/source-partition-product/v1"
+SOURCE_DEPENDENCY_STUB_SCHEMA = "charting-loop/source-dependency-stub/v1"
+RULE_LANE_BINDING_SCHEMA = "charting-loop/rule-lane-binding/v1"
+WITNESS_LANE_PACKAGE_SCHEMA = "charting-loop/witness-lane-package/v1"
+SOURCE_WITNESS_SCHEMA = "charting-loop/source-witness/v1"
+TYPED_PREDICATE_SCHEMA = "charting-loop/typed-predicate/v1"
+INTEGRATOR_MANIFEST_SCHEMA = "charting-loop/rule-integrator-manifest/v1"
+RULE_LANE_PRODUCT_SCHEMA = "charting-loop/rule-lane-product/v1"
+WITNESS_LANE_PRODUCT_SCHEMA = "charting-loop/witness-lane-product/v1"
+PARALLEL_RULE_ASSEMBLY_SCHEMA = "charting-loop/parallel-rule-assembly/v1"
+SOURCE_WITNESS_REPAIR_ENVELOPE_SCHEMA = (
+    "charting-loop/source-witness-repair-envelope/v1"
+)
 
 RULE_KINDS = frozenset(
     {
@@ -163,6 +181,11 @@ RELATIONSHIP_ALIGNMENT_MODES = frozenset(
 )
 ALIGNMENT_CELL_KEYS = frozenset(
     {"subject_axis", "subject_id", "condition_id", "predicate", "expected_outcome"}
+)
+
+SOURCE_WITNESS_KINDS = frozenset({"positive", "negative", "boundary"})
+PREDICATE_VALUE_TYPES = frozenset(
+    {"boolean", "bytes", "duration", "integer", "number", "state", "string", "timestamp"}
 )
 
 _IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]*$")
@@ -1228,16 +1251,591 @@ def validate_relationship_alignment(value: Any) -> dict[str, Any]:
     }
 
 
+def _typed_variable(value: Any, *, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise CorridorKitError(f"{label} must be an object")
+    _exact_keys(
+        value,
+        {"variable_id", "value_type", "source_slice_ids"},
+        label=label,
+    )
+    variable_id = _identifier(value, "variable_id")
+    value_type = _text(value, "value_type")
+    if value_type not in PREDICATE_VALUE_TYPES:
+        raise CorridorKitError(f"{label} has an unknown value_type: {value_type}")
+    return {
+        "variable_id": variable_id,
+        "value_type": value_type,
+        "source_slice_ids": _text_list(value, "source_slice_ids", nonempty=True),
+    }
+
+
+def validate_typed_predicate(value: Any, *, condition_kind: str) -> dict[str, Any]:
+    """Validate one source-indexed executable predicate declaration.
+
+    The compiler validates declared variables and temporal identity.  It does not
+    infer truth from prose or an evaluator.
+    """
+
+    if not isinstance(value, dict):
+        raise CorridorKitError("typed predicate must be an object")
+    _exact_keys(
+        value,
+        {
+            "schema_version",
+            "predicate_id",
+            "operator",
+            "inputs",
+            "outputs",
+            "producer_refs",
+            "precondition_rule_ids",
+            "dependency_refs",
+            "semantic_fields",
+        },
+        label="typed predicate",
+    )
+    if value.get("schema_version") != TYPED_PREDICATE_SCHEMA:
+        raise CorridorKitError("typed predicate has the wrong schema")
+    operator = _text(value, "operator")
+    if not _OPERATOR.fullmatch(operator):
+        raise CorridorKitError("typed predicate operator must be a stable operator")
+    raw_inputs = value.get("inputs")
+    raw_outputs = value.get("outputs")
+    if not isinstance(raw_inputs, list) or not raw_inputs:
+        raise CorridorKitError("typed predicate inputs must be non-empty")
+    if not isinstance(raw_outputs, list) or not raw_outputs:
+        raise CorridorKitError("typed predicate outputs must be non-empty")
+    inputs = [_typed_variable(item, label="typed predicate input") for item in raw_inputs]
+    outputs = [_typed_variable(item, label="typed predicate output") for item in raw_outputs]
+    variable_ids = [item["variable_id"] for item in [*inputs, *outputs]]
+    if len(variable_ids) != len(set(variable_ids)):
+        raise CorridorKitError("typed predicate variable IDs must be unique")
+    semantic_fields = value.get("semantic_fields")
+    if not isinstance(semantic_fields, dict) or any(
+        not isinstance(key, str)
+        or not key.strip()
+        or not isinstance(item, str)
+        or not item.strip()
+        for key, item in semantic_fields.items()
+    ):
+        raise CorridorKitError("typed predicate semantic_fields must be a text map")
+    if condition_kind in {"temporal", "state_transition"}:
+        required = {
+            "event_time_variable",
+            "transition_time_variable",
+            "before_outcome",
+            "after_outcome",
+            "chain_outcome",
+        }
+        missing = sorted(required - set(semantic_fields))
+        if missing:
+            raise CorridorKitError(
+                f"temporal typed predicate lacks semantic fields: {missing}"
+            )
+        input_ids = {item["variable_id"] for item in inputs}
+        for field in ("event_time_variable", "transition_time_variable"):
+            if semantic_fields[field] not in input_ids:
+                raise CorridorKitError(
+                    f"temporal typed predicate {field} must name an input variable"
+                )
+        if semantic_fields["before_outcome"] == semantic_fields["after_outcome"]:
+            raise CorridorKitError(
+                "temporal typed predicate cannot collapse before and after outcomes"
+            )
+    return {
+        "schema_version": TYPED_PREDICATE_SCHEMA,
+        "predicate_id": _identifier(value, "predicate_id"),
+        "operator": operator,
+        "inputs": inputs,
+        "outputs": outputs,
+        "producer_refs": _text_list(value, "producer_refs", nonempty=True),
+        "precondition_rule_ids": _text_list(value, "precondition_rule_ids"),
+        "dependency_refs": _text_list(value, "dependency_refs"),
+        "semantic_fields": dict(sorted(semantic_fields.items())),
+    }
+
+
+def _validate_source_partition_manifest(
+    value: Any, *, source_clause_ids: set[str]
+) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise CorridorKitError("source partition manifest must be an object")
+    _exact_keys(
+        value,
+        {
+            "schema_version",
+            "partition_id",
+            "authority_snapshot_digest",
+            "lanes",
+            "dependency_stubs",
+            "global_lane_id",
+            "unresolved_clause_ids",
+        },
+        label="source partition manifest",
+    )
+    if value.get("schema_version") != SOURCE_PARTITION_MANIFEST_SCHEMA:
+        raise CorridorKitError("source partition manifest has the wrong schema")
+    raw_lanes = value.get("lanes")
+    if not isinstance(raw_lanes, list) or not raw_lanes:
+        raise CorridorKitError("source partition manifest lanes must be non-empty")
+    lanes: list[dict[str, Any]] = []
+    lane_ids: set[str] = set()
+    owners: dict[str, str] = {}
+    for raw in raw_lanes:
+        if not isinstance(raw, dict):
+            raise CorridorKitError("source partition lane must be an object")
+        _exact_keys(
+            raw,
+            {
+                "lane_id",
+                "owner_clause_ids",
+                "boundary_clause_ids",
+                "lane_kind",
+            },
+            label="source partition lane",
+        )
+        lane_id = _identifier(raw, "lane_id")
+        if lane_id in lane_ids:
+            raise CorridorKitError(f"source partition lane is duplicated: {lane_id}")
+        lane_ids.add(lane_id)
+        owner_clause_ids = _text_list(raw, "owner_clause_ids")
+        boundary_clause_ids = _text_list(raw, "boundary_clause_ids")
+        unknown = sorted(
+            (set(owner_clause_ids) | set(boundary_clause_ids)) - source_clause_ids
+        )
+        if unknown:
+            raise CorridorKitError(
+                f"source partition lane references unknown clauses: {unknown}"
+            )
+        for clause_id in owner_clause_ids:
+            if clause_id in owners:
+                raise CorridorKitError(
+                    f"source clause has duplicate lane ownership: {clause_id}"
+                )
+            owners[clause_id] = lane_id
+        lanes.append(
+            {
+                "lane_id": lane_id,
+                "owner_clause_ids": owner_clause_ids,
+                "boundary_clause_ids": boundary_clause_ids,
+                "lane_kind": _text(raw, "lane_kind"),
+            }
+        )
+    unresolved = _text_list(value, "unresolved_clause_ids")
+    if set(unresolved) - source_clause_ids:
+        raise CorridorKitError("partition unresolved clauses reference unknown clauses")
+    if set(owners).intersection(unresolved):
+        raise CorridorKitError("owned source clause cannot also be unresolved")
+    missing = sorted(source_clause_ids - set(owners) - set(unresolved))
+    if missing:
+        raise CorridorKitError(f"source partition has coverage holes: {missing}")
+    global_lane_id = _identifier(value, "global_lane_id")
+    if global_lane_id not in lane_ids:
+        raise CorridorKitError("source partition global lane is missing")
+    raw_stubs = value.get("dependency_stubs")
+    if not isinstance(raw_stubs, list):
+        raise CorridorKitError("source partition dependency_stubs must be a list")
+    dependency_stubs: list[dict[str, Any]] = []
+    seen_stub_ids: set[str] = set()
+    seen_stub_identities: set[tuple[Any, ...]] = set()
+    for raw in raw_stubs:
+        if not isinstance(raw, dict):
+            raise CorridorKitError("source dependency stub must be an object")
+        _exact_keys(
+            raw,
+            {
+                "schema_version",
+                "dependency_ref",
+                "from_lane_id",
+                "to_lane_id",
+                "from_clause_ids",
+                "to_clause_ids",
+                "relationship",
+            },
+            label="source dependency stub",
+        )
+        if raw.get("schema_version") != SOURCE_DEPENDENCY_STUB_SCHEMA:
+            raise CorridorKitError("source dependency stub has the wrong schema")
+        dependency_ref = _identifier(raw, "dependency_ref")
+        if dependency_ref in seen_stub_ids:
+            raise CorridorKitError(
+                f"source dependency stub is duplicated: {dependency_ref}"
+            )
+        seen_stub_ids.add(dependency_ref)
+        from_lane_id = _identifier(raw, "from_lane_id")
+        to_lane_id = _identifier(raw, "to_lane_id")
+        if (
+            from_lane_id not in lane_ids
+            or to_lane_id not in lane_ids
+            or from_lane_id == to_lane_id
+        ):
+            raise CorridorKitError(
+                "source dependency stub must join two known distinct lanes"
+            )
+        from_clause_ids = _text_list(raw, "from_clause_ids", nonempty=True)
+        to_clause_ids = _text_list(raw, "to_clause_ids", nonempty=True)
+        if set(from_clause_ids) - source_clause_ids or set(to_clause_ids) - source_clause_ids:
+            raise CorridorKitError(
+                "source dependency stub references unknown source clauses"
+            )
+        from_owned = {
+            clause_id for clause_id, lane_id in owners.items() if lane_id == from_lane_id
+        }
+        to_owned = {
+            clause_id for clause_id, lane_id in owners.items() if lane_id == to_lane_id
+        }
+        if not set(from_clause_ids).issubset(from_owned) or not set(
+            to_clause_ids
+        ).issubset(to_owned):
+            raise CorridorKitError(
+                "source dependency stub clauses must be owned by their endpoint lanes"
+            )
+        relationship = _text(raw, "relationship")
+        if relationship not in RULE_RELATIONSHIPS:
+            raise CorridorKitError(
+                f"source dependency stub has an unknown relationship: {relationship}"
+            )
+        identity = (
+            from_lane_id,
+            to_lane_id,
+            tuple(sorted(from_clause_ids)),
+            tuple(sorted(to_clause_ids)),
+            relationship,
+        )
+        if identity in seen_stub_identities:
+            raise CorridorKitError("source dependency stub identity is duplicated")
+        seen_stub_identities.add(identity)
+        dependency_stubs.append(
+            {
+                "schema_version": SOURCE_DEPENDENCY_STUB_SCHEMA,
+                "dependency_ref": dependency_ref,
+                "from_lane_id": from_lane_id,
+                "to_lane_id": to_lane_id,
+                "from_clause_ids": sorted(from_clause_ids),
+                "to_clause_ids": sorted(to_clause_ids),
+                "relationship": relationship,
+            }
+        )
+    return {
+        "schema_version": SOURCE_PARTITION_MANIFEST_SCHEMA,
+        "partition_id": _identifier(value, "partition_id"),
+        "authority_snapshot_digest": _digest(value, "authority_snapshot_digest"),
+        "lanes": sorted(lanes, key=lambda item: item["lane_id"]),
+        "dependency_stubs": sorted(
+            dependency_stubs, key=lambda item: item["dependency_ref"]
+        ),
+        "global_lane_id": global_lane_id,
+        "unresolved_clause_ids": unresolved,
+    }
+
+
+def validate_source_partition_product(value: Any) -> dict[str, Any]:
+    """Validate and canonicalize the frozen authority/partition product."""
+
+    if not isinstance(value, dict):
+        raise CorridorKitError("source partition product must be an object")
+    _exact_keys(
+        value,
+        {
+            "schema_version",
+            "source_bundle",
+            "source_clause_inventory",
+            "revision",
+            "method_digest",
+            "compiler_config_digest",
+            "partition_manifest",
+        },
+        label="source partition product",
+    )
+    if value.get("schema_version") != SOURCE_PARTITION_PRODUCT_SCHEMA:
+        raise CorridorKitError("source partition product has the wrong schema")
+    source_bundle = validate_source_bundle(value.get("source_bundle"))
+    if source_bundle.get("schema_version") != TASK_SOURCE_BUNDLE_SCHEMA_V3:
+        raise CorridorKitError(
+            "source partition product requires a frozen AuthoritySnapshot"
+        )
+    source_clauses = validate_source_clause_inventory_v3(
+        value.get("source_clause_inventory"), source_bundle=source_bundle
+    )
+    partition_manifest = _validate_source_partition_manifest(
+        value.get("partition_manifest"),
+        source_clause_ids={item["clause_id"] for item in source_clauses},
+    )
+    if partition_manifest["authority_snapshot_digest"] != sha256_json(source_bundle):
+        raise CorridorKitError(
+            "source partition manifest does not bind the AuthoritySnapshot"
+        )
+    return {
+        "schema_version": SOURCE_PARTITION_PRODUCT_SCHEMA,
+        "source_bundle": source_bundle,
+        "source_clause_inventory": source_clauses,
+        "revision": validate_ir_revision(value.get("revision")),
+        "method_digest": _digest(value, "method_digest"),
+        "compiler_config_digest": _digest(value, "compiler_config_digest"),
+        "partition_manifest": partition_manifest,
+    }
+
+
+def build_source_witness_repair_envelope(
+    source_partition_product: Any,
+    prior_witness_product: Any,
+    *,
+    affected_lane_ids: Iterable[str],
+    source_refs: Iterable[str],
+) -> dict[str, Any]:
+    """Project repair scope onto identities visible in the frozen source partition."""
+
+    partition = validate_source_partition_product(source_partition_product)
+    if (
+        not isinstance(prior_witness_product, dict)
+        or prior_witness_product.get("schema_version") != WITNESS_LANE_PRODUCT_SCHEMA
+    ):
+        raise CorridorKitError("source witness repair requires a witness lane product")
+    lanes = list(affected_lane_ids)
+    if (
+        not lanes
+        or any(not isinstance(item, str) or not item.strip() for item in lanes)
+        or len(lanes) != len(set(lanes))
+    ):
+        raise CorridorKitError(
+            "source witness repair affected lanes must be a non-empty unique text list"
+        )
+    known_lanes = {
+        item["lane_id"] for item in partition["partition_manifest"]["lanes"]
+    }
+    unknown_lanes = sorted(set(lanes) - known_lanes)
+    if unknown_lanes:
+        raise CorridorKitError(
+            f"source witness repair lane escapes frozen partition: {unknown_lanes}"
+        )
+    refs = list(source_refs)
+    if (
+        any(not isinstance(item, str) or not item.strip() for item in refs)
+        or len(refs) != len(set(refs))
+    ):
+        raise CorridorKitError(
+            "source witness repair source refs must be a unique text list"
+        )
+    known_source_refs = {
+        item["clause_id"] for item in partition["source_clause_inventory"]
+    }
+    known_source_refs.update(
+        source_slice["slice_id"]
+        for item in partition["source_clause_inventory"]
+        for source_slice in item["source_slices"]
+    )
+    known_source_refs.update(
+        item["source_id"] for item in partition["source_bundle"]["sources"]
+    )
+    known_source_refs.update(
+        item["source_ref"] for item in partition["source_bundle"]["sources"]
+    )
+    unknown_refs = sorted(set(refs) - known_source_refs)
+    if unknown_refs:
+        raise CorridorKitError(
+            f"source witness repair ref escapes frozen partition: {unknown_refs}"
+        )
+    return {
+        "schema_version": SOURCE_WITNESS_REPAIR_ENVELOPE_SCHEMA,
+        "affected_lane_ids": sorted(lanes),
+        "source_refs": sorted(refs),
+        "partition_product_digest": sha256_json(partition),
+        "prior_witness_product_digest": sha256_json(prior_witness_product),
+    }
+
+
+def _validate_rule_lane_bindings(
+    value: Any, *, lane_ids: set[str], rule_ids: set[str]
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not value:
+        raise CorridorKitError("rule lane bindings must be non-empty")
+    result: list[dict[str, Any]] = []
+    owned_rules: set[str] = set()
+    seen_lanes: set[str] = set()
+    for raw in value:
+        if not isinstance(raw, dict):
+            raise CorridorKitError("rule lane binding must be an object")
+        _exact_keys(
+            raw,
+            {"schema_version", "lane_id", "rule_ids"},
+            label="rule lane binding",
+        )
+        if raw.get("schema_version") != RULE_LANE_BINDING_SCHEMA:
+            raise CorridorKitError("rule lane binding has the wrong schema")
+        lane_id = _identifier(raw, "lane_id")
+        if lane_id not in lane_ids or lane_id in seen_lanes:
+            raise CorridorKitError("rule lane binding has an unknown or duplicate lane")
+        seen_lanes.add(lane_id)
+        bound_rules = _text_list(raw, "rule_ids")
+        if set(bound_rules) - rule_ids:
+            raise CorridorKitError("rule lane binding references unknown Rules")
+        if owned_rules.intersection(bound_rules):
+            raise CorridorKitError("Rule has duplicate lane ownership")
+        owned_rules.update(bound_rules)
+        result.append(
+            {
+                "schema_version": RULE_LANE_BINDING_SCHEMA,
+                "lane_id": lane_id,
+                "rule_ids": bound_rules,
+            }
+        )
+    if owned_rules != rule_ids:
+        raise CorridorKitError("rule lane bindings do not own every Rule exactly once")
+    return sorted(result, key=lambda item: item["lane_id"])
+
+
+def _validate_witness_lane_packages(
+    value: Any,
+    *,
+    lane_ids: set[str],
+    source_clause_ids: set[str],
+    source_slice_ids: set[str],
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not value:
+        raise CorridorKitError("witness lane packages must be non-empty")
+    packages: list[dict[str, Any]] = []
+    seen_lanes: set[str] = set()
+    seen_witnesses: set[str] = set()
+    for raw in value:
+        if not isinstance(raw, dict):
+            raise CorridorKitError("witness lane package must be an object")
+        _exact_keys(
+            raw,
+            {
+                "schema_version",
+                "lane_id",
+                "role_session_ref",
+                "visibility",
+                "source_clause_ids",
+                "source_slice_ids",
+                "witnesses",
+            },
+            label="witness lane package",
+        )
+        if raw.get("schema_version") != WITNESS_LANE_PACKAGE_SCHEMA:
+            raise CorridorKitError("witness lane package has the wrong schema")
+        lane_id = _identifier(raw, "lane_id")
+        if lane_id not in lane_ids or lane_id in seen_lanes:
+            raise CorridorKitError("witness lane package has an unknown or duplicate lane")
+        seen_lanes.add(lane_id)
+        visibility = raw.get("visibility")
+        if not isinstance(visibility, dict):
+            raise CorridorKitError("witness lane visibility must be an object")
+        _exact_keys(
+            visibility,
+            {
+                "source_only",
+                "candidate_rule_visible",
+                "candidate_checklist_visible",
+                "candidate_witness_visible",
+                "input_envelope_digest",
+            },
+            label="witness lane visibility",
+        )
+        if (
+            visibility.get("source_only") is not True
+            or visibility.get("candidate_rule_visible") is not False
+            or visibility.get("candidate_checklist_visible") is not False
+            or visibility.get("candidate_witness_visible") is not False
+        ):
+            raise CorridorKitError("witness lane must use a source-only input envelope")
+        envelope_digest = _digest(visibility, "input_envelope_digest")
+        package_clause_ids = _text_list(raw, "source_clause_ids", nonempty=True)
+        package_slice_ids = _text_list(raw, "source_slice_ids", nonempty=True)
+        if set(package_clause_ids) - source_clause_ids or set(package_slice_ids) - source_slice_ids:
+            raise CorridorKitError("witness lane package references unknown source identity")
+        raw_witnesses = raw.get("witnesses")
+        if not isinstance(raw_witnesses, list) or not raw_witnesses:
+            raise CorridorKitError("witness lane package must contain witnesses")
+        witnesses: list[dict[str, Any]] = []
+        kinds: set[str] = set()
+        for witness in raw_witnesses:
+            if not isinstance(witness, dict):
+                raise CorridorKitError("source witness must be an object")
+            _exact_keys(
+                witness,
+                {
+                    "schema_version",
+                    "witness_ref",
+                    "kind",
+                    "source_clause_ids",
+                    "source_slice_ids",
+                    "operator",
+                    "input_case",
+                    "expected_relation",
+                    "boundary_relation",
+                },
+                label="source witness",
+            )
+            if witness.get("schema_version") != SOURCE_WITNESS_SCHEMA:
+                raise CorridorKitError("source witness has the wrong schema")
+            witness_ref = _identifier(witness, "witness_ref")
+            if witness_ref in seen_witnesses:
+                raise CorridorKitError(f"source witness is duplicated: {witness_ref}")
+            seen_witnesses.add(witness_ref)
+            kind = _text(witness, "kind")
+            if kind not in SOURCE_WITNESS_KINDS:
+                raise CorridorKitError(f"source witness has an unknown kind: {kind}")
+            kinds.add(kind)
+            witness_clause_ids = _text_list(witness, "source_clause_ids", nonempty=True)
+            witness_slice_ids = _text_list(witness, "source_slice_ids", nonempty=True)
+            if not set(witness_clause_ids).issubset(package_clause_ids) or not set(
+                witness_slice_ids
+            ).issubset(package_slice_ids):
+                raise CorridorKitError("source witness escapes its lane source envelope")
+            input_case = witness.get("input_case")
+            if not isinstance(input_case, dict):
+                raise CorridorKitError("source witness input_case must be an object")
+            operator = _text(witness, "operator")
+            if not _OPERATOR.fullmatch(operator):
+                raise CorridorKitError("source witness operator must be stable")
+            witnesses.append(
+                {
+                    "schema_version": SOURCE_WITNESS_SCHEMA,
+                    "witness_ref": witness_ref,
+                    "kind": kind,
+                    "source_clause_ids": witness_clause_ids,
+                    "source_slice_ids": witness_slice_ids,
+                    "operator": operator,
+                    "input_case": input_case,
+                    "expected_relation": _text(witness, "expected_relation"),
+                    "boundary_relation": _text(witness, "boundary_relation"),
+                }
+            )
+        if kinds != SOURCE_WITNESS_KINDS:
+            raise CorridorKitError(
+                "each witness lane must retain positive, negative, and boundary cases"
+            )
+        packages.append(
+            {
+                "schema_version": WITNESS_LANE_PACKAGE_SCHEMA,
+                "lane_id": lane_id,
+                "role_session_ref": _text(raw, "role_session_ref"),
+                "visibility": {
+                    **visibility,
+                    "input_envelope_digest": envelope_digest,
+                },
+                "source_clause_ids": package_clause_ids,
+                "source_slice_ids": package_slice_ids,
+                "witnesses": witnesses,
+            }
+        )
+    if seen_lanes != lane_ids:
+        raise CorridorKitError("witness lane packages do not cover every source lane")
+    return sorted(packages, key=lambda item: item["lane_id"])
+
+
 def validate_rule_semantics(value: Any) -> dict[str, Any]:
     """Return one canonical Rule semantic object or raise without guessing."""
 
     if not isinstance(value, dict):
         raise CorridorKitError("typed Rule semantics must be an object")
     semantics_schema = value.get("schema_version")
+    is_v5 = semantics_schema == TYPED_RULE_SEMANTICS_SCHEMA_V5
     is_v4 = semantics_schema == TYPED_RULE_SEMANTICS_SCHEMA_V4
     is_v3 = semantics_schema == TYPED_RULE_SEMANTICS_SCHEMA_V3
     is_v2 = semantics_schema == TYPED_RULE_SEMANTICS_SCHEMA
-    is_current = is_v2 or is_v3 or is_v4
+    is_current = is_v2 or is_v3 or is_v4 or is_v5
     expected_fields = {
         "rule_kind",
         "compilation_status",
@@ -1251,7 +1849,7 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
         expected_fields.update(
             {"schema_version", "requirement_level", "applicability"}
         )
-        if is_v4:
+        if is_v4 or is_v5:
             expected_fields.add("guidance")
     elif semantics_schema is not None:
         raise CorridorKitError("typed Rule semantics has an unknown schema")
@@ -1364,14 +1962,14 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
         _exact_keys(
             raw,
             (
-                {
+                ({
                     "condition_id",
                     "condition_kind",
                     "predicate",
                     "expected_outcome",
                     "required_witness_operators",
-                }
-                if is_v4
+                } | ({"predicate_spec"} if is_v5 else set()))
+                if is_v4 or is_v5
                 else {
                     "condition_id",
                     "predicate",
@@ -1397,13 +1995,17 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
                     nonempty=compilation_status == "complete",
                 ),
             }
-        if is_v4:
+        if is_v4 or is_v5:
             condition_kind = _text(raw, "condition_kind")
             if condition_kind not in CONDITION_KINDS:
                 raise CorridorKitError(
                     f"unknown typed Rule condition_kind: {condition_kind}"
                 )
             normalized_condition["condition_kind"] = condition_kind
+        if is_v5:
+            normalized_condition["predicate_spec"] = validate_typed_predicate(
+                raw.get("predicate_spec"), condition_kind=condition_kind
+            )
         conditions.append(normalized_condition)
 
     if (
@@ -1416,10 +2018,10 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
                 for condition in conditions
                 if condition.get("condition_kind") in {"temporal", "state_transition"}
             ]
-            if is_v4
+            if is_v4 or is_v5
             else conditions
         )
-        if is_v4 and not temporal_conditions:
+        if (is_v4 or is_v5) and not temporal_conditions:
             raise CorridorKitError("temporal Rule requires at least one temporal condition")
         for condition in temporal_conditions:
             if not set(condition["required_witness_operators"]).intersection(
@@ -1479,7 +2081,7 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
             raw,
             (
                 {"relationship", "target_rule_id", "provenance", "alignment"}
-                if is_v4
+                if is_v4 or is_v5
                 else {"relationship", "target_rule_id", "provenance"}
                 if is_v3
                 else {"relationship", "target_rule_id"}
@@ -1502,7 +2104,7 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
             "relationship": relationship,
             "target_rule_id": target_rule_id,
         }
-        if is_v3 or is_v4:
+        if is_v3 or is_v4 or is_v5:
             raw_provenance = raw.get("provenance")
             if not isinstance(raw_provenance, dict):
                 raise CorridorKitError("successor dependency provenance must be an object")
@@ -1565,14 +2167,14 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
                 "derivation_kind": derivation_kind,
                 "input_rule_provenance_digests": input_digests,
             }
-            if is_v4:
+            if is_v4 or is_v5:
                 normalized_dependency["alignment"] = validate_relationship_alignment(
                     raw.get("alignment")
                 )
         dependencies.append(normalized_dependency)
 
     guidance: list[dict[str, Any]] = []
-    if is_v4:
+    if is_v4 or is_v5:
         raw_guidance = value.get("guidance")
         if not isinstance(raw_guidance, list):
             raise CorridorKitError("typed Guidance must be a list")
@@ -1616,12 +2218,14 @@ def validate_rule_semantics(value: Any) -> dict[str, Any]:
         },
         "dependencies": dependencies,
     }
-    if is_v4:
+    if is_v4 or is_v5:
         normalized["guidance"] = guidance
     if is_current:
         normalized = {
             "schema_version": (
-                TYPED_RULE_SEMANTICS_SCHEMA_V4
+                TYPED_RULE_SEMANTICS_SCHEMA_V5
+                if is_v5
+                else TYPED_RULE_SEMANTICS_SCHEMA_V4
                 if is_v4
                 else TYPED_RULE_SEMANTICS_SCHEMA_V3
                 if is_v3
@@ -1659,6 +2263,14 @@ def project_rule_checklist_templates(
                 "condition_id": condition["condition_id"],
                 "predicate": condition["predicate"],
                 "expected_outcome": condition["expected_outcome"],
+                **(
+                    {
+                        "predicate_spec": condition["predicate_spec"],
+                        "predicate_digest": sha256_json(condition["predicate_spec"]),
+                    }
+                    if "predicate_spec" in condition
+                    else {}
+                ),
                 **(
                     {"condition_kind": condition["condition_kind"]}
                     if "condition_kind" in condition
@@ -1716,6 +2328,7 @@ def project_rule_checklist_templates(
                             TYPED_RULE_SEMANTICS_SCHEMA,
                             TYPED_RULE_SEMANTICS_SCHEMA_V3,
                             TYPED_RULE_SEMANTICS_SCHEMA_V4,
+                            TYPED_RULE_SEMANTICS_SCHEMA_V5,
                         }
                         else {}
                     ),
@@ -2015,17 +2628,19 @@ def compile_typed_rule_ir(
     if not isinstance(value, dict):
         raise CorridorKitError("typed Rule IR must be an object")
     ir_schema = value.get("schema_version")
+    is_v5 = ir_schema == TYPED_RULE_IR_SCHEMA_V5
     is_v4 = ir_schema == TYPED_RULE_IR_SCHEMA_V4
     is_v3 = ir_schema == TYPED_RULE_IR_SCHEMA_V3
     is_v2 = ir_schema == TYPED_RULE_IR_SCHEMA
-    is_byte_bound = is_v3 or is_v4
+    is_byte_bound = is_v3 or is_v4 or is_v5
     is_source_bound = is_v2 or is_byte_bound
     if not is_source_bound and ir_schema != TYPED_RULE_IR_SCHEMA_V1:
         raise CorridorKitError("typed Rule IR has the wrong schema")
     _exact_keys(
         value,
         (
-            {
+            (
+                {
                 "schema_version",
                 "source_bundle",
                 "source_clause_inventory",
@@ -2033,7 +2648,17 @@ def compile_typed_rule_ir(
                 "method_digest",
                 "compiler_config_digest",
                 "rules",
-            }
+                }
+                | (
+                    {
+                        "partition_manifest",
+                        "rule_lane_bindings",
+                        "witness_lane_packages",
+                    }
+                    if is_v5
+                    else set()
+                )
+            )
             if is_source_bound
             else {
                 "schema_version",
@@ -2053,7 +2678,9 @@ def compile_typed_rule_ir(
         source_bundle = validate_source_bundle(value.get("source_bundle"))
         if is_byte_bound:
             required_bundle_schema = (
-                TASK_SOURCE_BUNDLE_SCHEMA_V3 if is_v4 else TASK_SOURCE_BUNDLE_SCHEMA_V2
+                TASK_SOURCE_BUNDLE_SCHEMA_V3
+                if is_v4 or is_v5
+                else TASK_SOURCE_BUNDLE_SCHEMA_V2
             )
             if source_bundle["schema_version"] != required_bundle_schema:
                 raise CorridorKitError(
@@ -2097,6 +2724,11 @@ def compile_typed_rule_ir(
     rule_dependency_templates: list[dict[str, Any]] = []
     checklist_templates_by_rule: dict[str, list[dict[str, Any]]] = {}
     rule_provenance_digest_by_id: dict[str, str] = {}
+    partition_manifest: dict[str, Any] | None = None
+    rule_lane_bindings: list[dict[str, Any]] = []
+    witness_lane_packages: list[dict[str, Any]] = []
+    source_witness_bindings: list[dict[str, Any]] = []
+    v5_integration_issues: list[dict[str, Any]] = []
     clause_order_by_id = (
         {
             clause["clause_id"]: clause["clause_order_key"]
@@ -2148,6 +2780,8 @@ def compile_typed_rule_ir(
         semantics = validate_rule_semantics(raw.get("semantics"))
         if is_v4 and semantics.get("schema_version") != TYPED_RULE_SEMANTICS_SCHEMA_V4:
             raise CorridorKitError("typed Rule IR v4 requires typed Rule semantics v4")
+        if is_v5 and semantics.get("schema_version") != TYPED_RULE_SEMANTICS_SCHEMA_V5:
+            raise CorridorKitError("typed Rule IR v5 requires typed Rule semantics v5")
         semantics_digest = sha256_json(semantics)
         if is_byte_bound:
             assert source_bundle is not None
@@ -2179,7 +2813,7 @@ def compile_typed_rule_ir(
                 "statement": statement,
                 "source_ref": (
                     f"authority-snapshot:{bundle_digest}"
-                    if is_v4
+                    if is_v4 or is_v5
                     else f"source-bundle:{bundle_digest}"
                 ),
                 "source_digest": bundle_digest,
@@ -2189,7 +2823,7 @@ def compile_typed_rule_ir(
                             "manifest_digest"
                         ]
                     }
-                    if is_v4
+                    if is_v4 or is_v5
                     else {}
                 ),
                 "source_clause_ids": source_clause_ids,
@@ -2244,7 +2878,7 @@ def compile_typed_rule_ir(
                             "edge_provenance": dependency["provenance"],
                             **(
                                 {"relationship_alignment": dependency["alignment"]}
-                                if is_v4
+                                if is_v4 or is_v5
                                 else {}
                             ),
                         }
@@ -2253,6 +2887,199 @@ def compile_typed_rule_ir(
                     ),
                 }
             )
+
+    if is_v5:
+        assert source_bundle is not None
+        all_clause_ids = {clause["clause_id"] for clause in source_clauses}
+        all_slice_ids = {
+            source_slice["slice_id"]
+            for clause in source_clauses
+            for source_slice in clause["source_slices"]
+        }
+        partition_manifest = _validate_source_partition_manifest(
+            value.get("partition_manifest"), source_clause_ids=all_clause_ids
+        )
+        if partition_manifest["authority_snapshot_digest"] != sha256_json(source_bundle):
+            raise CorridorKitError(
+                "source partition manifest does not bind the AuthoritySnapshot"
+            )
+        lane_ids = {lane["lane_id"] for lane in partition_manifest["lanes"]}
+        rule_lane_bindings = _validate_rule_lane_bindings(
+            value.get("rule_lane_bindings"), lane_ids=lane_ids, rule_ids=rule_ids
+        )
+        witness_lane_packages = _validate_witness_lane_packages(
+            value.get("witness_lane_packages"),
+            lane_ids=lane_ids,
+            source_clause_ids=all_clause_ids,
+            source_slice_ids=all_slice_ids,
+        )
+        partition_lane_by_id = {
+            lane["lane_id"]: lane for lane in partition_manifest["lanes"]
+        }
+        rule_by_id = {rule["rule_id"]: rule for rule in normalized_rules}
+        witness_lane_by_id = {
+            package["lane_id"]: package for package in witness_lane_packages
+        }
+        clause_id_by_slice = {
+            source_slice["slice_id"]: clause["clause_id"]
+            for clause in source_clauses
+            for source_slice in clause["source_slices"]
+        }
+        for lane_id, package in witness_lane_by_id.items():
+            lane = partition_lane_by_id[lane_id]
+            accessible_clauses = set(lane["owner_clause_ids"]) | set(
+                lane["boundary_clause_ids"]
+            )
+            if not set(package["source_clause_ids"]).issubset(accessible_clauses):
+                raise CorridorKitError(
+                    f"witness lane {lane_id} escapes its source clause envelope"
+                )
+            package_slice_clauses = {
+                clause_id_by_slice[slice_id]
+                for slice_id in package["source_slice_ids"]
+            }
+            if not package_slice_clauses.issubset(
+                set(package["source_clause_ids"])
+            ):
+                raise CorridorKitError(
+                    f"witness lane {lane_id} source slices escape its clause envelope"
+                )
+            source_envelope = {
+                "schema_version": "charting-loop/source-witness-input-envelope/v1",
+                "partition_manifest_digest": sha256_json(partition_manifest),
+                "authority_snapshot_digest": sha256_json(source_bundle),
+                "lane_id": lane_id,
+                "source_clause_ids": sorted(package["source_clause_ids"]),
+                "source_slice_ids": sorted(package["source_slice_ids"]),
+            }
+            if package["visibility"]["input_envelope_digest"] != sha256_json(
+                source_envelope
+            ):
+                raise CorridorKitError(
+                    f"witness lane {lane_id} input envelope digest is not reproducible"
+                )
+        for binding in rule_lane_bindings:
+            lane = partition_lane_by_id[binding["lane_id"]]
+            accessible_clauses = set(lane["owner_clause_ids"]) | set(
+                lane["boundary_clause_ids"]
+            )
+            for rule_id in binding["rule_ids"]:
+                rule = rule_by_id[rule_id]
+                if not set(rule["source_clause_ids"]).issubset(accessible_clauses):
+                    raise CorridorKitError(
+                        f"Rule {rule_id} escapes its source lane envelope"
+                    )
+                if not set(rule["source_clause_ids"]).intersection(
+                    lane["owner_clause_ids"]
+                ):
+                    raise CorridorKitError(
+                        f"Rule {rule_id} has no owned source clause in its lane"
+                    )
+                package = witness_lane_by_id[binding["lane_id"]]
+                matching_witnesses = [
+                    witness
+                    for witness in package["witnesses"]
+                    if set(witness["source_clause_ids"]).intersection(
+                        rule["source_clause_ids"]
+                    )
+                ]
+                for condition in rule["semantics"]["conditions"]:
+                    predicate = condition["predicate_spec"]
+                    unknown_predicate_rule_refs = sorted(
+                        (
+                            set(predicate["precondition_rule_ids"])
+                            | set(predicate["dependency_refs"])
+                        )
+                        - rule_ids
+                    )
+                    if unknown_predicate_rule_refs:
+                        v5_integration_issues.append(
+                            {
+                                "lane_id": binding["lane_id"],
+                                "rule_id": rule_id,
+                                "condition_id": condition["condition_id"],
+                                "error_type": "typed_predicate_dangling_rule_ref",
+                                "unknown_rule_refs": unknown_predicate_rule_refs,
+                            }
+                        )
+                    witnesses = [
+                        witness
+                        for witness in matching_witnesses
+                        if witness["operator"] == predicate["operator"]
+                    ]
+                    kinds = {witness["kind"] for witness in witnesses}
+                    if kinds != SOURCE_WITNESS_KINDS:
+                        v5_integration_issues.append(
+                            {
+                                "lane_id": binding["lane_id"],
+                                "rule_id": rule_id,
+                                "condition_id": condition["condition_id"],
+                                "error_type": "source_witness_partition_gap",
+                                "missing_witness_kinds": sorted(
+                                    SOURCE_WITNESS_KINDS - kinds
+                                ),
+                            }
+                        )
+                    source_witness_bindings.append(
+                        {
+                            "lane_id": binding["lane_id"],
+                            "rule_id": rule_id,
+                            "condition_id": condition["condition_id"],
+                            "predicate_id": predicate["predicate_id"],
+                            "predicate_digest": sha256_json(predicate),
+                            "source_witness_refs": sorted(
+                                witness["witness_ref"] for witness in witnesses
+                            ),
+                            "source_witness_digest": sha256_json(witnesses),
+                        }
+                    )
+                quantifier = rule["semantics"]["quantifier"]
+                applicability = rule["semantics"]["applicability"]
+                witness_domain_kinds = {
+                    witness["input_case"].get("domain_kind")
+                    for witness in matching_witnesses
+                    if isinstance(witness["input_case"].get("domain_kind"), str)
+                }
+                if witness_domain_kinds and witness_domain_kinds != {
+                    quantifier["domain_kind"]
+                }:
+                    v5_integration_issues.append(
+                        {
+                            "lane_id": binding["lane_id"],
+                            "rule_id": rule_id,
+                            "error_type": "source_witness_domain_mismatch",
+                            "rule_domain_kind": quantifier["domain_kind"],
+                            "source_witness_domain_kinds": sorted(
+                                witness_domain_kinds
+                            ),
+                        }
+                    )
+                if (
+                    quantifier["domain_kind"] == "closed_enumeration"
+                    and applicability["mode"] == "conditional"
+                ):
+                    for subject_id in quantifier["subjects"]:
+                        subject_kinds = {
+                            witness["kind"]
+                            for witness in matching_witnesses
+                            if witness["input_case"].get("subject_id") == subject_id
+                        }
+                        missing_classifications = {
+                            "positive",
+                            "negative",
+                        } - subject_kinds
+                        if missing_classifications:
+                            v5_integration_issues.append(
+                                {
+                                    "lane_id": binding["lane_id"],
+                                    "rule_id": rule_id,
+                                    "subject_id": subject_id,
+                                    "error_type": "closed_domain_classification_gap",
+                                    "missing_witness_kinds": sorted(
+                                        missing_classifications
+                                    ),
+                                }
+                            )
 
     if is_byte_bound:
         assert source_bundle is not None
@@ -2285,7 +3112,7 @@ def compile_typed_rule_ir(
             source["source_id"]
             for source in source_bundle["sources"]
             if source.get("retrieval_status", source.get("byte_status")) == "available"
-            and (not is_v4 or source.get("plane") == "normative_rule")
+            and (not (is_v4 or is_v5) or source.get("plane") == "normative_rule")
             and source["source_id"] not in inventoried_source_ids
         )
         if missing_source_inventories:
@@ -2347,7 +3174,7 @@ def compile_typed_rule_ir(
             missing_roles = sorted(
                 set(clause["required_semantic_roles"]) - declared_roles
             )
-            if missing_roles and not is_v4:
+            if missing_roles and not (is_v4 or is_v5):
                 raise CorridorKitError(
                     f"source clause semantic roles are not mapped: {clause['clause_id']}:{missing_roles}"
                 )
@@ -2452,7 +3279,7 @@ def compile_typed_rule_ir(
     semantic_delta: list[dict[str, Any]] = []
     unaccounted_normative_ranges: list[dict[str, Any]] = []
     mapping_matrix: list[dict[str, Any]] = []
-    if is_v4:
+    if is_v4 or is_v5:
         assert source_bundle is not None
         slice_index = {
             source_slice["slice_id"]: (clause, source_slice)
@@ -2583,7 +3410,7 @@ def compile_typed_rule_ir(
             continue
         source_cells = checklist_templates_by_rule[dependency["from_rule_id"]]
         target_cells = checklist_templates_by_rule[dependency["to_rule_id"]]
-        if is_v4:
+        if is_v4 or is_v5:
             aligned_pairs, issues = _project_aligned_dependency(
                 dependency=dependency,
                 source_cells=source_cells,
@@ -2628,7 +3455,7 @@ def compile_typed_rule_ir(
                                         "relationship_alignment"
                                     ]
                                 }
-                                if is_v4
+                                if is_v4 or is_v5
                                 else {}
                             ),
                         }
@@ -2645,7 +3472,7 @@ def compile_typed_rule_ir(
                 )
 
     semantic_edge_templates: list[dict[str, Any]] = []
-    if is_v4:
+    if is_v4 or is_v5:
         checklist_ids_by_rule = {
             rule_id: sorted(
                 item["checklist_item_id"]
@@ -2746,10 +3573,218 @@ def compile_typed_rule_ir(
                 }
             )
 
+    normalized_predicates = sorted(
+        (
+            {
+                "rule_id": rule["rule_id"],
+                "condition_id": condition["condition_id"],
+                "predicate_spec": condition["predicate_spec"],
+            }
+            for rule in normalized_rules
+            for condition in rule["semantics"]["conditions"]
+            if "predicate_spec" in condition
+        ),
+        key=lambda item: (item["rule_id"], item["condition_id"]),
+    )
+    operator_signatures: dict[str, set[tuple[tuple[str, ...], tuple[str, ...]]]] = {}
+    for item in normalized_predicates:
+        predicate = item["predicate_spec"]
+        operator_signatures.setdefault(predicate["operator"], set()).add(
+            (
+                tuple(variable["value_type"] for variable in predicate["inputs"]),
+                tuple(variable["value_type"] for variable in predicate["outputs"]),
+            )
+        )
+    operator_schema = [
+        {
+            "operator": operator,
+            "signatures": [
+                {"input_types": list(inputs), "output_types": list(outputs)}
+                for inputs, outputs in sorted(signatures)
+            ],
+        }
+        for operator, signatures in sorted(operator_signatures.items())
+    ]
+    if is_v5:
+        for operator, signatures in sorted(operator_signatures.items()):
+            if len(signatures) > 1:
+                v5_integration_issues.append(
+                    {
+                        "operator": operator,
+                        "error_type": "typed_operator_signature_conflict",
+                        "signature_count": len(signatures),
+                    }
+                )
+    hard_dependency_closure: dict[str, list[str]] = {}
+    for rule_id in sorted(rule_ids):
+        reachable: set[str] = set()
+        pending = list(hard_edges[rule_id])
+        while pending:
+            prerequisite = pending.pop()
+            if prerequisite in reachable:
+                continue
+            reachable.add(prerequisite)
+            pending.extend(hard_edges[prerequisite])
+        hard_dependency_closure[rule_id] = sorted(reachable)
+
+    lane_packages: list[dict[str, Any]] = []
+    integrator_manifest: dict[str, Any] | None = None
+    if is_v5:
+        assert partition_manifest is not None
+        binding_by_lane = {
+            item["lane_id"]: item for item in rule_lane_bindings
+        }
+        witness_by_lane = {
+            item["lane_id"]: item for item in witness_lane_packages
+        }
+        lane_by_rule = {
+            rule_id: binding["lane_id"]
+            for binding in rule_lane_bindings
+            for rule_id in binding["rule_ids"]
+        }
+        raw_cross_lane_edges = sorted(
+            (
+                {
+                    "semantic_edge_id": item["semantic_edge_id"],
+                    "from_rule_id": item["from_rule_id"],
+                    "to_rule_id": item["to_rule_id"],
+                    "from_lane_id": lane_by_rule[item["from_rule_id"]],
+                    "to_lane_id": lane_by_rule[item["to_rule_id"]],
+                    "relationship": item["declared_relationship"],
+                }
+                for item in semantic_edge_templates
+                if lane_by_rule[item["from_rule_id"]]
+                != lane_by_rule[item["to_rule_id"]]
+            ),
+            key=lambda item: item["semantic_edge_id"],
+        )
+        dependency_stubs = partition_manifest["dependency_stubs"]
+        matched_stub_refs: set[str] = set()
+        cross_lane_edges: list[dict[str, Any]] = []
+        for edge in raw_cross_lane_edges:
+            from_rule_clauses = set(
+                rule_by_id[edge["from_rule_id"]]["source_clause_ids"]
+            )
+            to_rule_clauses = set(
+                rule_by_id[edge["to_rule_id"]]["source_clause_ids"]
+            )
+            structural_matches = [
+                stub
+                for stub in dependency_stubs
+                if stub["from_lane_id"] == edge["from_lane_id"]
+                and stub["to_lane_id"] == edge["to_lane_id"]
+                and bool(set(stub["from_clause_ids"]) & from_rule_clauses)
+                and bool(set(stub["to_clause_ids"]) & to_rule_clauses)
+            ]
+            matches = [
+                stub
+                for stub in structural_matches
+                if stub["relationship"] == edge["relationship"]
+            ]
+            if len(matches) != 1:
+                v5_integration_issues.append(
+                    {
+                        "semantic_edge_id": edge["semantic_edge_id"],
+                        "error_type": (
+                            "cross_lane_dependency_stub_ambiguous"
+                            if len(matches) > 1
+                            else "cross_lane_dependency_relationship_mismatch"
+                            if structural_matches
+                            else "cross_lane_dependency_stub_missing"
+                        ),
+                        "source_dependency_refs": sorted(
+                            stub["dependency_ref"] for stub in structural_matches
+                        ),
+                    }
+                )
+                cross_lane_edges.append({**edge, "source_dependency_ref": None})
+                continue
+            dependency_ref = matches[0]["dependency_ref"]
+            matched_stub_refs.add(dependency_ref)
+            cross_lane_edges.append(
+                {**edge, "source_dependency_ref": dependency_ref}
+            )
+        for dependency_ref in sorted(
+            {stub["dependency_ref"] for stub in dependency_stubs}
+            - matched_stub_refs
+        ):
+            v5_integration_issues.append(
+                {
+                    "source_dependency_ref": dependency_ref,
+                    "error_type": "source_dependency_stub_without_rule_edge",
+                }
+            )
+        for lane in partition_manifest["lanes"]:
+            lane_id = lane["lane_id"]
+            binding = binding_by_lane[lane_id]
+            lane_rules = [
+                rule_by_id[rule_id] for rule_id in binding["rule_ids"]
+            ]
+            lane_witness = witness_by_lane[lane_id]
+            incident_edges = [
+                item
+                for item in cross_lane_edges
+                if lane_id in {item["from_lane_id"], item["to_lane_id"]}
+            ]
+            lane_package = {
+                "lane_id": lane_id,
+                "rule_ids": sorted(binding["rule_ids"]),
+                "source_partition_digest": sha256_json(lane),
+                "rule_package_digest": sha256_json(lane_rules),
+                "witness_package_digest": sha256_json(lane_witness),
+                "source_witness_binding_digest": sha256_json(
+                    [
+                        item
+                        for item in source_witness_bindings
+                        if item["lane_id"] == lane_id
+                    ]
+                ),
+                "incident_cross_lane_edges": incident_edges,
+            }
+            lane_packages.append(
+                {**lane_package, "lane_package_digest": sha256_json(lane_package)}
+            )
+        lane_packages.sort(key=lambda item: item["lane_id"])
+        integrator_body = {
+            "schema_version": INTEGRATOR_MANIFEST_SCHEMA,
+            "partition_manifest_digest": sha256_json(partition_manifest),
+            "lane_packages_digest": sha256_json(lane_packages),
+            "normalized_predicate_digest": sha256_json(normalized_predicates),
+            "operator_schema_digest": sha256_json(operator_schema),
+            "source_witness_set_digest": sha256_json(witness_lane_packages),
+            "source_witness_bindings_digest": sha256_json(source_witness_bindings),
+            "dependency_closure_digest": sha256_json(hard_dependency_closure),
+            "cross_lane_edges_digest": sha256_json(cross_lane_edges),
+            "source_dependency_stubs_digest": sha256_json(dependency_stubs),
+            "boundary_clause_ids": sorted(
+                {
+                    clause_id
+                    for lane in partition_manifest["lanes"]
+                    for clause_id in lane["boundary_clause_ids"]
+                }
+            ),
+            "unresolved_clause_ids": list(
+                partition_manifest["unresolved_clause_ids"]
+            ),
+            "integration_issues": v5_integration_issues,
+            "whole_ledger_status": (
+                "complete"
+                if not v5_integration_issues
+                and not partition_manifest["unresolved_clause_ids"]
+                else "incomplete"
+            ),
+        }
+        integrator_manifest = {
+            **integrator_body,
+            "integrator_digest": sha256_json(integrator_body),
+        }
+
     normalized_ir = (
         {
             "schema_version": (
-                TYPED_RULE_IR_SCHEMA_V4
+                TYPED_RULE_IR_SCHEMA_V5
+                if is_v5
+                else TYPED_RULE_IR_SCHEMA_V4
                 if is_v4
                 else TYPED_RULE_IR_SCHEMA_V3
                 if is_v3
@@ -2760,6 +3795,15 @@ def compile_typed_rule_ir(
             "revision": revision,
             "method_digest": method_digest,
             "compiler_config_digest": compiler_config_digest,
+            **(
+                {
+                    "partition_manifest": partition_manifest,
+                    "rule_lane_bindings": rule_lane_bindings,
+                    "witness_lane_packages": witness_lane_packages,
+                }
+                if is_v5
+                else {}
+            ),
             "rules": normalized_rules,
         }
         if is_source_bound
@@ -2778,7 +3822,9 @@ def compile_typed_rule_ir(
     implementation_digest = _compiler_implementation_digest()
     manifest = {
         "schema_version": (
-            COMPILE_PROBE_MANIFEST_SCHEMA_V4
+            COMPILE_PROBE_MANIFEST_SCHEMA_V5
+            if is_v5
+            else COMPILE_PROBE_MANIFEST_SCHEMA_V4
             if is_v4
             else COMPILE_PROBE_MANIFEST_SCHEMA_V3
             if is_v3
@@ -2801,7 +3847,7 @@ def compile_typed_rule_ir(
                             "manifest_digest"
                         ]
                     }
-                    if is_v4
+                    if is_v4 or is_v5
                     else {}
                 ),
             }
@@ -2867,12 +3913,18 @@ def compile_typed_rule_ir(
         if is_source_bound
         else rules_complete
     )
-    if is_v4:
+    if is_v4 or is_v5:
         compilation_complete = bool(
             compilation_complete
             and not semantic_delta
             and not unaccounted_normative_ranges
             and not relationship_alignment_issues
+            and (not is_v5 or not v5_integration_issues)
+            and (
+                not is_v5
+                or partition_manifest is not None
+                and not partition_manifest["unresolved_clause_ids"]
+            )
         )
     rule_compile_issues = [
         {
@@ -2923,9 +3975,19 @@ def compile_typed_rule_ir(
                 "relationships": relationship_alignment_issues,
             }
         )
+    if v5_integration_issues:
+        successor_issues.append(
+            {
+                "status": "incomplete",
+                "issues": ["parallel_lane_integration_mismatch"],
+                "lane_findings": v5_integration_issues,
+            }
+        )
     report = {
         "schema_version": (
-            TYPED_RULE_COMPILATION_SCHEMA_V4
+            TYPED_RULE_COMPILATION_SCHEMA_V5
+            if is_v5
+            else TYPED_RULE_COMPILATION_SCHEMA_V4
             if is_v4
             else TYPED_RULE_COMPILATION_SCHEMA_V3
             if is_v3
@@ -2958,7 +4020,7 @@ def compile_typed_rule_ir(
                 ),
                 "source_provenance_status": (
                     "authority_snapshot_with_exact_byte_slices"
-                    if is_v4
+                    if is_v4 or is_v5
                     else "exact_byte_slices"
                     if is_v3
                     else "legacy_clause_text"
@@ -2979,26 +4041,60 @@ def compile_typed_rule_ir(
         "typed_rule_ir_digest": ir_digest,
         "candidate_revision_digest": (
             sha256_json({"revision": revision, "typed_rule_ir_digest": ir_digest})
-            if is_v4
+            if is_v4 or is_v5
             else None
         ),
         "authority_snapshot_digest": (
-            sha256_json(source_bundle) if is_v4 and source_bundle is not None else None
+            sha256_json(source_bundle)
+            if (is_v4 or is_v5) and source_bundle is not None
+            else None
         ),
         "reverse_semantic_projection": reverse_semantic_projection,
         "reverse_semantic_projection_digest": (
-            sha256_json(reverse_semantic_projection) if is_v4 else None
+            sha256_json(reverse_semantic_projection) if is_v4 or is_v5 else None
         ),
         "semantic_delta": semantic_delta,
-        "semantic_delta_digest": sha256_json(semantic_delta) if is_v4 else None,
+        "semantic_delta_digest": (
+            sha256_json(semantic_delta) if is_v4 or is_v5 else None
+        ),
         "semantic_edge_templates": semantic_edge_templates,
         "semantic_edge_templates_digest": (
-            sha256_json(semantic_edge_templates) if is_v4 else None
+            sha256_json(semantic_edge_templates) if is_v4 or is_v5 else None
         ),
         "witness_obligation_templates": witness_obligation_templates,
         "witness_obligation_templates_digest": sha256_json(
             witness_obligation_templates
         ),
+        "normalized_predicates": normalized_predicates,
+        "normalized_predicate_digest": (
+            sha256_json(normalized_predicates) if is_v5 else None
+        ),
+        "operator_schema": operator_schema,
+        "operator_schema_digest": sha256_json(operator_schema) if is_v5 else None,
+        "source_witness_bindings": source_witness_bindings,
+        "source_witness_set_digest": (
+            sha256_json(witness_lane_packages) if is_v5 else None
+        ),
+        "source_witness_bindings_digest": (
+            sha256_json(source_witness_bindings) if is_v5 else None
+        ),
+        "hard_dependency_closure": hard_dependency_closure,
+        "dependency_closure_digest": (
+            sha256_json(hard_dependency_closure) if is_v5 else None
+        ),
+        "partition_manifest": partition_manifest,
+        "partition_manifest_digest": (
+            sha256_json(partition_manifest) if is_v5 else None
+        ),
+        "lane_packages": lane_packages,
+        "lane_packages_digest": sha256_json(lane_packages) if is_v5 else None,
+        "integrator_manifest": integrator_manifest,
+        "integrator_digest": (
+            integrator_manifest["integrator_digest"]
+            if integrator_manifest is not None
+            else None
+        ),
+        "parallel_lane_integration_issues": v5_integration_issues,
         "source_clause_rule_matrix": mapping_matrix,
         "unaccounted_normative_ranges": unaccounted_normative_ranges,
         "relationship_alignment_issues": relationship_alignment_issues,
@@ -3009,9 +4105,9 @@ def compile_typed_rule_ir(
         "typed_dependency_count": len(typed_dependency_templates),
         "rule_bodies": rule_bodies,
         "authority_snapshot_template": (
-            source_bundle if is_v4 and source_bundle is not None else None
+            source_bundle if (is_v4 or is_v5) and source_bundle is not None else None
         ),
-        "normalized_typed_rule_ir": normalized_ir if is_v4 else None,
+        "normalized_typed_rule_ir": normalized_ir if is_v4 or is_v5 else None,
         "source_artifact_templates": (
             source_bundle["sources"] if is_byte_bound and source_bundle is not None else []
         ),
@@ -3027,3 +4123,113 @@ def compile_typed_rule_ir(
     }
     report["report_digest"] = sha256_json(report)
     return report
+
+
+def assemble_parallel_rule_ir(
+    source_partition_product: Any,
+    rule_product: Any,
+    witness_product: Any,
+    *,
+    run_classification: str = "fresh_task_pre_experiment",
+) -> dict[str, Any]:
+    """Join independently visible Rule and witness lane products deterministically."""
+
+    source_partition = validate_source_partition_product(source_partition_product)
+    if not isinstance(rule_product, dict) or not isinstance(witness_product, dict):
+        raise CorridorKitError("parallel Rule assembly inputs must be objects")
+    _exact_keys(
+        rule_product,
+        {
+            "schema_version",
+            "partition_product_digest",
+            "source_bundle",
+            "source_clause_inventory",
+            "revision",
+            "method_digest",
+            "compiler_config_digest",
+            "partition_manifest",
+            "rule_lane_bindings",
+            "rules",
+        },
+        label="rule lane product",
+    )
+    if rule_product.get("schema_version") != RULE_LANE_PRODUCT_SCHEMA:
+        raise CorridorKitError("rule lane product has the wrong schema")
+    _exact_keys(
+        witness_product,
+        {
+            "schema_version",
+            "partition_product_digest",
+            "partition_manifest_digest",
+            "authority_snapshot_digest",
+            "witness_lane_packages",
+        },
+        label="witness lane product",
+    )
+    if witness_product.get("schema_version") != WITNESS_LANE_PRODUCT_SCHEMA:
+        raise CorridorKitError("witness lane product has the wrong schema")
+    source_partition_digest = sha256_json(source_partition)
+    if (
+        rule_product.get("partition_product_digest") != source_partition_digest
+        or witness_product.get("partition_product_digest") != source_partition_digest
+    ):
+        raise CorridorKitError(
+            "parallel products do not bind the frozen source partition"
+        )
+    for field in (
+        "source_bundle",
+        "source_clause_inventory",
+        "revision",
+        "method_digest",
+        "compiler_config_digest",
+        "partition_manifest",
+    ):
+        if rule_product.get(field) != source_partition[field]:
+            raise CorridorKitError(
+                f"Rule product changed frozen source partition field: {field}"
+            )
+    partition_manifest = source_partition["partition_manifest"]
+    source_bundle = source_partition["source_bundle"]
+    if witness_product.get("partition_manifest_digest") != sha256_json(
+        partition_manifest
+    ):
+        raise CorridorKitError("witness product does not bind the Rule partition")
+    if witness_product.get("authority_snapshot_digest") != sha256_json(source_bundle):
+        raise CorridorKitError("witness product does not bind the AuthoritySnapshot")
+    typed_rule_ir = {
+        "schema_version": TYPED_RULE_IR_SCHEMA_V5,
+        "source_bundle": source_bundle,
+        "source_clause_inventory": source_partition["source_clause_inventory"],
+        "revision": source_partition["revision"],
+        "method_digest": source_partition["method_digest"],
+        "compiler_config_digest": source_partition["compiler_config_digest"],
+        "partition_manifest": partition_manifest,
+        "rule_lane_bindings": rule_product["rule_lane_bindings"],
+        "witness_lane_packages": witness_product["witness_lane_packages"],
+        "rules": rule_product["rules"],
+    }
+    compile_report = compile_typed_rule_ir(
+        typed_rule_ir, run_classification=run_classification
+    )
+    input_identity = {
+        "partition_product_digest": source_partition_digest,
+        "rule_product_digest": sha256_json(rule_product),
+        "witness_product_digest": sha256_json(witness_product),
+        "partition_manifest_digest": sha256_json(partition_manifest),
+        "authority_snapshot_digest": sha256_json(source_bundle),
+    }
+    assembly = {
+        "schema_version": PARALLEL_RULE_ASSEMBLY_SCHEMA,
+        **input_identity,
+        "typed_rule_ir_digest": compile_report["typed_rule_ir_digest"],
+        "compile_report_digest": compile_report["report_digest"],
+        "compilation_complete": compile_report["compilation_complete"],
+    }
+    return {
+        "typed_rule_ir": typed_rule_ir,
+        "compile_report": compile_report,
+        "assembly_manifest": {
+            **assembly,
+            "assembly_digest": sha256_json(assembly),
+        },
+    }

@@ -41,6 +41,10 @@ from benchmark_agents.contract import (
     STUDY_PROFILE_PATH,
     TYPED_RULE_IR_PATH,
     TYPED_RULE_REPORT_PATH,
+    SOURCE_PARTITION_PATH,
+    RULE_LANE_PRODUCT_PATH,
+    WITNESS_LANE_PRODUCT_PATH,
+    PARALLEL_ASSEMBLY_PATH,
     EXECUTION_TEST_ROOT,
     EXECUTION_TEST_QA_PATH,
     METHOD_PATH,
@@ -69,6 +73,12 @@ from benchmark_agents.contract import (
     worker_prompt,
     graph_study_profile,
     graph_compile_qa_prompt,
+    graph_parallel_compile_qa_prompt,
+    graph_source_partition_prompt,
+    graph_rule_lane_prompt,
+    graph_witness_lane_prompt,
+    graph_rule_lane_repair_prompt,
+    graph_witness_lane_repair_prompt,
     graph_compile_failure_qa_prompt,
     graph_compile_repair_prompt,
     graph_compile_failure_repair_prompt,
@@ -88,7 +98,7 @@ from benchmark_agents.contract import (
 
 
 AGENT_VERSION = "0.9.0"
-GRAPH_AGENT_VERSION = "1.2.1"
+GRAPH_AGENT_VERSION = "1.3.0"
 METHOD_SOURCE_COMMIT = "3c3813444a7d43d0a56837e9cb960be86ce26d06"
 METHOD_SOURCE_PATH = "method-paper/METHOD.md"
 METHOD_SCOPE_PATH = "method-paper/SCOPE-DATUM.md"
@@ -1140,6 +1150,84 @@ class ChartingLoopFullMethodAgent(Codex):
             asyncio.get_running_loop().time() - phase_started_at, 3
         )
         return phase_context, outcome
+
+    async def _run_parallel_new_roles(
+        self,
+        roles: list[tuple[str, Codex, str]],
+        environment: BaseEnvironment,
+        *,
+        deadline: float,
+    ) -> dict[str, tuple[AgentContext, dict[str, Any]]]:
+        """Run independent roles concurrently after one shared-session reset."""
+
+        await self._reset_live_session(environment)
+
+        async def run_one(
+            role: str, agent: Codex, prompt: str
+        ) -> tuple[str, AgentContext, dict[str, Any]]:
+            phase_context = AgentContext()
+            started = asyncio.get_running_loop().time()
+            outcome: dict[str, Any] = {
+                "phase": role,
+                "role": role,
+                "mode": "parallel_new",
+                "deadline_scope": "task",
+                "remaining_seconds_at_start": round(max(0.0, deadline - started), 3),
+                "status": "completed",
+                "archived": False,
+                "quiescent": False,
+            }
+            begin_phase = getattr(agent, "begin_phase", None)
+            if begin_phase is None:
+                outcome["status"] = "isolation_failed"
+                outcome["isolation_error"] = "phase_agent_has_no_identity_boundary"
+                return role, phase_context, outcome
+            begin_phase(role)
+            try:
+                async with asyncio.timeout_at(deadline):
+                    await agent.run(prompt, environment, phase_context)
+            except TimeoutError:
+                outcome["status"] = "task_deadline_reached"
+            except Exception as exc:
+                outcome["status"] = "failed"
+                outcome["error_type"] = type(exc).__name__
+            finally:
+                try:
+                    isolation = await agent.ensure_phase_quiescent(
+                        environment, terminate=True
+                    )
+                    outcome["process_isolation"] = isolation
+                    outcome["quiescent"] = bool(isolation.get("quiescent"))
+                except Exception as exc:
+                    outcome["isolation_error_type"] = type(exc).__name__
+                if not outcome["quiescent"]:
+                    outcome["execution_status"] = outcome["status"]
+                    outcome["status"] = "isolation_failed"
+            outcome["elapsed_seconds"] = round(
+                asyncio.get_running_loop().time() - started, 3
+            )
+            return role, phase_context, outcome
+
+        completed = await asyncio.gather(
+            *(run_one(role, agent, prompt) for role, agent, prompt in roles)
+        )
+        result = {
+            role: (phase_context, outcome)
+            for role, phase_context, outcome in completed
+        }
+        for role, agent, _ in roles:
+            _, outcome = result[role]
+            if not outcome["quiescent"]:
+                continue
+            try:
+                await self._archive_role(environment, role, agent._OUTPUT_FILENAME)
+                outcome["archived"] = True
+                outcome["role_metrics"] = await self._collect_role_metrics(
+                    environment, role=role
+                )
+            except Exception as exc:
+                outcome["archive_error_type"] = type(exc).__name__
+        return result
 
     async def _resume_role(
         self,
@@ -2299,10 +2387,16 @@ class _ChartingLoopGraphKernelAgent(ChartingLoopFullMethodAgent):
     """Task-clock Worker authoring with a shared task-neutral Graph Kernel."""
 
     ARM = ""
-    ROLE_SEQUENCE = ("worker", "qa")
+    ROLE_SEQUENCE = (
+        "source-partitioner",
+        "rule-compiler",
+        "witness-compiler",
+        "qa",
+    )
     ORCHESTRATION_MESSAGE = (
         "Deterministic orchestration: frozen Study profile plus shared Graph "
-        "Kernel -> Worker compile -> compile QA/recompile -> RuleClosure -> "
+        "Kernel -> source partition -> parallel Rule/source-witness compile -> "
+        "whole-ledger compile QA/recompile -> RuleClosure -> "
         "Direction/test contract -> pre-action QA -> same-Worker implementation "
         "-> frozen-result QA/repair -> official scoring."
     )
@@ -2668,6 +2762,200 @@ Path(__MANIFEST_PATH__).chmod(0o444)
         )
 
     @staticmethod
+    def _parallel_product_paths(iteration: int) -> tuple[str, str, str]:
+        if iteration == 1:
+            return (
+                RULE_LANE_PRODUCT_PATH,
+                WITNESS_LANE_PRODUCT_PATH,
+                PARALLEL_ASSEMBLY_PATH,
+            )
+        root = PurePosixPath(CORRIDOR_PATH) / "compile-revisions"
+        return (
+            (root / f"rule-lanes-{iteration:04d}.json").as_posix(),
+            (root / f"witness-lanes-{iteration:04d}.json").as_posix(),
+            (root / f"parallel-assembly-{iteration:04d}.json").as_posix(),
+        )
+
+    async def _assemble_parallel_compile(
+        self,
+        environment: BaseEnvironment,
+        *,
+        source_partition_path: str,
+        rule_product_path: str,
+        witness_product_path: str,
+        ir_path: str,
+        report_path: str,
+        assembly_path: str,
+    ) -> dict[str, Any]:
+        """Deterministically assemble independent lane products inside the trial."""
+
+        program = "\n".join(
+            [
+                "import json",
+                "from pathlib import Path",
+                "from corridor_kit import canonical_json_bytes,load_json,sha256_bytes",
+                "from corridor_kit.core import atomic_write_bytes",
+                "from corridor_kit.compiler import assemble_parallel_rule_ir",
+                f"partition_path=Path({source_partition_path!r})",
+                f"rule_path=Path({rule_product_path!r})",
+                f"witness_path=Path({witness_product_path!r})",
+                "assembled=assemble_parallel_rule_ir(load_json(partition_path),load_json(rule_path),load_json(witness_path))",
+                f"atomic_write_bytes(Path({ir_path!r}),canonical_json_bytes(assembled['typed_rule_ir']))",
+                f"atomic_write_bytes(Path({report_path!r}),canonical_json_bytes(assembled['compile_report']))",
+                f"atomic_write_bytes(Path({assembly_path!r}),canonical_json_bytes(assembled['assembly_manifest']))",
+                "print(json.dumps({'ok':True,'source_partition_sha256':sha256_bytes(partition_path.read_bytes()),'rule_product_sha256':sha256_bytes(rule_path.read_bytes()),'witness_product_sha256':sha256_bytes(witness_path.read_bytes()),'assembly_digest':assembled['assembly_manifest']['assembly_digest'],'compilation_complete':assembled['compile_report']['compilation_complete']},sort_keys=True))",
+            ]
+        )
+        parent = PurePosixPath(ir_path).parent.as_posix()
+        result = await self.exec_as_root(
+            environment,
+            command=(
+                f"install -d -m 0700 {shlex.quote(parent)} && "
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                f"python3 -c {shlex.quote(program)} && "
+                f"chmod 0444 {shlex.quote(ir_path)} {shlex.quote(report_path)} "
+                f"{shlex.quote(assembly_path)}"
+            ),
+        )
+        lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
+        if result.return_code != 0 or not lines:
+            return {
+                "ok": False,
+                "error": (result.stderr or result.stdout or "no output")[-2000:],
+            }
+        try:
+            return json.loads(lines[-1])
+        except json.JSONDecodeError:
+            return {"ok": False, "error": "parallel assembler output unreadable"}
+
+    async def _compile_repair_impact(
+        self,
+        environment: BaseEnvironment,
+        *,
+        compile_report_path: str,
+        findings: list[Any],
+    ) -> dict[str, Any]:
+        """Recompute QA repair scope from compiler topology, not QA lane guesses."""
+
+        groups = [
+            sorted(
+                {
+                    ref
+                    for field in ("rule_refs", "impact_rule_refs")
+                    for ref in finding.get(field, [])
+                    if isinstance(ref, str)
+                }
+            )
+            for finding in findings
+            if isinstance(finding, dict)
+        ]
+        groups = [group for group in groups if group]
+        if not groups:
+            return {
+                "available": False,
+                "parallel_safe": False,
+                "impact_sets": [],
+                "reason": "machine_addressable_rule_refs_unavailable",
+            }
+        program = "\n".join(
+            [
+                "import json",
+                "from pathlib import Path",
+                "from corridor_kit import load_json",
+                "from corridor_kit.graph_index import compile_repairs_are_disjoint",
+                f"report=load_json(Path({compile_report_path!r}))",
+                f"groups=json.loads({json.dumps(groups)!r})",
+                "print(json.dumps(compile_repairs_are_disjoint(report,groups),sort_keys=True))",
+            ]
+        )
+        result = await self.exec_as_root(
+            environment,
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                f"python3 -c {shlex.quote(program)}"
+            ),
+        )
+        lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
+        if result.return_code != 0 or not lines:
+            return {
+                "available": False,
+                "parallel_safe": False,
+                "impact_sets": [],
+                "reason": "impact_projection_failed",
+            }
+        try:
+            return {"available": True, **json.loads(lines[-1])}
+        except json.JSONDecodeError:
+            return {
+                "available": False,
+                "parallel_safe": False,
+                "impact_sets": [],
+                "reason": "impact_projection_unreadable",
+            }
+
+    async def _freeze_witness_repair_envelope(
+        self,
+        environment: BaseEnvironment,
+        *,
+        source_partition_path: str,
+        prior_witness_product_path: str,
+        output_path: str,
+        affected_lane_ids: list[str],
+        findings: list[Any],
+    ) -> dict[str, Any]:
+        """Project QA findings onto source-only identity before witness repair."""
+
+        source_refs = sorted(
+            {
+                ref
+                for finding in findings
+                if isinstance(finding, dict)
+                for ref in finding.get("source_refs", [])
+                if isinstance(ref, str) and ref
+            }
+        )
+        program = "\n".join(
+            [
+                "import json",
+                "from pathlib import Path",
+                "from corridor_kit import canonical_json_bytes,load_json,sha256_json",
+                "from corridor_kit.compiler import build_source_witness_repair_envelope",
+                "from corridor_kit.core import atomic_write_bytes",
+                f"partition=load_json(Path({source_partition_path!r}))",
+                f"prior=load_json(Path({prior_witness_product_path!r}))",
+                f"affected_lane_ids=json.loads({json.dumps(sorted(set(affected_lane_ids)))!r})",
+                f"source_refs=json.loads({json.dumps(source_refs)!r})",
+                "envelope=build_source_witness_repair_envelope(partition,prior,affected_lane_ids=affected_lane_ids,source_refs=source_refs)",
+                f"target=Path({output_path!r})",
+                "atomic_write_bytes(target,canonical_json_bytes(envelope))",
+                "target.chmod(0o444)",
+                "print(json.dumps({'ok':True,'envelope_digest':sha256_json(envelope)},sort_keys=True))",
+            ]
+        )
+        result = await self.exec_as_root(
+            environment,
+            command=(
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                f"python3 -c {shlex.quote(program)}"
+            ),
+        )
+        lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
+        if result.return_code != 0 or not lines:
+            return {
+                "ok": False,
+                "error": (result.stderr or result.stdout or "no output")[-2000:],
+            }
+        try:
+            return {
+                **json.loads(lines[-1]),
+                "path": output_path,
+                "affected_lane_ids": sorted(set(affected_lane_ids)),
+                "source_ref_count": len(source_refs),
+            }
+        except json.JSONDecodeError:
+            return {"ok": False, "error": "witness repair envelope unreadable"}
+
+    @staticmethod
     def _rule_compile_candidate_metadata(
         candidate: dict[str, Any],
     ) -> dict[str, Any]:
@@ -2944,10 +3232,11 @@ Path(__MANIFEST_PATH__).chmod(0o444)
             "import json; from pathlib import Path; "
             "from corridor_kit.graph import ratify_rule_candidate; "
             f"a=json.loads(Path({qa_path!r}).read_text(encoding='utf-8')); "
+            "findings=[json.dumps(x,sort_keys=True,separators=(',',':')) if isinstance(x,dict) else x for x in a['findings']]; "
             f"r=ratify_rule_candidate(Path({closure_staging!r}),"
             f"candidate_report_record_id={candidate['candidate_report_record_id']!r},"
             f"candidate_report_digest={candidate['candidate_report_digest']!r},"
-            "outcome=a['outcome'],findings=a['findings'],"
+            "outcome=a['outcome'],findings=findings,"
             f"ratifier_ref={'runner:compile-audit-' + str(iteration).zfill(4)!r}); "
             "print(json.dumps(r,sort_keys=True))"
         )
@@ -3157,7 +3446,9 @@ Path(__MANIFEST_PATH__).chmod(0o444)
         if self.ARM not in {"method", "neutral"}:
             raise ValueError("Graph Kernel agent arm is not configured")
 
-        worker = self._child_agent("worker")
+        source_partitioner = self._child_agent("source-partitioner")
+        worker = self._child_agent("rule-compiler")
+        witness_worker = self._child_agent("witness-compiler")
         qa = self._child_agent("qa")
         loop = asyncio.get_running_loop()
         started_at = loop.time()
@@ -3186,8 +3477,8 @@ Path(__MANIFEST_PATH__).chmod(0o444)
             "study_profile": profile,
             "study_profile_digest": profile["profile_digest"],
             "builder_present": False,
-            "roles": ["worker", "qa"],
-            "task_clock_roles": ["worker", "qa"],
+            "roles": ["source-partitioner", "rule-compiler", "witness-compiler", "qa"],
+            "task_clock_roles": ["source-partitioner", "rule-compiler", "witness-compiler", "qa"],
             "qa_schedule": (
                 "compile_candidate_then_execution_test_contract_then_each_worker_freeze"
             ),
@@ -3195,7 +3486,7 @@ Path(__MANIFEST_PATH__).chmod(0o444)
             "phase_events": [
                 "study_profile_frozen",
                 "graph_kernel_ready",
-                "worker_compile_started",
+                "source_partition_started",
             ],
             "phase_runs": [],
             "deadline_policy": "single_task_deadline",
@@ -3211,7 +3502,19 @@ Path(__MANIFEST_PATH__).chmod(0o444)
             "qa_is_advisory": True,
             "qa_can_recommend_repair": True,
             "qa_can_repair": False,
-            "repair_actor": "same_worker_session",
+            "repair_actor": "same_rule_compiler_session",
+            "compile_role_visibility": {
+                "source-partitioner": ["public_authority", "frozen_method", "kit"],
+                "rule-compiler": ["public_authority", "frozen_partition", "frozen_method", "kit"],
+                "witness-compiler": ["public_authority", "frozen_partition", "frozen_method", "kit"],
+                "witness_forbidden": [
+                    "candidate_rules",
+                    "candidate_checklists",
+                    "candidate_witnesses",
+                    "official_verifier_output",
+                ],
+                "enforcement": "role_session_input_envelope_cooperative",
+            },
             "official_verifier_schedule": "after_agent_return",
             "last_worker_snapshot_owns_fallback": True,
             "grading_owned_by_harbor": True,
@@ -3230,71 +3533,253 @@ Path(__MANIFEST_PATH__).chmod(0o444)
             "outcome": "not_assessed",
             "rule_closure_ready": False,
         }
+        partition_identity: dict[str, Any] = {"ok": False}
+        _, partition_run = await self._run_new_role(
+            "source-partitioner",
+            source_partitioner,
+            graph_source_partition_prompt(
+                instruction,
+                arm=self.ARM,
+                study_profile_digest=str(profile["profile_digest"]),
+                remaining_seconds=_remaining_seconds(execution_deadline),
+                method_text=method_text,
+            ),
+            environment,
+            deadline=execution_deadline,
+        )
+        self._record_phase_outcome(metadata, partition_run, context)
+        partition_program = "\n".join(
+            [
+                "import json",
+                "from pathlib import Path",
+                "from corridor_kit import canonical_json_bytes,load_json,sha256_json",
+                "from corridor_kit.compiler import validate_source_partition_product",
+                "from corridor_kit.core import atomic_write_bytes",
+                f"p=Path({SOURCE_PARTITION_PATH!r})",
+                "v=validate_source_partition_product(load_json(p))",
+                "atomic_write_bytes(p,canonical_json_bytes(v))",
+                "print(json.dumps({'ok':True,'partition_product_digest':sha256_json(v),'lane_ids':sorted(item['lane_id'] for item in v['partition_manifest']['lanes']),'byte_size':p.stat().st_size},sort_keys=True))",
+            ]
+        )
+        partition_check = await self.exec_as_root(
+            environment,
+            command=(
+                f"test -f {shlex.quote(SOURCE_PARTITION_PATH)} && "
+                f"PYTHONDONTWRITEBYTECODE=1 PYTHONPATH={shlex.quote(SDK_ROOT)} "
+                f"python3 -c {shlex.quote(partition_program)}"
+            ),
+        )
+        partition_lines = [
+            line for line in (partition_check.stdout or "").splitlines() if line.strip()
+        ]
+        if partition_check.return_code == 0 and partition_lines:
+            try:
+                partition_identity = json.loads(partition_lines[-1])
+            except json.JSONDecodeError:
+                partition_identity = {"ok": False, "error": "partition_identity_unreadable"}
+        if partition_identity.get("ok") is True:
+            await self.exec_as_root(
+                environment,
+                command=f"chmod 0444 {shlex.quote(SOURCE_PARTITION_PATH)}",
+            )
+            metadata["phase_events"].append("source_partition_frozen")
+        else:
+            metadata["phase_events"].append("source_partition_failed")
+        metadata["source_partition"] = partition_identity
         prior_candidate: dict[str, Any] | None = None
-        while _remaining_seconds(execution_deadline) > 0 and rule_closure is None:
+        compile_repair_impact: dict[str, Any] | None = None
+        while (
+            partition_identity.get("ok") is True
+            and _remaining_seconds(execution_deadline) > 0
+            and rule_closure is None
+        ):
             compile_iteration += 1
             ir_path, report_path = self._rule_compile_paths(compile_iteration)
+            rule_product_path, witness_product_path, assembly_path = (
+                self._parallel_product_paths(compile_iteration)
+            )
+            if compile_iteration > 1:
+                product_parent = PurePosixPath(rule_product_path).parent.as_posix()
+                product_owner = shlex.quote(
+                    str(getattr(environment, "default_user", None) or "root")
+                )
+                await self.exec_as_root(
+                    environment,
+                    command=(
+                        f"install -d -m 0700 -o {product_owner} "
+                        f"{shlex.quote(product_parent)}"
+                    ),
+                )
             if worker_started:
                 assert prior_candidate is not None and compile_qa_path is not None
-                if (
-                    prior_candidate.get("status")
-                    == "compile_candidate_semantic_rejected"
-                ):
-                    repair_prompt = graph_compile_failure_repair_prompt(
-                        instruction,
-                        arm=self.ARM,
-                        study_profile_digest=str(profile["profile_digest"]),
-                        failed_candidate_id=str(
-                            prior_candidate["failed_candidate_id"]
-                        ),
-                        prior_typed_rule_ir_digest=str(
-                            prior_candidate["typed_rule_ir_sha256"]
-                        ),
-                        qa_path=compile_qa_path,
-                        output_ir_path=ir_path,
-                        output_report_path=report_path,
-                        remaining_seconds=_remaining_seconds(execution_deadline),
-                        method_text=method_text,
-                    )
-                else:
-                    repair_prompt = graph_compile_repair_prompt(
-                        instruction,
-                        arm=self.ARM,
-                        study_profile_digest=str(profile["profile_digest"]),
-                        prior_graph_digest=str(prior_candidate["graph_digest"]),
-                        prior_candidate_report_record_id=str(
-                            prior_candidate["candidate_report_record_id"]
-                        ),
-                        qa_path=compile_qa_path,
-                        output_ir_path=ir_path,
-                        output_report_path=report_path,
-                        remaining_seconds=_remaining_seconds(execution_deadline),
-                        method_text=method_text,
-                    )
-                _, worker_run = await self._resume_role(
-                    "worker",
-                    worker,
-                    repair_prompt,
-                    environment,
-                    phase=f"worker-recompile-{compile_iteration:04d}",
-                    deadline=execution_deadline,
+                prior_rule_product_path, prior_witness_product_path, _ = (
+                    self._parallel_product_paths(compile_iteration - 1)
                 )
-            else:
-                _, worker_run = await self._run_new_role(
-                    "worker",
+                structured_findings = (
+                    compile_assessment.get("findings", [])
+                    if isinstance(compile_assessment, dict)
+                    else []
+                )
+                projected_impact_lanes = sorted(
+                    {
+                        lane_id
+                        for impact in (
+                            compile_repair_impact or {}
+                        ).get("impact_sets", [])
+                        if isinstance(impact, dict)
+                        for lane_id in impact.get("affected_lane_ids", [])
+                        if isinstance(lane_id, str)
+                    }
+                )
+                qa_impact_lanes = sorted(
+                    {
+                        lane_id
+                        for finding in structured_findings
+                        if isinstance(finding, dict)
+                        for lane_id in finding.get("minimal_rerun_lanes", [])
+                        if isinstance(lane_id, str)
+                    }
+                )
+                frozen_lane_ids = sorted(
+                    lane_id
+                    for lane_id in partition_identity.get("lane_ids", [])
+                    if isinstance(lane_id, str)
+                )
+                unknown_qa_lanes = sorted(set(qa_impact_lanes) - set(frozen_lane_ids))
+                if unknown_qa_lanes:
+                    metadata["phase_events"].append(
+                        "qa_lane_projection_rejected_to_whole_ledger"
+                    )
+                impact_lanes = (
+                    projected_impact_lanes
+                    or (qa_impact_lanes if not unknown_qa_lanes else [])
+                    or frozen_lane_ids
+                )
+                witness_repair_envelope_path = (
+                    PurePosixPath(rule_product_path).parent
+                    / f"witness-repair-envelope-{compile_iteration:04d}.json"
+                ).as_posix()
+                witness_repair_envelope = (
+                    await self._freeze_witness_repair_envelope(
+                        environment,
+                        source_partition_path=SOURCE_PARTITION_PATH,
+                        prior_witness_product_path=prior_witness_product_path,
+                        output_path=witness_repair_envelope_path,
+                        affected_lane_ids=impact_lanes,
+                        findings=structured_findings,
+                    )
+                )
+                metadata.setdefault("witness_repair_envelopes", []).append(
+                    witness_repair_envelope
+                )
+                if witness_repair_envelope.get("ok") is not True:
+                    metadata["phase_events"].append(
+                        "source_witness_repair_envelope_failed"
+                    )
+                    break
+                _, worker_run = await self._resume_role(
+                    "rule-compiler",
                     worker,
-                    graph_worker_prompt(
+                    graph_rule_lane_repair_prompt(
                         instruction,
                         arm=self.ARM,
-                        study_profile_digest=str(profile["profile_digest"]),
+                        qa_path=compile_qa_path,
+                        prior_product_path=prior_rule_product_path,
+                        output_path=rule_product_path,
+                        impact_lane_ids=impact_lanes,
                         remaining_seconds=_remaining_seconds(execution_deadline),
                         method_text=method_text,
                     ),
                     environment,
+                    phase=f"rule-lane-recompile-{compile_iteration:04d}",
                     deadline=execution_deadline,
                 )
+                _, witness_run = await self._resume_role(
+                    "witness-compiler",
+                    witness_worker,
+                    graph_witness_lane_repair_prompt(
+                        instruction,
+                        arm=self.ARM,
+                        repair_envelope_path=witness_repair_envelope_path,
+                        prior_product_path=prior_witness_product_path,
+                        output_path=witness_product_path,
+                        impact_lane_ids=impact_lanes,
+                        remaining_seconds=_remaining_seconds(execution_deadline),
+                        method_text=method_text,
+                    ),
+                    environment,
+                    phase=f"witness-lane-recompile-{compile_iteration:04d}",
+                    deadline=execution_deadline,
+                )
+            else:
+                parallel_runs = await self._run_parallel_new_roles(
+                    [
+                        (
+                            "rule-compiler",
+                            worker,
+                            graph_rule_lane_prompt(
+                                instruction,
+                                arm=self.ARM,
+                                study_profile_digest=str(profile["profile_digest"]),
+                                remaining_seconds=_remaining_seconds(execution_deadline),
+                                method_text=method_text,
+                                output_path=rule_product_path,
+                            ),
+                        ),
+                        (
+                            "witness-compiler",
+                            witness_worker,
+                            graph_witness_lane_prompt(
+                                instruction,
+                                arm=self.ARM,
+                                study_profile_digest=str(profile["profile_digest"]),
+                                remaining_seconds=_remaining_seconds(execution_deadline),
+                                method_text=method_text,
+                                output_path=witness_product_path,
+                            ),
+                        ),
+                    ],
+                    environment,
+                    deadline=execution_deadline,
+                )
+                _, worker_run = parallel_runs["rule-compiler"]
+                _, witness_run = parallel_runs["witness-compiler"]
                 worker_started = True
             self._record_phase_outcome(metadata, worker_run, context)
+            self._record_phase_outcome(metadata, witness_run, context)
+            sealed_products = await self.exec_as_root(
+                environment,
+                command=(
+                    f"test -f {shlex.quote(rule_product_path)} && "
+                    f"test -f {shlex.quote(witness_product_path)} && "
+                    f"chmod 0444 {shlex.quote(rule_product_path)} "
+                    f"{shlex.quote(witness_product_path)}"
+                ),
+            )
+            if sealed_products.return_code != 0:
+                metadata["phase_events"].append("parallel_compile_product_missing")
+                break
+            assembly = await self._assemble_parallel_compile(
+                environment,
+                source_partition_path=SOURCE_PARTITION_PATH,
+                rule_product_path=rule_product_path,
+                witness_product_path=witness_product_path,
+                ir_path=ir_path,
+                report_path=report_path,
+                assembly_path=assembly_path,
+            )
+            metadata.setdefault("parallel_compile_assemblies", []).append(
+                {
+                    "iteration": compile_iteration,
+                    "rule_product_path": rule_product_path,
+                    "witness_product_path": witness_product_path,
+                    "assembly_path": assembly_path,
+                    **assembly,
+                }
+            )
+            if assembly.get("ok") is not True:
+                metadata["phase_events"].append("parallel_compile_assembly_failed")
+                break
             compile_candidate = await self._freeze_rule_compile_candidate(
                 environment,
                 iteration=compile_iteration,
@@ -3354,7 +3839,7 @@ Path(__MANIFEST_PATH__).chmod(0o444)
                         audit_iteration=compile_iteration,
                     )
                 else:
-                    compile_prompt = graph_compile_qa_prompt(
+                    compile_prompt = graph_parallel_compile_qa_prompt(
                         instruction,
                         arm=self.ARM,
                         study_profile_digest=str(profile["profile_digest"]),
@@ -3374,17 +3859,11 @@ Path(__MANIFEST_PATH__).chmod(0o444)
                         typed_rule_ir_digest=str(
                             compile_candidate["typed_rule_ir_sha256"]
                         ),
-                        typed_rule_ir_size=int(
-                            compile_candidate["typed_rule_ir_size"]
-                        ),
                         typed_rule_report_path=str(
                             compile_candidate["typed_rule_report_path"]
                         ),
                         typed_rule_report_digest=str(
                             compile_candidate["compile_report_sha256"]
-                        ),
-                        typed_rule_report_size=int(
-                            compile_candidate["compile_report_size"]
                         ),
                         qa_output_path=compile_qa_path,
                         audit_iteration=compile_iteration,
@@ -3416,6 +3895,26 @@ Path(__MANIFEST_PATH__).chmod(0o444)
                 study_profile_digest=str(profile["profile_digest"]),
                 candidate=compile_candidate,
             )
+            compile_repair_impact = None
+            if (
+                not compiler_rejected
+                and isinstance(compile_assessment, dict)
+                and compile_decision.get("valid") is True
+                and compile_decision.get("outcome") != "pass"
+            ):
+                compile_repair_impact = await self._compile_repair_impact(
+                    environment,
+                    compile_report_path=str(
+                        compile_candidate["typed_rule_report_path"]
+                    ),
+                    findings=compile_assessment.get("findings", []),
+                )
+                metadata.setdefault("compile_repair_impacts", []).append(
+                    {
+                        "iteration": compile_iteration,
+                        **compile_repair_impact,
+                    }
+                )
             compile_audit_record = {
                 "kind": "rule_compile",
                 "iteration": compile_iteration,
@@ -3538,7 +4037,7 @@ Path(__MANIFEST_PATH__).chmod(0o444)
                     )
                     phase = f"worker-execution-test-revision-{execution_test_iteration:04d}"
                 _, plan_run = await self._resume_role(
-                    "worker",
+                    "rule-compiler",
                     worker,
                     plan_prompt,
                     environment,
@@ -3690,7 +4189,7 @@ Path(__MANIFEST_PATH__).chmod(0o444)
                 environment, graph_path=GRAPH_PATH
             )
             _, implementation_run = await self._resume_role(
-                "worker",
+                "rule-compiler",
                 worker,
                 graph_implementation_prompt(
                     instruction,
@@ -3942,7 +4441,7 @@ Path(__MANIFEST_PATH__).chmod(0o444)
                         f"{audit_iteration:04d}-{repair_test_iteration:04d}"
                     )
                 _, repair_plan_run = await self._resume_role(
-                    "worker",
+                    "rule-compiler",
                     worker,
                     repair_plan_prompt,
                     environment,
@@ -4089,7 +4588,7 @@ Path(__MANIFEST_PATH__).chmod(0o444)
                 break
 
             _, repair_run = await self._resume_role(
-                "worker",
+                "rule-compiler",
                 worker,
                 graph_repair_prompt(
                     instruction,

@@ -99,6 +99,184 @@ def _copy(value: Any) -> Any:
     return value
 
 
+def compile_repair_impact_set(
+    compile_report: Mapping[str, Any], changed_rule_ids: Iterable[str]
+) -> dict[str, Any]:
+    """Compute the complete deterministic recompile surface for Rule findings.
+
+    The result is diagnostic only.  It starts from the compiler's frozen integration
+    report and includes every owner that can make a lane-local repair non-local.
+    """
+
+    changed = sorted(set(changed_rule_ids))
+    rule_bodies = {
+        str(item["rule_id"]): item
+        for item in compile_report.get("rule_bodies", [])
+        if isinstance(item, Mapping) and isinstance(item.get("rule_id"), str)
+    }
+    unknown = sorted(set(changed) - set(rule_bodies))
+    if not changed or unknown:
+        raise CorridorKitError(
+            "repair impact requires known changed Rules"
+            + (f": {unknown}" if unknown else "")
+        )
+    lane_packages = [
+        item for item in compile_report.get("lane_packages", []) if isinstance(item, Mapping)
+    ]
+    lane_by_rule = {
+        str(rule_id): str(lane["lane_id"])
+        for lane in lane_packages
+        for rule_id in lane.get("rule_ids", [])
+    }
+    if set(rule_bodies) - set(lane_by_rule):
+        raise CorridorKitError("repair impact requires complete Rule lane ownership")
+    hard_closure = {
+        str(rule_id): {
+            str(ref) for ref in refs if isinstance(ref, str) and ref in rule_bodies
+        }
+        for rule_id, refs in compile_report.get("hard_dependency_closure", {}).items()
+        if isinstance(rule_id, str) and isinstance(refs, list)
+    }
+    semantic_edges = {
+        str(edge["semantic_edge_id"]): dict(edge)
+        for edge in compile_report.get("semantic_edge_templates", [])
+        if isinstance(edge, Mapping)
+        and isinstance(edge.get("semantic_edge_id"), str)
+        and edge.get("from_rule_id") in rule_bodies
+        and edge.get("to_rule_id") in rule_bodies
+    }
+    cross_lane_edges = {
+        str(edge["semantic_edge_id"]): dict(edge)
+        for lane in lane_packages
+        for edge in lane.get("incident_cross_lane_edges", [])
+        if isinstance(edge, Mapping)
+        and isinstance(edge.get("semantic_edge_id"), str)
+        and edge.get("from_rule_id") in rule_bodies
+        and edge.get("to_rule_id") in rule_bodies
+    }
+    coupled_relationships = {"conflicts", "overlaps", "coupled_with", "invalidates"}
+    global_lane_id = (
+        compile_report.get("partition_manifest", {}) or {}
+    ).get("global_lane_id")
+    global_lane_rules = {
+        rule_id for rule_id, lane_id in lane_by_rule.items() if lane_id == global_lane_id
+    }
+    temporal_rule_ids = {
+        rule_id
+        for rule_id, body in rule_bodies.items()
+        if any(
+            condition.get("condition_kind") in {"temporal", "state_transition"}
+            for condition in body.get("semantics", {}).get("conditions", [])
+            if isinstance(condition, Mapping)
+        )
+    }
+    affected_rules = set(changed)
+    incident_by_id: dict[str, dict[str, Any]] = {}
+    invalidated_rules: set[str] = set()
+    conflict_overlap_rules: set[str] = set()
+    changed_since_last_pass = True
+    while changed_since_last_pass:
+        before = set(affected_rules)
+        for rule_id, prerequisites in hard_closure.items():
+            if prerequisites & affected_rules:
+                affected_rules.add(rule_id)
+        for edge_id, edge in cross_lane_edges.items():
+            endpoints = {str(edge["from_rule_id"]), str(edge["to_rule_id"])}
+            if endpoints & affected_rules:
+                affected_rules.update(endpoints)
+                incident_by_id[edge_id] = edge
+        for edge_id, edge in semantic_edges.items():
+            relationship = edge.get("declared_relationship")
+            endpoints = {str(edge["from_rule_id"]), str(edge["to_rule_id"])}
+            if relationship in coupled_relationships and endpoints & affected_rules:
+                affected_rules.update(endpoints)
+                if relationship == "invalidates":
+                    invalidated_rules.add(str(edge["to_rule_id"]))
+                if relationship in {"conflicts", "overlaps"}:
+                    conflict_overlap_rules.update(endpoints)
+                if edge_id in cross_lane_edges:
+                    incident_by_id[edge_id] = cross_lane_edges[edge_id]
+        if incident_by_id or affected_rules & temporal_rule_ids:
+            affected_rules.update(global_lane_rules)
+        changed_since_last_pass = affected_rules != before
+    temporal_owners = sorted(
+        rule_id
+        for rule_id in affected_rules
+        if any(
+            condition.get("condition_kind") in {"temporal", "state_transition"}
+            for condition in rule_bodies[rule_id]
+            .get("semantics", {})
+            .get("conditions", [])
+            if isinstance(condition, Mapping)
+        )
+    )
+    global_owners = sorted(
+        rule_id for rule_id in affected_rules if lane_by_rule.get(rule_id) == global_lane_id
+    )
+    hard_dependants = {
+        rule_id
+        for rule_id, prerequisites in hard_closure.items()
+        if rule_id not in changed and prerequisites & affected_rules
+    }
+    affected_lanes = sorted(
+        {lane_by_rule[rule_id] for rule_id in affected_rules if rule_id in lane_by_rule}
+    )
+    result = {
+        "changed_rule_ids": changed,
+        "affected_rule_ids": sorted(affected_rules),
+        "hard_dependant_rule_ids": sorted(hard_dependants),
+        "affected_lane_ids": affected_lanes,
+        "invalidated_rule_ids": sorted(invalidated_rules),
+        "incident_cross_lane_edges": sorted(
+            incident_by_id.values(), key=lambda item: item["semantic_edge_id"]
+        ),
+        "conflict_overlap_component_rule_ids": sorted(conflict_overlap_rules),
+        "temporal_owner_rule_ids": temporal_owners,
+        "global_owner_rule_ids": global_owners,
+        "integrator_digest": compile_report.get("integrator_digest"),
+        "requires_integrator_rerun": True,
+    }
+    return {**result, "impact_set_digest": sha256_json(result)}
+
+
+def compile_repairs_are_disjoint(
+    compile_report: Mapping[str, Any], changed_rule_groups: Sequence[Iterable[str]]
+) -> dict[str, Any]:
+    """Allow parallel repair only when complete impact sets are pairwise disjoint."""
+
+    impacts = [
+        compile_repair_impact_set(compile_report, group)
+        for group in changed_rule_groups
+    ]
+    overlaps: list[dict[str, Any]] = []
+    for left_index, left in enumerate(impacts):
+        for right_index in range(left_index + 1, len(impacts)):
+            right = impacts[right_index]
+            shared_rules = sorted(
+                set(left["affected_rule_ids"]) & set(right["affected_rule_ids"])
+            )
+            shared_lanes = sorted(
+                set(left["affected_lane_ids"]) & set(right["affected_lane_ids"])
+            )
+            if shared_rules or shared_lanes:
+                overlaps.append(
+                    {
+                        "left_index": left_index,
+                        "right_index": right_index,
+                        "shared_rule_ids": shared_rules,
+                        "shared_lane_ids": shared_lanes,
+                    }
+                )
+    return {
+        "impact_sets": impacts,
+        "parallel_safe": not overlaps,
+        "overlaps": overlaps,
+        "advisory_only": True,
+        "authorizes_mutation": False,
+        "blocking_gate": False,
+    }
+
+
 @dataclass(frozen=True)
 class GraphIndex:
     """Digest-bound immutable query surface for one validated graph."""
