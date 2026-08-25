@@ -71,7 +71,7 @@ as evidence for either frozen probe.
 
 ### Frozen-v5 end-to-end regression custody
 
-Three same-task `data-anonymization` runs test the frozen Graph Agent 1.3.0 / Corridor
+Four same-task `data-anonymization` runs test the frozen Graph Agent 1.3.0 / Corridor
 Kit 0.8.0 engineering path. They are private adaptive regressions, not result-index
 entries, matched experiments, or leaderboard submissions. Attempts 001 and 002 reached
 the harness but exposed task-neutral SDK intake defects. Attempt 003 started from zero
@@ -85,6 +85,17 @@ records exact timing, phase disposition, and content-addressed local custody. It
 not estimate semantic alignment or critical-path improvement. A later run may change
 only the task-external setup timeout under a new preregistration; the 3,600-second task
 clock and frozen Method/Kit semantics remain unchanged.
+
+Attempt 004 made that setup-only correction and reached the real compiler path. It
+froze a 14-lane, 160-clause source partition, then completed parallel Rule and witness
+products. Deterministic assembly correctly rejected a duplicated source-owned
+`revision`: the partition said `SOURCE.PARTITION.FIRST`, while the Rule product said
+`RULE.LANES.FIRST`. Compile QA, RuleClosure, Worker, result QA, repair, and meaningful
+official verification did not start. The [CL-148 audit](../exogenous/local/cl148-data-anonymization-v5-kit080-e2e/AUDIT.md)
+classifies this as a noncounting SDK product-ownership defect—not a task score and not
+a recurrence of the official-verifier semantic mismatch recorded by DC-044. It also
+records the observed critical path: 703.744 seconds for source partitioning followed by
+about 1,040 seconds for the two concurrent compiler lanes.
 
 ## Publication and participation status
 

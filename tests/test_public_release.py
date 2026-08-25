@@ -718,12 +718,17 @@ class PublicReleaseTests(unittest.TestCase):
 
         for marker in (
             "### Frozen-v5 end-to-end regression custody",
-            "Three same-task `data-anonymization` runs",
+            "Four same-task `data-anonymization` runs",
             "`AgentSetupTimeoutError` after 360 seconds",
             "compiler, graph, Worker, QA, repair, and official verifier never started",
             "**not an official task score**",
             "only the task-external setup timeout",
             "3,600-second task clock and frozen Method/Kit semantics remain unchanged",
+            "Attempt 004 made that setup-only correction",
+            "`SOURCE.PARTITION.FIRST`",
+            "`RULE.LANES.FIRST`",
+            "noncounting SDK product-ownership defect",
+            "not a recurrence of the official-verifier semantic mismatch recorded by DC-044",
         ):
             self.assertIn(marker, index_words)
 
@@ -746,6 +751,33 @@ class PublicReleaseTests(unittest.TestCase):
         self.assertEqual(cl147_result["phase_outcomes"]["official_verifier"], "not_started")
         self.assertFalse(cl147_graph["graph_created"])
         self.assertEqual(cl147_graph["counts"]["rules"], 0)
+
+        cl148_root = (
+            REPOSITORY_ROOT
+            / "exogenous"
+            / "local"
+            / "cl148-data-anonymization-v5-kit080-e2e"
+        )
+        cl148_result = json.loads((cl148_root / "RESULT.json").read_text(encoding="utf-8"))
+        cl148_graph = json.loads(
+            (cl148_root / "GRAPH-SUMMARY.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(cl148_result["classification"], "unscored_sdk_assembly_failure")
+        self.assertIsNone(cl148_result["official_reward"])
+        self.assertFalse(cl148_result["official_verifier_reached"])
+        self.assertFalse(cl148_result["harbor_summary_mean_is_task_score"])
+        self.assertEqual(cl148_result["retry_count"], 0)
+        self.assertEqual(
+            cl148_result["phase_outcomes"]["deterministic_assembly"],
+            "rejected_revision_mismatch",
+        )
+        self.assertEqual(cl148_result["phase_outcomes"]["worker"], "not_started")
+        self.assertEqual(cl148_result["compiler_products"]["source_partition"]["lanes"], 14)
+        self.assertEqual(cl148_result["compiler_products"]["rule_lane"]["rules"], 37)
+        self.assertEqual(cl148_result["compiler_products"]["witness_lane"]["witnesses"], 441)
+        self.assertTrue(cl148_graph["graph_created"])
+        self.assertEqual(cl148_graph["counts"]["ratified_rules"], 0)
+        self.assertEqual(cl148_graph["counts"]["directions"], 0)
 
         publication_markers = (
             "## Publication and participation status",
