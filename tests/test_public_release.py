@@ -716,6 +716,37 @@ class PublicReleaseTests(unittest.TestCase):
         self.assertEqual(index.count("| `production-planning` |"), 1)
         self.assertEqual(index.count("| `ico-path-patch` |"), 1)
 
+        for marker in (
+            "### Frozen-v5 end-to-end regression custody",
+            "Three same-task `data-anonymization` runs",
+            "`AgentSetupTimeoutError` after 360 seconds",
+            "compiler, graph, Worker, QA, repair, and official verifier never started",
+            "**not an official task score**",
+            "only the task-external setup timeout",
+            "3,600-second task clock and frozen Method/Kit semantics remain unchanged",
+        ):
+            self.assertIn(marker, index_words)
+
+        cl147_root = (
+            REPOSITORY_ROOT
+            / "exogenous"
+            / "local"
+            / "cl147-data-anonymization-v5-kit080-e2e"
+        )
+        cl147_result = json.loads((cl147_root / "RESULT.json").read_text(encoding="utf-8"))
+        cl147_graph = json.loads(
+            (cl147_root / "GRAPH-SUMMARY.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(cl147_result["classification"], "unscored_infrastructure_failure")
+        self.assertIsNone(cl147_result["official_reward"])
+        self.assertFalse(cl147_result["official_verifier_reached"])
+        self.assertFalse(cl147_result["harbor_summary_mean_is_task_score"])
+        self.assertEqual(cl147_result["retry_count"], 0)
+        self.assertEqual(cl147_result["phase_outcomes"]["worker"], "not_started")
+        self.assertEqual(cl147_result["phase_outcomes"]["official_verifier"], "not_started")
+        self.assertFalse(cl147_graph["graph_created"])
+        self.assertEqual(cl147_graph["counts"]["rules"], 0)
+
         publication_markers = (
             "## Publication and participation status",
             "**Current status: the public result and causal-evidence release is live.**",

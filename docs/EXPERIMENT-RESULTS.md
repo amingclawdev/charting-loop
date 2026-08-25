@@ -69,6 +69,23 @@ execution after an honest partial freeze, and make typed admitted Facts plus rep
 row/checkpoint progression part of Position. No post-result change or rerun is counted
 as evidence for either frozen probe.
 
+### Frozen-v5 end-to-end regression custody
+
+Three same-task `data-anonymization` runs test the frozen Graph Agent 1.3.0 / Corridor
+Kit 0.8.0 engineering path. They are private adaptive regressions, not result-index
+entries, matched experiments, or leaderboard submissions. Attempts 001 and 002 reached
+the harness but exposed task-neutral SDK intake defects. Attempt 003 started from zero
+after those fixes, but Harbor stopped during remote agent installation with
+`AgentSetupTimeoutError` after 360 seconds. The compiler, graph, Worker, QA, repair,
+and official verifier never started. Harbor's displayed `0.0` exception aggregate is
+therefore **not an official task score**.
+
+The bounded [CL-147 audit](../exogenous/local/cl147-data-anonymization-v5-kit080-e2e/AUDIT.md)
+records exact timing, phase disposition, and content-addressed local custody. It does
+not estimate semantic alignment or critical-path improvement. A later run may change
+only the task-external setup timeout under a new preregistration; the 3,600-second task
+clock and frozen Method/Kit semantics remain unchanged.
+
 ## Publication and participation status
 
 **Current status: the public result and causal-evidence release is live.** A reader can
