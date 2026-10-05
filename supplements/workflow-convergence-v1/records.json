@@ -1,0 +1,385 @@
+{
+  "schema": "workflow-convergence-supplement.v1",
+  "title": "Redacted engineering records for Convergence under Rules",
+  "prepared_date_local": "2026-10-05",
+  "timezone": "America/Toronto",
+  "authority": "Human author selected option A and authorized public redacted disclosure of the cited case/audit excerpts.",
+  "status_vocabulary": {
+    "curated": "Author engineering report; original event history not newly re-audited",
+    "primary_fields": "Selected fields checked read-only by the author-assisted preparation process",
+    "normative": "Required protocol behavior, not an observed result",
+    "unknown": "Missing or not verified; never filled by inference"
+  },
+  "scope": "Existing four cases, two audits, baseline and operating clarification; selected August fields and separately versioned October 5 Daily Planner addendum. Frozen paper datum and method scope unchanged.",
+  "redaction_policy": "Selected original event sequence numbers and immutable commit bindings retained. Host/private control-plane paths, actor/session identifiers and token values removed. Other historical object aliases preserve equality relations; full private payloads and private mapping excluded.",
+  "community_boundary": "Author reports earlier public/Discord discussion. Specific message permalinks were not supplied or independently checked; no third-party messages/screenshots/identities are redistributed here. Public discussion is not primary runtime evidence.",
+  "source_excerpts": [
+    {
+      "id": "SRC-C17",
+      "title": "DC-017 acceptance-boundary collapse",
+      "evidence_status": "curated author engineering report",
+      "language": "zh/en",
+      "redacted_excerpt": "### DC-017 验收边界坍缩(负向判决无围栏)【题10 候选】\n类别:drift(系统策略;meta-drift 首个实测案例——防漂移规则制造漂移)。\n不变量:判决作用域——第②层(产品行为)的 false 不得作废第①层(治理证据)仍有效的证据。discard 必须能点名\"作废了哪件已接受证据\"。\n机制:伞行验收语句\"any Browser failure discards the generation\"把三个独立问题(泳道合法性/产品行为/harness 正确性)压成一个,预签空白判决交给 observer 观察通道。\n判决性证据(抽查核实):PG-001 Gen48 `…object-01` timeline 5/6/8/9 全 passed、11 `observer.visual_smoke failed`(仅 390×844 viewport 元数据缺失)→整代废弃;Gen49 `…object-02` 整链重跑至 close(3/5/6/8/9/11/13/15)只为补一行元数据=**一次完整可避免重放**。PG-002 Gen59 同形,半途叫停,改正先例:blocked_parent+有界修复行。\n不对称(本仓补充):正向判决服务端硬围栏(coordinator 提 QA 线→permission_denied 实录);负向判决无围栏且带无界爆炸半径。**observer 连有界核准权都没有,却拿到了无界否决权。**\n引用:sources/ 审计文章(PG/EDGE/ADMIN 全案)· backlog `work-item-01`。状态:处置规则已改正(Gen59 先例);围栏与伞行回写在设计评审中(操作者四建议+mint 时 acceptance⊆scope 校验)。",
+      "excerpt_sha256": "fbaf6f0d0d7e9f558d8bf81566cf704980f96864b0f3bb9af41a6771753b1955"
+    },
+    {
+      "id": "SRC-C35",
+      "title": "DC-035 manuscript-review ratchet",
+      "evidence_status": "curated self-application report",
+      "language": "zh/en",
+      "redacted_excerpt": "### DC-035 论文评审棘轮:fresh-context AI 评审的基准重生成 ✅\n类别:drift(direction/棘轮——**评审域**,DC-001 同形跨域)。主体×驱动:AI 评审(GPT/Claude)× fresh-context 重读。\n不变量:验收基准 dispatch 时冻结;新发现 = 新工作,不得追溯改写当前终点线。\n机制:理论论文 claim freeze 宣布后,每轮评审以全新上下文重读全文 → 重新派生\"理想\n论文模型\" → `Datum_{t+1} = Datum_t + 新发现的期望`。每条 finding 局部为真(数学缝隙、\n措辞过强、引用待核),验收线却从\"理论完整\"渐次移到\"接近形式方法论文的精度\"。\n**\"还有没有可改之处\"不是合法结束条件**——任何复杂理论永远有可改之处,此即无语义\n基例的评审递归。操作者抓获(\"这是不是在 ratchet up,正如理论所说,datum 没定所以\n一直有修改的地方\")。\n纠正:按理论开方——把论文自己的验收 datum 编译成文件\n(`SRC-BASELINE`:八项必须/不要求清单/closure condition/gate),\ngate 判据:违反八项 = blocker,改进 = new row。\n首验:其后两轮外部评审自觉在 gate 内运行(主动给出\"已通过、不再重开\"清单),\n递归终止;v1 按 closure condition 关闭(commits `object-03..object-04`)。\n新性质(相对 DC-001):评审者为 AI;**fresh-context 是棘轮的机械成因**——每轮上下文\n重建即基准重生成,无持久 datum。AI 评审比人类更易棘轮的可测主张,归伴随篇。\n特殊证据地位:比 motivating incidents 更接近\"预测-干预-结果\"环(失败产生于真实\n完稿过程、干预成功判据事先可述且被满足);但诊断者与理论作者同体,只 motivate\n不 validate。\n引用:`SRC-BASELINE`(datum 与事件记录)· 会话实录 · DC-001(同形)。\n状态:✅ datum 已编译,递归已终止;素材归 arXiv v2 / 伴随篇,**不重开 v1**",
+      "excerpt_sha256": "27321029baf16bb10b1871dda9d23fe3e4a86c09e2a803f5ff452829296e779b"
+    },
+    {
+      "id": "SRC-C37",
+      "title": "DC-037 August 22 validator ordering recurrence",
+      "evidence_status": "curated engineering mechanism report",
+      "language": "zh/en",
+      "redacted_excerpt": "**2026-08-22 recurrence——合法 QA basis 被消费者重新解释,随后形成 pre-QA materialization 环。**\nDirect Main 的 source-backed Rule/Contract 没有变化;新增的 strict Direct QA selector 也正确限定了\n`exact_candidate_snapshot`。漂移发生在两个消费者投影。其一,demo QA trace\n`record-id-01` 已由服务端证明 `canonical_base_plus_candidate_diff`\n(base `probe-candidate-A…`,candidate `probe-candidate-B…`,两文件 diff hash `object-05`),reconcile preflight 却额外要求\n物理 snapshot commit 等于 candidate,把一条合法 basis 投影成 `qa_candidate_count=0`。修复\n`candidate-C1…` 只让 reconcile/close 共用同一个 basis-bounded consumer:接受既有的 base+diff 或 exact\nsnapshot 两种事实形状,没有新增 Rule、Contract revision、Gate 或 schema。其二,该修复自身改变 graph\nfunction identity,QA 因而正确要求 exact snapshot;但唯一 `activate=false` materializer 又被放在\nQA-before-activate preflight 之后,形成“QA 要 exact snapshot、snapshot 要先 QA”的入口环。修复\n`candidate-C2…` 只把 `activate` 判定前移:非激活物化可在 QA 前执行,真正激活仍 fail-closed 要 QA。\nlive 证据为 candidate-only snapshot `graph-G2` → exact QA trace\n`record-id-02` → QA `aming-claw:event-E15` → 同 snapshot 激活与 row FIXED。\n判定:`NO_RULE_CHANGE`;这是 DC-037 的 gate-consumer/orphan-order recurrence,不是新机制的理由。",
+      "excerpt_sha256": "eab7141ec94e7599db750f937e6fd6e56503ec964b50cfe7b2a0fe351961816c"
+    },
+    {
+      "id": "SRC-C39",
+      "title": "DC-039 rule projection and forward recovery",
+      "evidence_status": "curated engineering report; probe remains reported-only",
+      "language": "zh/en",
+      "redacted_excerpt": "### DC-039 Redirect 停在 backlog:Position blocker 反向改写 Direction,机制递归复发 🔴\n类别:drift(**direction/投影层 + 治理顺序**;DC-037 在正确诊断后的 recurrence)。主体×驱动:\n长时运行执行者 × `fresh blocker → fresh P0 row → 局部修复` 的默认推进循环。\n案发窗口:2026-08-15 权威模型纠正与 freeze 决定 → 08-18~21 同一 session goal 再次扩张。\n\n**冻结过、但没有进入执行控制面的 Direction:**操作者 08-15 已明确权威栈:\n**版本化通用 Rule + task Contract 定义规则;ContractRuntime 保存所选 revision/执行事实;\nGate 逐条校验 Rule;Guide 只投影下一步**。同轮指定\n`work-item-02` 为唯一 root、WIP=1,要求先完成\n`contract_rule_id → gate validator → admitted Facts → verdict → Guide action` map,冻结 Guide、alias、\nrecovery mode 和 helper semantics。然而该 root 与三-lane parent 仍 OPEN,Rule→Gate map、chain-coherence\ntest 与同一 current WorldRef whole-chain traversal 均未闭环。\n\n**发散读数(08-18 12:12Z→08-21 03:21Z):**至少新增 77 条 backlog\n(48 FIXED / 19 WAIVED / 8 SUPERSEDED / 2 OPEN),61 条 P0、66 条绑定 66 个不同 commit;\n生命周期中位数 31.1 分钟。机制链连续长成 redaction→staged-fence→post-startup continuity→\nsafe-ref auto-rejoin→Guide host realization→body parity→stale/server compatibility→bounded replacement。\n常见签名是 implementation/QA/reconcile PASS 后 live 再失败,随后把该 Position blocker 直接升级为\n下一行的语义来源;局部 Gate 绿没有触发 Rule closure 重算。\n\n**P/D/E/X 判定:**P 把“最新 blocker/row”误当 Position;D 让无 Rule 来源的 Gate predicate 反向成为义务;\nE 是合法 action 不可消费/Guide 投影错误;X 是 body/schema/host transport 缺陷。E/X 修复可以必要,\n但不得创建新 Rule、Contract revision、per-Rule checkpoint 或 per-blocker Gate/row。\n\n**Charting Loop 对照:**frozen Method v8 规定 Direction 是 frozen objective 与 applicable Rule closure\n在一个 content-addressed Position checkpoint 上的联合投影;Position 变化应重投影 Direction,不能为\n每条 Rule 创建 checkpoint。CL-091 曾把 Method、SDK、Harness、Acceptance 混成 Method v9 而被\nsupersede;CL-093 逐条做 v8 delta 后判 `NO_METHOD_CHANGE`,把问题缩回一个 SDK resolver 修复并明确\n“不改 Method、不加 Gate”。本案缺的不是新方法,而是让已有方法约束 successor admission。\n\n**08-21 redirection 实施结果:**scheduler 首次真正按 Direct Main→MF Parallel→MF Batch 顺序保持 WIP=1。\nDirect repair `object-06` 已 implementation/独立 QA/部署,但首次 close 暴露的 post-implementation\n要求依法不做 post-hoc backfill,以 no-PASS `aming-claw:25860` 保留;随后才进入唯一 fresh MF Parallel。\nMF 两 lane 的 diff/测试证据已保全、canonical candidate custody 尚未铸成,并在 DC-042 host boundary\n冻结;父级记录 `25872`,MF Batch 未启动。\n这证明 redirect 已从对话确认进入 scheduler/WIP,但三 lane happy path 尚未收敛。\n\n**可审计 redirection 条件:**同时改变四个对象才算完成:(a)精确选择 source-backed Rule/Contract revision;\n(b)由 admitted Facts 重算 PositionRef;(c)对全部 applicable Rules 联合重投影 DirectionDigest;\n(d)scheduler/backlog WIP 与 next legal action 绑定该投影。总体出口只允许\n`NO_RULE_CHANGE | CONTRACT_UPDATE | INSUFFICIENT_EVIDENCE`;只更新对话或 backlog details 不是状态转换。\n\n**08-22 redirection 活体结果——先沉淀 current fix,再修 blocker,WIP 始终为 1。**第一份 AC 修复\n`candidate-C1…` 已先成为 immutable implementation(`aming-claw:event-E01`);dogfood 暴露 exact-snapshot 环后,\nsource execution 没有丢弃该 commit 或切去同一 row 改第二件事,而是铸一个 no-PASS root\n`generation-S`/diagnostic\n`failure-F1`,下游 QA/reconcile/close 只继承该 root、零 PASS。\n随后 fresh diagnostic Direct row 才以 `candidate-C2…` 修 ordering defect,完成 implementation\n`event-E14`、exact QA `event-E15`、active full reconcile、close-ready `event-E18` 与 FIXED。这里 bypass 的作用是\n保住已沉淀的 `candidate-C1…` 并记录 block,不是给 block 制造新语义。\n\n受控 Daily Planner probe 把这一语义完整跑了一遍:Generation A 的真实 work commit\n`probe-candidate-A…` 后人为在 `qa_graph_context` 制造 block;四个 bypass timeline 事件 `22/24/26/28`\n全部绑定同一 commit、同一 generation `probe-generation-A`、同一 root diagnostic\n`probe-failure-F2`,只有首行 `diagnostic_created=true`,后三行为\n`inherited_gate`,且没有 QA/reconcile/close PASS。Generation B 没有 resume/backfill A,而以 fresh commit\n`probe-candidate-B…` 正常完成 base+diff QA `35`、reconcile `36`、close-ready `38` 并 FIXED。\n这次 redirection 的判别点不是“是否又遇到 block”,而是 block 是否先经 Rule join 被缩回既有\nconsumer projection owner;两个修复均为 `NO_RULE_CHANGE`,没有再增 Contract/Gate/DC case。\n\n状态:🔴 **宏观发散已审计,redirection 已进入 WIP 控制但 whole-chain 未完成。**复用既有 freeze root,\n不为本 case 新建工程 row;关闭条件仍是 Rule→Gate map、历史 77 行 disposition、当前 WorldRef 的\nDirect/MF Parallel/MF Batch fresh traversal,且 successor admission 持续受 Direction projection 约束。",
+      "excerpt_sha256": "75ee671b702f3cc653ce32c0f35a841c68a800fbaa9f0d9af97d240d46349f2b"
+    },
+    {
+      "id": "SRC-AUDIT1",
+      "title": "Acceptance-boundary incident audit, July 28",
+      "evidence_status": "curated incident audit; historical repair-to-parent recommendation retained for provenance only",
+      "language": "zh/en",
+      "redacted_excerpt": "# E2E Product–Governance Acceptance-Boundary Drift\n\n**Audit date:** 2026-07-28  \n**Audit backlog:** `work-item-01`  \n**Umbrella:** `work-item-03`  \n**Status:** Evidence audit and operating decision\n\n## Finding\n\nThe recovery run contains a distinct drift class: **acceptance-boundary\ncollapse**. A downstream observer E2E finding in the target product was treated\nas proof that an already accepted governance lane had failed. The resulting\naction discarded the generation and restarted from Direct Main, even though\nthe implementation, independent QA, merge, and current-HEAD reconcile evidence\nremained valid.\n\nThe exact count at the audit cutoff is:\n\n| Measure | Count | Meaning |\n| --- | ---: | --- |\n| Confirmed product-vs-governance boundary incidents | 2 | Gen48 and Gen59 |\n| Completed avoidable full-chain replays | 1 | Gen49 repeated Direct Main from implementation through Browser and close after the Gen48 product defect |\n| Aborted partial restart attempts | 1 | Gen61 created a fresh fixture/row and reached pre-mutation authority after the Gen59 product defect, but was superseded before candidate, QA, merge, reconcile, or Browser |\n| Additional completed full-chain replays caused by this exact defect class | 0 | No other case satisfies all inclusion rules |\n\nTherefore, the answer depends on the unit:\n\n- **Two disposition rounds were wrong.**\n- **One complete E2E chain was unnecessarily replayed.**\n- **One second replay was started but stopped before implementation.**\n\nIt would be inaccurate to report two completed E2E reruns. It would also be\ninaccurate to report only one incident, because the Gen59-to-Gen61 transition\nhad already created and activated a fresh Direct Main row before the\nclassification was corrected.\n\n## Audit scope and counting rule\n\nThe audit read the umbrella row in full, including its 91,908-byte narrative\nledger and the 44 entries currently projected in `discarded_generations`.\nLater Gen53–Gen59 evidence is recorded in the same umbrella narrative and in\nthe per-project backlog/timeline ledgers. Every post-reconcile Browser failure\nin that material was inspected.\n\nA case is included only when all of the following are true:\n\n1. The governed lane already had valid implementation or worker evidence,\n   independent QA, merge, and activated current-HEAD full reconcile.\n2. The later observer Browser run found a defect in the target product.\n3. The finding did not invalidate the authority, identity, commit, tests,\n   merge, or reconcile evidence already accepted for the lane.\n4. The disposition selected or began a fresh generation/full-chain restart\n   instead of a bounded successor repair followed by return to the parent.\n\nThe count excludes:\n\n- rejected or malformed governance calls;\n- failed or missing independent QA;\n- stale, dirty, or identity-invalid evidence;\n- governance runtime/guide defects;\n- Browser harness or target-selection failures where product acceptance was\n  not evaluated;\n- Browser cleanup failures after product acceptance passed;\n- parent/umbrella administrative bookkeeping failures.\n\nThose exclusions do not declare the adjacent failures harmless. They keep the\nanswer to this audit question precise.\n",
+      "excerpt_sha256": "34b08eb6435ef695997e946027cb8b341631d8ddde55d41178aaa581545fba7c"
+    },
+    {
+      "id": "SRC-AUDIT1-PG1",
+      "title": "Acceptance-boundary audit, Gen48 and Gen49",
+      "evidence_status": "curated incident timeline report",
+      "language": "zh/en",
+      "redacted_excerpt": "\nGen48 produced candidate\n`object-07`.\n\nIts timeline records:\n\n- implementation PASS at `timeline:5`;\n- independent QA PASS at `timeline:6`;\n- merge PASS at `timeline:8`;\n- current-HEAD full reconcile PASS at `timeline:9`, snapshot\n  `graph-01`;\n- Browser failure at `timeline:11`.\n\nThe Browser payload is specific. Starter state, Today Focus behavior, reminder\nbehavior, reload persistence, new-task defaults, and console checks passed.\nOnly the requested 390×844 presentation failed: the page retained a 1280px CSS\nlayout viewport because the fixture did not provide viewport metadata.\n\nThis was a real product defect, and it correctly blocked close. It did **not**\nretroactively invalidate the QA principal, candidate commit, merge, or graph\nreconcile. Nevertheless, the row encoded:\n\n```text\ndiscarded=true\ncorrected_retry_allowed=false\nnext_after_discard=fresh_generation_direct_main\n```\n\nGen49 then created a new fixture,\n`fixture-01`, and repeated the whole Direct Main\npath solely to inject the missing viewport metadata:\n\n- pre-mutation authority `timeline:3`;\n- implementation `timeline:5`;\n- independent QA `timeline:6`;\n- merge `timeline:8`;\n- reconcile `timeline:9`, snapshot `graph-02`;\n- Browser PASS `timeline:11`;\n- close-ready `timeline:13`;\n- protected close `timeline:15`.\n\nThat is the one confirmed completed avoidable full-chain replay.\n\nThe QA PASS was not fraudulent. It proved the bounded candidate and its tests.\nThe later real-Browser check exposed a coverage/integration gap that the\nbounded QA suite did not exercise. The error was turning that new product\nfinding into expiry of all earlier governance evidence.",
+      "excerpt_sha256": "522be45ae811343e844cfc80d7a6e7d4a2b879954404dd384c5022a359180038"
+    },
+    {
+      "id": "SRC-AUDIT2",
+      "title": "Historical-execution revalidation audit, August 2",
+      "evidence_status": "curated audit with conservative count units",
+      "language": "zh/en",
+      "redacted_excerpt": "This run contains a distinct drift class: **historical-execution revalidation\ndrift**. After repairing the governance framework, the observer repeatedly\nreturned to a preserved R5/R9 ContractRuntime and treated the next failure from\nthat historical execution as the release-blocking truth for the repaired\nworld. The failures were real for that execution, but their evidence authority\nwas overstated.\n\nThe violated invariant is:\n\n> A framework fix at canonical governance HEAD `H_new` must be release-tested\n> with a fixture and execution minted after `H_new` is deployed and reconciled.\n> A pre-existing ContractRuntime may prove backward compatibility, but it may\n> not authorize or reject the current product happy path unless the same failure\n> is reproduced in a fresh execution at `H_new`.\n\nThis is not a claim that every R4–R10 repair was unnecessary. Several repairs\nfixed legitimate compatibility defects and produced valid worker, QA, merge,\nand reconcile evidence. The drift was in the **choice of the next release test\ntarget**: after each repair, the run resumed the same old chain instead of\nminting a current-head Daily Planner world.\n\n## Exact count at the audit cutoff\n\n| Measure | Count | Meaning |\n| --- | ---: | --- |\n| Historical repair efforts materialized before the reset | 7 | R4, R5, R6, R7, fixture-only R8, R9 candidate work, and R10; completion status differs and not all were wrong, but all remained coupled to the historical compatibility chain |\n| Completed merges/reconciles in the indexed chain | 4 | R4, R6, R7, and R10 reached live merge plus current-full reconcile |\n| Post-R10 returns to the preserved R9 execution | 1 | `aming-claw:historical-event-H1`; this produced more strict failures from the old runtime instead of a fresh Daily Planner verdict |\n| Additional repair rows filed from that post-R10 old-world revisit | 1 | R11 was filed at `aming-claw:historical-event-H2` but never entered or dispatched |\n| Fresh current-head Daily Planner worlds created after correction | 2 | One `mf_parallel` world and one `mf_batch_parallel` world |\n| Current-world contract blockers identified | 2 | First, `mf_parallel` advertised two lanes but accepted one worker; second, normal `worker_commit` charged an inherited target-HEAD file to the successor worker |\n\nThe conservative count is therefore: **one confirmed post-fix old-world\nrelease-test decision, one unexecuted repair row propagated from it, and two\nfresh worlds created by the correction**. The longer R4–R10 chain explains how\nthe decision pattern formed; it is not counted as seven proven mistakes.\n",
+      "excerpt_sha256": "b1a5b0700e5c8c728a467369f6ebd8118456c6aa60db8c2893475baa6d81a68e"
+    },
+    {
+      "id": "SRC-BASELINE",
+      "title": "Eight-item manuscript acceptance baseline, August 6",
+      "evidence_status": "frozen historical acceptance baseline; not the current paper datum",
+      "language": "zh/en",
+      "redacted_excerpt": "# Frozen Datum — arXiv Theory Preprint v1(2026-08-06 冻结)\n\n> 本文件是论文自身的 dispatch-time 验收基准。按论文 §2.2 的三因子律:\n> 此后一切修改意见先过 gate;违反本 datum = blocker,否则 = new row(v2 / companion / backlog)。\n> 本 datum 冻结后不得追溯修改——新发现形成新工作,不重定当前终点线。\n\n## 论文目标\n建立 Charting Loop 的公开理论记录;**不是**该理论的最终形式化,也**不是**总体经验验证。\n\n## v1 必须满足(八项)\n1. 核心概念有清晰定义\n2. 核心公式数学上合法\n3. 四层 stack、动态 loop 与 P/D/E 分解不相互矛盾\n4. motivating incidents 明确标为理论来源而非普遍验证\n5. 有可证伪预测\n6. 已有理论有真实、准确的引用\n7. 没有明知错误的普遍性或优先权声明\n8. AI 使用得到透明披露\n\n## v1 不要求\n所有状态变量入递推式 · certificate 覆盖并发/随机 workflow · 完整经验验证 ·\n完整立法语料 · 最优 notation · 唯一理论表达 · 穷尽性综述 · 预答所有 reviewer objection\n\n## Closure condition(semantic base case)\n对固定 checklist 做一次审核;无违反上述八项的 blocker 即冻结。\n新的有价值发现 → backlog,不重开 v1。\n**\"还有没有任何可改之处\"不是合法的结束条件。**\n\n## Gate(每条新意见必答)\n是否违反上述八项?\n- 是(公式不成立/同符号双义/核心定义自相矛盾/引用假/宣称有数据实无/交叉引用失效)→ blocker\n- 否(更严参数/更漂亮措辞/额外预测/更深形式化/更多案例)→ new row\n",
+      "excerpt_sha256": "bfa76397756d04f4c3346f373f8f7d3f8ea58a2a93947782f6f0d116d8180976"
+    },
+    {
+      "id": "SRC-OPERATING",
+      "title": "July 23 source-terminal and independent-repair clarification",
+      "evidence_status": "normative operating protocol; not implementation proof",
+      "language": "zh/en",
+      "redacted_excerpt": "> **2026-07-23 supersession notice（新 session 必读）**\n>\n> 下文 P1/P2 的旧短语“继续原泳道 / 继续原线”只表示：在**当前 generation 内**\n> 对 blocked line 做 audited no-PASS bypass 后，继续向前完成独立 QA、冻结候选、\n> ordered batch merge 和 batch-level full reconcile。merge 后 source row/execution\n> 立即进入不可重新调度的 `WAIVED / completed_with_exception` 吸收终态。\n>\n> 后续 root repair 必须是独立 row；repair merge 与 full reconcile 完成后，只能启动\n> 使用新 fixture、execution、QA、commit 与 evidence 的 fresh generation。**禁止**\n> repair 后返回历史 source row、重试历史 close、填补历史 missing line，或发出\n> `resume_original_contract` / `parent_to_resume`。\n>",
+      "excerpt_sha256": "1b9f5257dcf15baba3d0f2f2815e8b51ced4256ae3b30432121d594aed2e85d6"
+    }
+  ],
+  "runtime_episode": {
+    "date": "2026-08-22",
+    "source_candidate": "candidate-C1",
+    "repair_candidate": "candidate-C2",
+    "source_execution": "execution-S",
+    "repair_execution": "execution-R",
+    "no_pass_generation": "generation-S",
+    "diagnostic_root": "failure-F1",
+    "events": [
+      {
+        "id": 26135,
+        "type": "observer.implementation",
+        "status": "passed",
+        "candidate": "afb11910979683b7509bae5a314d442c19e0ed77",
+        "date_utc": "2026-08-22",
+        "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
+        "selected_facts": {
+          "line_id": "observer_implementation",
+          "canonical_head_commit": "afb11910979683b7509bae5a314d442c19e0ed77"
+        },
+        "event_alias": "event-E01",
+        "candidate_alias": "candidate-C1",
+        "created_at_utc": "2026-08-22T13:31:20Z"
+      },
+      {
+        "id": 26136,
+        "type": "contract_line_bypass",
+        "status": "proceeded_with_exception",
+        "candidate": "afb11910979683b7509bae5a314d442c19e0ed77",
+        "date_utc": "2026-08-22",
+        "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
+        "selected_facts": {
+          "authoritative_pass_synthesized": false,
+          "diagnostic_backlog_id": "failure-F1",
+          "diagnostic_created": true,
+          "line_id": "qa_graph_context",
+          "no_pass_claim": true,
+          "no_pass_generation_id": "generation-S"
+        },
+        "event_alias": "event-E02",
+        "candidate_alias": "candidate-C1",
+        "created_at_utc": "2026-08-22T13:40:29Z"
+      },
+      {
+        "id": 26138,
+        "type": "contract_line_bypass",
+        "status": "proceeded_with_exception",
+        "candidate": "afb11910979683b7509bae5a314d442c19e0ed77",
+        "date_utc": "2026-08-22",
+        "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
+        "selected_facts": {
+          "authoritative_pass_synthesized": false,
+          "diagnostic_backlog_id": "failure-F1",
+          "diagnostic_created": false,
+          "line_id": "qa_independent_verification",
+          "no_pass_claim": true,
+          "no_pass_generation_id": "generation-S"
+        },
+        "event_alias": "event-E04",
+        "candidate_alias": "candidate-C1",
+        "created_at_utc": "2026-08-22T13:40:46Z"
+      },
+      {
+        "id": 26140,
+        "type": "contract_line_bypass",
+        "status": "proceeded_with_exception",
+        "candidate": "afb11910979683b7509bae5a314d442c19e0ed77",
+        "date_utc": "2026-08-22",
+        "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
+        "selected_facts": {
+          "authoritative_pass_synthesized": false,
+          "diagnostic_backlog_id": "failure-F1",
+          "diagnostic_created": false,
+          "line_id": "observer_reconcile",
+          "no_pass_claim": true,
+          "no_pass_generation_id": "generation-S"
+        },
+        "event_alias": "event-E06",
+        "candidate_alias": "candidate-C1",
+        "created_at_utc": "2026-08-22T13:41:01Z"
+      },
+      {
+        "id": 26142,
+        "type": "contract_line_bypass",
+        "status": "proceeded_with_exception",
+        "candidate": "afb11910979683b7509bae5a314d442c19e0ed77",
+        "date_utc": "2026-08-22",
+        "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
+        "selected_facts": {
+          "authoritative_pass_synthesized": false,
+          "diagnostic_backlog_id": "failure-F1",
+          "diagnostic_created": false,
+          "line_id": "observer_close_ready",
+          "no_pass_claim": true,
+          "no_pass_generation_id": "generation-S"
+        },
+        "event_alias": "event-E08",
+        "candidate_alias": "candidate-C1",
+        "created_at_utc": "2026-08-22T13:41:17Z"
+      },
+      {
+        "id": 26144,
+        "type": "graph.reconcile",
+        "status": "passed",
+        "candidate": "afb11910979683b7509bae5a314d442c19e0ed77",
+        "date_utc": "2026-08-22",
+        "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
+        "selected_facts": {
+          "canonical_head_commit": "afb11910979683b7509bae5a314d442c19e0ed77",
+          "snapshot_id": "graph-G1"
+        },
+        "event_alias": "event-E10",
+        "candidate_alias": "candidate-C1",
+        "created_at_utc": "2026-08-22T13:45:13Z"
+      },
+      {
+        "id": 26148,
+        "type": "observer.implementation",
+        "status": "passed",
+        "candidate": "92b6260a127e55914b24edae623d4051a57b144c",
+        "date_utc": "2026-08-22",
+        "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
+        "selected_facts": {
+          "line_id": "observer_implementation",
+          "canonical_head_commit": "92b6260a127e55914b24edae623d4051a57b144c"
+        },
+        "event_alias": "event-E14",
+        "candidate_alias": "candidate-C2",
+        "created_at_utc": "2026-08-22T13:51:26Z"
+      },
+      {
+        "id": 26149,
+        "type": "qa.independent_verification",
+        "status": "passed",
+        "candidate": "92b6260a127e55914b24edae623d4051a57b144c",
+        "date_utc": "2026-08-22",
+        "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
+        "selected_facts": {
+          "line_id": "qa_graph_context",
+          "base_commit_sha": "92b6260a127e55914b24edae623d4051a57b144c",
+          "candidate_commit_sha": "92b6260a127e55914b24edae623d4051a57b144c",
+          "snapshot_id": "graph-G2"
+        },
+        "event_alias": "event-E15",
+        "candidate_alias": "candidate-C2",
+        "created_at_utc": "2026-08-22T14:00:01Z"
+      },
+      {
+        "id": 26150,
+        "type": "graph.reconcile",
+        "status": "passed",
+        "candidate": "92b6260a127e55914b24edae623d4051a57b144c",
+        "date_utc": "2026-08-22",
+        "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
+        "selected_facts": {
+          "canonical_head_commit": "92b6260a127e55914b24edae623d4051a57b144c",
+          "snapshot_id": "graph-G2"
+        },
+        "event_alias": "event-E16",
+        "candidate_alias": "candidate-C2",
+        "created_at_utc": "2026-08-22T14:00:25Z"
+      },
+      {
+        "id": 26152,
+        "type": "observer.close_ready",
+        "status": "passed",
+        "candidate": "92b6260a127e55914b24edae623d4051a57b144c",
+        "date_utc": "2026-08-22",
+        "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
+        "selected_facts": {
+          "line_id": "observer_reconcile",
+          "full_reconcile_snapshot_id": "graph-G2",
+          "snapshot_id": "graph-G2",
+          "snapshot_kind": "full"
+        },
+        "event_alias": "event-E18",
+        "candidate_alias": "candidate-C2",
+        "created_at_utc": "2026-08-22T14:02:22Z"
+      },
+      {
+        "id": 26154,
+        "type": "route_token_gate.backlog_close",
+        "status": "accepted",
+        "candidate": "92b6260a127e55914b24edae623d4051a57b144c",
+        "date_utc": "2026-08-22",
+        "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
+        "selected_facts": {},
+        "event_alias": "event-E20",
+        "candidate_alias": "candidate-C2",
+        "created_at_utc": "2026-08-22T14:02:48Z"
+      }
+    ],
+    "execution_readbacks": [
+      {
+        "execution": "execution-S",
+        "contract": "human-supervised development",
+        "version": "v1",
+        "revision": "rev2",
+        "state": {
+          "status": "active",
+          "next_action": null,
+          "execution_state_revision": 9
+        },
+        "terminal_and_scheduler_flags_present": false
+      },
+      {
+        "execution": "execution-R",
+        "contract": "human-supervised development",
+        "version": "v1",
+        "revision": "rev2",
+        "state": {
+          "status": "active",
+          "next_action": null,
+          "execution_state_revision": 9
+        },
+        "terminal_and_scheduler_flags_present": false
+      }
+    ],
+    "backlog_readbacks": [
+      {
+        "work_item": "source-work-item-S",
+        "status": "OPEN",
+        "candidate": null,
+        "runtime_state": null
+      },
+      {
+        "work_item": "failure-F1",
+        "status": "FIXED",
+        "candidate": "candidate-C2",
+        "runtime_state": "fixed"
+      }
+    ],
+    "source_candidate_commit": "afb11910979683b7509bae5a314d442c19e0ed77",
+    "repair_candidate_commit": "92b6260a127e55914b24edae623d4051a57b144c"
+  },
+  "reported_product_probe": {
+    "source": "SRC-C39",
+    "status": "curated report only; target raw ledger events not recovered",
+    "source_candidate": "probe-candidate-A",
+    "fresh_candidate": "probe-candidate-B",
+    "source_generation": "probe-generation-A",
+    "failure_root": "probe-failure-F2",
+    "reported_dispositions": 4,
+    "reported_root_count": 1,
+    "reported_fresh_stages": [
+      "independent QA",
+      "integration consistency",
+      "completion check"
+    ],
+    "raw_events_checked": false,
+    "complete_fresh_certificate_verified": false
+  },
+  "count_units": {
+    "acceptance_boundary": {
+      "audit_date": "2026-07-28",
+      "incidents": 2,
+      "completed_avoidable_full_replay": 1,
+      "aborted_partial_restart": 1,
+      "status": "curated audit counts; incident != completed replay"
+    },
+    "historical_world": {
+      "audit_date": "2026-08-02",
+      "post_fix_old_world_revisit": 1,
+      "unexecuted_successor": 1,
+      "fresh_fixtures": 2,
+      "historical_efforts": 7,
+      "status": "curated audit counts; seven historical efforts are not seven proven mistakes"
+    },
+    "direction_projection": {
+      "window_start_utc": "2026-08-18T12:12:00Z",
+      "window_end_utc": "2026-08-21T03:21:00Z",
+      "rows_at_least": 77,
+      "FIXED": 48,
+      "WAIVED": 19,
+      "SUPERSEDED": 8,
+      "OPEN": 2,
+      "status": "curated counted dispositions; activity does not establish parent progress"
+    },
+    "qa_ratchet": {
+      "documented_post_baseline_review_rounds": 2,
+      "status": "curated self-application endpoint; not independent efficacy or zero recurrence"
+    }
+  },
+  "unresolved": [
+    "Original direct-fix retirement contract/timeline not reconstructed",
+    "EG2: source permanent terminality and scheduler ineligibility unverified; failed probe OPEN status does not invalidate a separate completed probe",
+    "EG3-original: historical August Daily Planner A/B raw events and complete fresh-generation certificate not recovered",
+    "Portable workflow replay and independent replication not supplied"
+  ],
+  "post_freeze_addendum": {
+    "file": "daily-planner-r7-20261005.json",
+    "evidence_date": "2026-10-05",
+    "scope": "Existing Daily Planner main case; bounded zero-business-bypass native completion with documented same-world corrections; no full six-step protocol verification",
+    "datum_sha256": "c1fd0d51a8026ec99e586e61118683e8516f1ed23a2075b13085b9b3155560c5"
+  }
+}

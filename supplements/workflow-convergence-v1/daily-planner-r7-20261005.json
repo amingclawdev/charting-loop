@@ -1,0 +1,2213 @@
+{
+  "schema_version": "daily_planner_public_candidate.v1.20261005",
+  "status": "REDACTED_POST_FREEZE_EVIDENCE_ADDENDUM",
+  "provenance_note": "Whitelisted primary readbacks and retained test receipts checked read-only against the author-held originals. Original hashes bind retained source versions; published redacted bytes have separate hashes. No workflow or test was run for the paper audit.",
+  "post_datum_freeze": true,
+  "datum_sha256": "c1fd0d51a8026ec99e586e61118683e8516f1ed23a2075b13085b9b3155560c5",
+  "baseline_commit": "72e6dcae119fa9f05d64503fc78213c969a62a1a",
+  "baseline_file_sha256": {
+    "README.md": "d9093e8cc6af49233aee80e7471da21c5988d5f74829ca986a8998f875e2b577",
+    "daily_planner/__init__.py": "f8d5e126d21a77c4258201811ac52948e446e4657a81a5c200ecee634b495848",
+    "daily_planner/models.py": "7960d9da622710913b0821a68f4e904387795311bb0f388ec247d9f08a0f3797",
+    "daily_planner/planner.py": "bcfe1973ce336dbef513b875920a1a54f15c6668f49e19fd18d64c6f5ac1e635",
+    "pyproject.toml": "0c760eec0d76cceb104bc07066dce7ba99924eae3ed86e13e46f19a9410962d1",
+    "tests/test_models.py": "979a268938dbd5ad86b74ab38b08b76b10ec38ce0f6c4f1a206ef9a27eb9b354",
+    "tests/test_planner.py": "f223f33399ebfcd8b657ff71ece7655b0dad95f65672265fdabb50b29781f611"
+  },
+  "batch_generations": [
+    {
+      "world_alias": "R1",
+      "read_at_utc": "2026-10-05T13:50:53.652058+00:00",
+      "runtime": {
+        "observed_commits": [
+          "52322d2f60c772061ee4df9818a7c69584be22d7",
+          "935b0d4a581a4db31934c4f39017761216b05f90"
+        ],
+        "note": "初始保存的世界记录为 523，后续实际加载见证为 935b；不是全程固定 523。各事件的完整版本区间未全部重建。"
+      },
+      "criteria_count_by_scope": {
+        "Models": 3,
+        "Planner": 3,
+        "Parent": 3
+      },
+      "criteria_raw_sha256_by_scope": {
+        "Models": "0d0e2eb81130c9595bbc7572fde757cd2b9c3b01aaa0306951acff73b2fac72b",
+        "Planner": "72dc1d82620956d0e91bebeb7ae25add78f19f6126b9e4076041933c9914dce6",
+        "Parent": "5026602d57f03d7a4abe5c1450e9e7abcdedd72f0e6c8a8aecf6b133964f36d1"
+      },
+      "all_criteria_byte_equal_to_previous": null,
+      "backlog_status_by_scope": {
+        "Models": {
+          "status": "WAIVED",
+          "runtime_state": "audit_archived"
+        },
+        "Planner": {
+          "status": "WAIVED",
+          "runtime_state": "audit_archived"
+        },
+        "Parent": {
+          "status": "WAIVED",
+          "runtime_state": "audit_archived"
+        }
+      },
+      "CEX_states": [
+        {
+          "scope": "Models",
+          "status": "active",
+          "revision": "rev10",
+          "next_line": "observer_merge",
+          "completed_line_count": 9
+        },
+        {
+          "scope": "Planner",
+          "status": "active",
+          "revision": "rev10",
+          "next_line": "worker_finish_time_attestation",
+          "completed_line_count": 7
+        }
+      ],
+      "stop_reason": "早期 dispatch identity 阻塞后出现继续记录；最终 Planner 原提交缺少提交前的完整 commands/baseline_comparison，不能事后补写为原始证据。Models 合并，Planner 仅审计例外整合；父 Batch 未完整认证。",
+      "scheduler": {
+        "tasks_table_rows": 0,
+        "no_queued_or_claimed_task_observed": true,
+        "permanently_ineligible_verified": false,
+        "redispatch_possible": "UNKNOWN: 当前队列为空；没有验证所有派发器的 absorbing 禁止条件。OPEN/active/next-action 或遗留 epoch 不能当作永久不可恢复。",
+        "current_background_worker_state": "本审计不启动调度器，不执行调度 dryrun；当前服务状态不能反推历史或永久 eligibility。"
+      }
+    },
+    {
+      "world_alias": "R2",
+      "read_at_utc": "2026-10-05T13:50:53.698205+00:00",
+      "runtime": {
+        "observed_commits": [
+          "45eb75272ec5db08aa13e4ee25e7ab2947e427bc"
+        ],
+        "client_source_commit": "47d495056497bab7624ab1d4b6ebdfbb75b6481c",
+        "note": "名字和客户端为 47d，服务器实际加载 45eb。"
+      },
+      "criteria_count_by_scope": {
+        "Parent": 3,
+        "Models": 2,
+        "Planner": 2
+      },
+      "criteria_raw_sha256_by_scope": {
+        "Parent": "02e2b5fa4d33f51a51c970245c6d21685f938474574ef11450dc4cd4f2d097c8",
+        "Models": "bb47756c08e09e3711b655c147936c7935b80b08d74af527d1fbcaa172827d5c",
+        "Planner": "212d2ac05ce784e479a3c34e348996d01d65b56e16e770d752da07634bab5f8e"
+      },
+      "all_criteria_byte_equal_to_previous": false,
+      "backlog_status_by_scope": {
+        "Parent": {
+          "status": "OPEN",
+          "runtime_state": ""
+        },
+        "Models": {
+          "status": "OPEN",
+          "runtime_state": ""
+        },
+        "Planner": {
+          "status": "OPEN",
+          "runtime_state": ""
+        }
+      },
+      "CEX_states": [
+        {
+          "scope": "Models",
+          "status": "active",
+          "revision": "rev10",
+          "next_line": "worker_finish_time_attestation",
+          "completed_line_count": 7
+        },
+        {
+          "scope": "Planner",
+          "status": "active",
+          "revision": "rev10",
+          "next_line": "worker_finish_time_attestation",
+          "completed_line_count": 7
+        }
+      ],
+      "stop_reason": "两 worker 到 worker_commit；atomic Guide 执行输入缺失/超过 32768 字节，停在 finish-time attestation。离线组合 8+51 PASS 不是 native Batch PASS。",
+      "scheduler": {
+        "tasks_table_rows": 0,
+        "no_queued_or_claimed_task_observed": true,
+        "permanently_ineligible_verified": false,
+        "redispatch_possible": "UNKNOWN: 当前队列为空；没有验证所有派发器的 absorbing 禁止条件。OPEN/active/next-action 或遗留 epoch 不能当作永久不可恢复。",
+        "current_background_worker_state": "本审计不启动调度器，不执行调度 dryrun；当前服务状态不能反推历史或永久 eligibility。"
+      }
+    },
+    {
+      "world_alias": "R3",
+      "read_at_utc": "2026-10-05T13:50:53.729351+00:00",
+      "runtime": {
+        "observed_commits": [
+          "e8e5007a2d5f6d553ca0a8381f36cf2d8b747d65"
+        ]
+      },
+      "criteria_count_by_scope": {
+        "Parent": 3,
+        "Models": 2,
+        "Planner": 2
+      },
+      "criteria_raw_sha256_by_scope": {
+        "Parent": "9db9646cb9fab5008287d117b632da3e27fcf050c9d523283c7317cc2da90b3a",
+        "Models": "60dcd894cbcb2f9c8d05d9c783781cee7f04016c32f0b37fe3033850f0ee92c9",
+        "Planner": "4121b8c4fc5ff5380ebdf554e03d5689345f2c27c2328f0ce7d55b7336fb38eb"
+      },
+      "all_criteria_byte_equal_to_previous": false,
+      "backlog_status_by_scope": {
+        "Parent": {
+          "status": "OPEN",
+          "runtime_state": ""
+        },
+        "Models": {
+          "status": "OPEN",
+          "runtime_state": ""
+        },
+        "Planner": {
+          "status": "OPEN",
+          "runtime_state": ""
+        }
+      },
+      "CEX_states": [
+        {
+          "scope": "Models",
+          "status": "active",
+          "revision": "rev10",
+          "next_line": "worker_read_runtime_guide",
+          "completed_line_count": 2
+        },
+        {
+          "scope": "Planner",
+          "status": "active",
+          "revision": "rev10",
+          "next_line": "worker_read_runtime_guide",
+          "completed_line_count": 2
+        }
+      ],
+      "stop_reason": "prefill/dispatch 后，规范身份修正仍遇 prefill_lane_mismatch。无 accepted worker read/startup/implementation；进程 EOF 不是 CEX 终态。",
+      "scheduler": {
+        "tasks_table_rows": 0,
+        "no_queued_or_claimed_task_observed": true,
+        "permanently_ineligible_verified": false,
+        "redispatch_possible": "UNKNOWN: 当前队列为空；没有验证所有派发器的 absorbing 禁止条件。OPEN/active/next-action 或遗留 epoch 不能当作永久不可恢复。",
+        "current_background_worker_state": "本审计不启动调度器，不执行调度 dryrun；当前服务状态不能反推历史或永久 eligibility。"
+      }
+    },
+    {
+      "world_alias": "R4",
+      "read_at_utc": "2026-10-05T13:50:53.739020+00:00",
+      "runtime": {
+        "observed_commits": [
+          "d33c5beed1049d81d6fa48c6cb1527a415ffd3ee",
+          "0bab001b1a0c14a6b4bd4978c23d6c1c63c47e3a"
+        ],
+        "note": "初始 d33；实际 Planner QA 报告绑定 0bab；中间修复/继续记录保留，不能当成固定 d33 实验。"
+      },
+      "criteria_count_by_scope": {
+        "Parent": 3,
+        "Models": 2,
+        "Planner": 2
+      },
+      "criteria_raw_sha256_by_scope": {
+        "Parent": "d8f756714fdfdb28da240b7ef532f8bb85f185861d288cb865e16d392d26940f",
+        "Models": "7acf8bcce359535f9211ab64edf9af3aec8afba685fcfc51a266e0f9e1130c1c",
+        "Planner": "1411d561946878e6415e685cd5711c33719a2e72ed70f453b5bc564392aab78b"
+      },
+      "all_criteria_byte_equal_to_previous": false,
+      "backlog_status_by_scope": {
+        "Parent": {
+          "status": "OPEN",
+          "runtime_state": ""
+        },
+        "Models": {
+          "status": "OPEN",
+          "runtime_state": ""
+        },
+        "Planner": {
+          "status": "OPEN",
+          "runtime_state": ""
+        }
+      },
+      "CEX_states": [
+        {
+          "scope": "Models",
+          "status": "active",
+          "revision": "rev10",
+          "next_line": "worker_finish_time_attestation",
+          "completed_line_count": 7
+        },
+        {
+          "scope": "Planner",
+          "status": "active",
+          "revision": "rev10",
+          "next_line": "observer_merge",
+          "completed_line_count": 9
+        }
+      ],
+      "stop_reason": "模型侧仍停在 attestation；Planner 虽有 finish，但独立验证事件 29 是 failed；依赖 Models stub 的原始功能标准未满足。大响应传输歧义不抹除已落盘失败。",
+      "scheduler": {
+        "tasks_table_rows": 0,
+        "no_queued_or_claimed_task_observed": true,
+        "permanently_ineligible_verified": false,
+        "redispatch_possible": "UNKNOWN: 当前队列为空；没有验证所有派发器的 absorbing 禁止条件。OPEN/active/next-action 或遗留 epoch 不能当作永久不可恢复。",
+        "current_background_worker_state": "本审计不启动调度器，不执行调度 dryrun；当前服务状态不能反推历史或永久 eligibility。"
+      }
+    },
+    {
+      "world_alias": "R5",
+      "read_at_utc": "2026-10-05T13:50:53.789892+00:00",
+      "runtime": {
+        "observed_commits": [
+          "1e30a1fa2f9305013d8090eb1e781204f8bd3051"
+        ]
+      },
+      "criteria_count_by_scope": {
+        "Parent": 3,
+        "Models": 2,
+        "Planner": 2
+      },
+      "criteria_raw_sha256_by_scope": {
+        "Parent": "d8f756714fdfdb28da240b7ef532f8bb85f185861d288cb865e16d392d26940f",
+        "Models": "7acf8bcce359535f9211ab64edf9af3aec8afba685fcfc51a266e0f9e1130c1c",
+        "Planner": "1411d561946878e6415e685cd5711c33719a2e72ed70f453b5bc564392aab78b"
+      },
+      "all_criteria_byte_equal_to_previous": true,
+      "backlog_status_by_scope": {
+        "Parent": {
+          "status": "OPEN",
+          "runtime_state": ""
+        },
+        "Models": {
+          "status": "OPEN",
+          "runtime_state": ""
+        },
+        "Planner": {
+          "status": "OPEN",
+          "runtime_state": ""
+        }
+      },
+      "CEX_states": [
+        {
+          "scope": "Models",
+          "status": "active",
+          "revision": "rev10",
+          "next_line": "observer_merge",
+          "completed_line_count": 9
+        },
+        {
+          "scope": "Planner",
+          "status": "active",
+          "revision": "rev10",
+          "next_line": "observer_merge",
+          "completed_line_count": 9
+        }
+      ],
+      "stop_reason": "两候选 scoped QA 接受基线失败；Models-first merge dryrun 因 rev10_worker_finish_attestation_mismatch 拒绝。原始 baseline.failed=8 被递归消费者错误解释；没有 live merge/reconcile/父验收。",
+      "scheduler": {
+        "tasks_table_rows": 0,
+        "no_queued_or_claimed_task_observed": true,
+        "permanently_ineligible_verified": false,
+        "redispatch_possible": "UNKNOWN: 当前队列为空；没有验证所有派发器的 absorbing 禁止条件。OPEN/active/next-action 或遗留 epoch 不能当作永久不可恢复。",
+        "current_background_worker_state": "本审计不启动调度器，不执行调度 dryrun；当前服务状态不能反推历史或永久 eligibility。"
+      }
+    },
+    {
+      "world_alias": "R6",
+      "read_at_utc": "2026-10-05T13:50:53.862675+00:00",
+      "runtime": {
+        "observed_commits": [
+          "a029dc214a56dff2ca34b4e9a540387f6769c05f"
+        ]
+      },
+      "criteria_count_by_scope": {
+        "Parent": 3,
+        "Models": 2,
+        "Planner": 2
+      },
+      "criteria_raw_sha256_by_scope": {
+        "Parent": "d8f756714fdfdb28da240b7ef532f8bb85f185861d288cb865e16d392d26940f",
+        "Models": "7acf8bcce359535f9211ab64edf9af3aec8afba685fcfc51a266e0f9e1130c1c",
+        "Planner": "1411d561946878e6415e685cd5711c33719a2e72ed70f453b5bc564392aab78b"
+      },
+      "all_criteria_byte_equal_to_previous": true,
+      "backlog_status_by_scope": {
+        "Parent": {
+          "status": "OPEN",
+          "runtime_state": ""
+        },
+        "Models": {
+          "status": "OPEN",
+          "runtime_state": ""
+        },
+        "Planner": {
+          "status": "OPEN",
+          "runtime_state": ""
+        }
+      },
+      "CEX_states": [
+        {
+          "scope": "Models",
+          "status": "active",
+          "revision": "rev10",
+          "next_line": "worker_finish_time_attestation",
+          "completed_line_count": 7
+        },
+        {
+          "scope": "Planner",
+          "status": "active",
+          "revision": "rev10",
+          "next_line": "worker_implementation",
+          "completed_line_count": 5
+        }
+      ],
+      "stop_reason": "Models 原始 raw command failed 被普通递归验证器误判，停在 attestation；Planner 原始 0/3、全套 0/8 依赖失败触发正确保护性拒绝，未 accepted implementation/新 commit。",
+      "scheduler": {
+        "tasks_table_rows": 0,
+        "no_queued_or_claimed_task_observed": true,
+        "permanently_ineligible_verified": false,
+        "redispatch_possible": "UNKNOWN: 当前队列为空；没有验证所有派发器的 absorbing 禁止条件。OPEN/active/next-action 或遗留 epoch 不能当作永久不可恢复。",
+        "current_background_worker_state": "本审计不启动调度器，不执行调度 dryrun；当前服务状态不能反推历史或永久 eligibility。"
+      }
+    },
+    {
+      "world_alias": "R7",
+      "read_at_utc": "2026-10-05T13:50:53.895610+00:00",
+      "runtime": {
+        "observed_commits": [
+          "e32caf83b28bbf0a35fba0fe113a6d063d216184",
+          "153411ff3a23901a772ef68094612cbd88f2b066"
+        ],
+        "note": "以 e32 建立，02:38Z 拒绝后同一 R7 在 153 下继续并关单。不能称固定 e32、全程无纠错的 happy path。当前 0f 服务在关单后加载，不归属于历史证书。"
+      },
+      "criteria_count_by_scope": {
+        "Parent": 3,
+        "Models": 2,
+        "Planner": 2
+      },
+      "criteria_raw_sha256_by_scope": {
+        "Parent": "d8f756714fdfdb28da240b7ef532f8bb85f185861d288cb865e16d392d26940f",
+        "Models": "7acf8bcce359535f9211ab64edf9af3aec8afba685fcfc51a266e0f9e1130c1c",
+        "Planner": "1411d561946878e6415e685cd5711c33719a2e72ed70f453b5bc564392aab78b"
+      },
+      "all_criteria_byte_equal_to_previous": true,
+      "backlog_status_by_scope": {
+        "Parent": {
+          "status": "FIXED",
+          "runtime_state": "fixed"
+        },
+        "Models": {
+          "status": "FIXED",
+          "runtime_state": "fixed"
+        },
+        "Planner": {
+          "status": "FIXED",
+          "runtime_state": "fixed"
+        }
+      },
+      "CEX_states": [
+        {
+          "scope": "Models",
+          "status": "active",
+          "revision": "rev10",
+          "next_line": null,
+          "completed_line_count": 14
+        },
+        {
+          "scope": "Planner",
+          "status": "active",
+          "revision": "rev10",
+          "next_line": null,
+          "completed_line_count": 14
+        }
+      ],
+      "stop_reason": "最初 Planner green-ledger attestation 在 02:38Z 被拒绝；源验证器独立修复后，同一 R7 在新服务器版本下继续；最终两子任务及父任务全部 FIXED。纠错与拒绝记录保留。",
+      "scheduler": {
+        "tasks_table_rows": 0,
+        "no_queued_or_claimed_task_observed": true,
+        "permanently_ineligible_verified": false,
+        "redispatch_possible": "UNKNOWN: 当前队列为空；没有验证所有派发器的 absorbing 禁止条件。OPEN/active/next-action 或遗留 epoch 不能当作永久不可恢复。",
+        "current_background_worker_state": "本审计不启动调度器，不执行调度 dryrun；当前服务状态不能反推历史或永久 eligibility。"
+      }
+    }
+  ],
+  "R7": {
+    "world_alias": "R7",
+    "candidate_commit": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+    "runtime_history": {
+      "observed_commits": [
+        "e32caf83b28bbf0a35fba0fe113a6d063d216184",
+        "153411ff3a23901a772ef68094612cbd88f2b066"
+      ],
+      "note": "以 e32 建立，02:38Z 拒绝后同一 R7 在 153 下继续并关单。不能称固定 e32、全程无纠错的 happy path。当前 0f 服务在关单后加载，不归属于历史证书。"
+    },
+    "same_world_continued_after_first_refusal": true,
+    "pristine_fresh_happy_path_claimed": false,
+    "events": [
+      {
+        "id": 1,
+        "backlog_id": "",
+        "event_type": "route_token_gate.project_bootstrap",
+        "phase": "route_gate",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T00:19:00Z"
+      },
+      {
+        "id": 2,
+        "backlog_id": "DP-WARRANTY-E32-BATCH-R7-20261004",
+        "event_type": "mf_batch_parallel.entered",
+        "phase": "orchestration",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T00:23:07Z"
+      },
+      {
+        "id": 3,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "mf_parallel.entered",
+        "phase": "orchestration",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T00:25:18Z"
+      },
+      {
+        "id": 4,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "mf_subagent.dispatch",
+        "phase": "dispatch",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "72e6dcae119fa9f05d64503fc78213c969a62a1a",
+        "created_at": "2026-10-05T00:41:24Z"
+      },
+      {
+        "id": 5,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "observer.runtime_context_session_token_initial_join",
+        "phase": "runtime_context_initial_join",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T00:44:37Z"
+      },
+      {
+        "id": 6,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "observer.runtime_context_session_token_initial_join_identity_binding",
+        "phase": "runtime_context_initial_join_identity_binding",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T00:44:37Z"
+      },
+      {
+        "id": 7,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "mf_subagent_read_receipt",
+        "phase": "startup_read_receipt",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T00:48:40Z"
+      },
+      {
+        "id": 8,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "mf_subagent.startup",
+        "phase": "startup_gate",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "72e6dcae119fa9f05d64503fc78213c969a62a1a",
+        "created_at": "2026-10-05T00:49:41Z"
+      },
+      {
+        "id": 9,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "observer.runtime_context_session_token_rejoin",
+        "phase": "runtime_context_recovery",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T00:51:43Z"
+      },
+      {
+        "id": 10,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "route_token_gate.task_timeline_append",
+        "phase": "route_gate",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T00:59:49Z"
+      },
+      {
+        "id": 11,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "mf.implementation",
+        "phase": "implementation",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T00:59:49Z"
+      },
+      {
+        "id": 12,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "mf_subagent.worker_commit",
+        "phase": "worker_commit",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "90fd444ac8532d6e4f5e6075ff0479b085983b6c",
+        "created_at": "2026-10-05T01:01:09Z"
+      },
+      {
+        "id": 13,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "mf_subagent.finish_time_worker_attestation",
+        "phase": "finish_time_worker_attestation",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "90fd444ac8532d6e4f5e6075ff0479b085983b6c",
+        "created_at": "2026-10-05T01:04:55Z"
+      },
+      {
+        "id": 14,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "mf_subagent.finish_gate",
+        "phase": "finish_gate",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "90fd444ac8532d6e4f5e6075ff0479b085983b6c",
+        "created_at": "2026-10-05T01:06:25Z"
+      },
+      {
+        "id": 15,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "qa.independent_verification",
+        "phase": "qa",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "90fd444ac8532d6e4f5e6075ff0479b085983b6c",
+        "created_at": "2026-10-05T01:21:08Z"
+      },
+      {
+        "id": 16,
+        "backlog_id": "",
+        "event_type": "route_token_gate.merge_queue",
+        "phase": "route_gate",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T01:30:02Z"
+      },
+      {
+        "id": 17,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "parallel.merge_queue_item_materialize",
+        "phase": "merge_queue",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "90fd444ac8532d6e4f5e6075ff0479b085983b6c",
+        "created_at": "2026-10-05T01:30:02Z"
+      },
+      {
+        "id": 18,
+        "backlog_id": "",
+        "event_type": "route_token_gate.merge_execute",
+        "phase": "route_gate",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "5bac1cf418feeaee6d4f1944c13c1891db2fa188",
+        "created_at": "2026-10-05T01:40:39Z"
+      },
+      {
+        "id": 19,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "parallel.merge_preview",
+        "phase": "merge_preview",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "72e6dcae119fa9f05d64503fc78213c969a62a1a",
+        "created_at": "2026-10-05T01:40:39Z"
+      },
+      {
+        "id": 20,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "parallel.live_merge",
+        "phase": "live_merge",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "5bac1cf418feeaee6d4f1944c13c1891db2fa188",
+        "created_at": "2026-10-05T01:40:39Z"
+      },
+      {
+        "id": 21,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "mf_parallel.entered",
+        "phase": "orchestration",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T01:48:03Z"
+      },
+      {
+        "id": 22,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "mf_subagent.dispatch",
+        "phase": "dispatch",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "5bac1cf418feeaee6d4f1944c13c1891db2fa188",
+        "created_at": "2026-10-05T02:05:56Z"
+      },
+      {
+        "id": 23,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "observer.runtime_context_session_token_initial_join",
+        "phase": "runtime_context_initial_join",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T02:08:26Z"
+      },
+      {
+        "id": 24,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "observer.runtime_context_session_token_initial_join_identity_binding",
+        "phase": "runtime_context_initial_join_identity_binding",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T02:08:26Z"
+      },
+      {
+        "id": 25,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "mf_subagent_read_receipt",
+        "phase": "startup_read_receipt",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T02:11:33Z"
+      },
+      {
+        "id": 26,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "mf_subagent.startup",
+        "phase": "startup_gate",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "5bac1cf418feeaee6d4f1944c13c1891db2fa188",
+        "created_at": "2026-10-05T02:12:34Z"
+      },
+      {
+        "id": 27,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "observer.runtime_context_session_token_rejoin",
+        "phase": "runtime_context_recovery",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T02:13:58Z"
+      },
+      {
+        "id": 28,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "route_token_gate.task_timeline_append",
+        "phase": "route_gate",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T02:30:59Z"
+      },
+      {
+        "id": 29,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "mf.implementation",
+        "phase": "implementation",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T02:30:59Z"
+      },
+      {
+        "id": 30,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "mf_subagent.worker_commit",
+        "phase": "worker_commit",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "df7accc4ae5ec4ebaf31594de2d3a6822cbb6acc",
+        "created_at": "2026-10-05T02:32:06Z"
+      },
+      {
+        "id": 31,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "observer.runtime_context_session_token_rejoin",
+        "phase": "runtime_context_recovery",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T06:20:28Z"
+      },
+      {
+        "id": 32,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "mf_subagent.finish_time_worker_attestation",
+        "phase": "finish_time_worker_attestation",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "df7accc4ae5ec4ebaf31594de2d3a6822cbb6acc",
+        "created_at": "2026-10-05T06:31:29Z"
+      },
+      {
+        "id": 33,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "mf_subagent.finish_gate",
+        "phase": "finish_gate",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "df7accc4ae5ec4ebaf31594de2d3a6822cbb6acc",
+        "created_at": "2026-10-05T06:35:32Z"
+      },
+      {
+        "id": 34,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "qa.independent_verification",
+        "phase": "qa",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "df7accc4ae5ec4ebaf31594de2d3a6822cbb6acc",
+        "created_at": "2026-10-05T07:17:03Z"
+      },
+      {
+        "id": 35,
+        "backlog_id": "",
+        "event_type": "route_token_gate.merge_queue",
+        "phase": "route_gate",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "",
+        "created_at": "2026-10-05T07:25:10Z"
+      },
+      {
+        "id": 36,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "parallel.merge_queue_item_materialize",
+        "phase": "merge_queue",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "df7accc4ae5ec4ebaf31594de2d3a6822cbb6acc",
+        "created_at": "2026-10-05T07:25:10Z"
+      },
+      {
+        "id": 37,
+        "backlog_id": "",
+        "event_type": "route_token_gate.merge_execute",
+        "phase": "route_gate",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "created_at": "2026-10-05T07:30:02Z"
+      },
+      {
+        "id": 38,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "parallel.merge_preview",
+        "phase": "merge_preview",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "5bac1cf418feeaee6d4f1944c13c1891db2fa188",
+        "created_at": "2026-10-05T07:30:02Z"
+      },
+      {
+        "id": 39,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "parallel.live_merge",
+        "phase": "live_merge",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "created_at": "2026-10-05T07:30:02Z"
+      },
+      {
+        "id": 40,
+        "backlog_id": "DP-WARRANTY-E32-BATCH-R7-20261004",
+        "event_type": "graph.reconcile",
+        "phase": "reconcile",
+        "status": "passed",
+        "decision": "",
+        "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "created_at": "2026-10-05T07:49:04Z"
+      },
+      {
+        "id": 41,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "contract_runtime.route_action_precheck",
+        "phase": "route_gate",
+        "status": "accepted",
+        "decision": "accepted",
+        "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "created_at": "2026-10-05T12:43:27Z"
+      },
+      {
+        "id": 42,
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "event_type": "route_token_gate.backlog_close",
+        "phase": "route_gate",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "created_at": "2026-10-05T12:43:27Z"
+      },
+      {
+        "id": 43,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "contract_runtime.route_action_precheck",
+        "phase": "route_gate",
+        "status": "accepted",
+        "decision": "accepted",
+        "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "created_at": "2026-10-05T12:48:58Z"
+      },
+      {
+        "id": 44,
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "event_type": "route_token_gate.backlog_close",
+        "phase": "route_gate",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "created_at": "2026-10-05T12:48:58Z"
+      },
+      {
+        "id": 45,
+        "backlog_id": "DP-WARRANTY-E32-BATCH-R7-20261004",
+        "event_type": "route_token_gate.task_timeline_append",
+        "phase": "route_gate",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "created_at": "2026-10-05T12:50:31Z"
+      },
+      {
+        "id": 46,
+        "backlog_id": "DP-WARRANTY-E32-BATCH-R7-20261004",
+        "event_type": "mf_batch_parallel.parent_acceptance",
+        "phase": "acceptance",
+        "status": "accepted",
+        "decision": "ready_for_native_parent_close",
+        "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "created_at": "2026-10-05T12:50:31Z"
+      },
+      {
+        "id": 47,
+        "backlog_id": "DP-WARRANTY-E32-BATCH-R7-20261004",
+        "event_type": "contract_runtime.route_action_precheck",
+        "phase": "route_gate",
+        "status": "accepted",
+        "decision": "accepted",
+        "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "created_at": "2026-10-05T12:50:46Z"
+      },
+      {
+        "id": 48,
+        "backlog_id": "DP-WARRANTY-E32-BATCH-R7-20261004",
+        "event_type": "route_token_gate.backlog_close",
+        "phase": "route_gate",
+        "status": "accepted",
+        "decision": "",
+        "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "created_at": "2026-10-05T12:50:46Z"
+      }
+    ],
+    "canonical_independent_QA": [
+      {
+        "line_id": "qa_independent_verification",
+        "status": "passed",
+        "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "actor_role": "qa",
+        "evidence_owner_role": "qa",
+        "authorization_source": "qa_session_token_ref",
+        "observer_impersonation": false,
+        "parent_materialization_authorized": false,
+        "contract_execution_id": "cex-mf-parallel-d4ce5b6f366a25062e5c",
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "revision": "rev10",
+        "test_results": {
+          "candidate_new_failures": 0,
+          "commands": [
+            {
+              "command": "python -m pytest",
+              "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+              "completed_at": "2026-10-05T12:26:56.564043+00:00",
+              "exit_code": 0,
+              "phase": "original_full_suite",
+              "runs": 1,
+              "started_at": "2026-10-05T12:26:56.413831+00:00",
+              "status": "passed",
+              "stderr": "",
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.0, pluggy-1.6.0\nrootdir: <local-path-redacted>\nconfigfile: pyproject.toml\ntestpaths: tests\ncollected 8 items\n\ntests/test_models.py .....                                               [ 62%]\ntests/test_planner.py ...                                                [100%]\n\n============================== 8 passed in 0.01s ===============================\n",
+              "stdout_sha256": "860ca295651236347f30a49456ba977b1c66b509fbc27f02284c2e599dfb9877",
+              "test_files_unchanged": true,
+              "tree": "80bcdf0ec7f9b84f201f26d3d76035e902a863fc"
+            }
+          ],
+          "full_failed": 0,
+          "full_passed": 8,
+          "full_suite_passed": true,
+          "original_tests_unchanged": true,
+          "passed": true,
+          "schema_version": "qa_candidate_acceptance_results.v1",
+          "scoped_results": {
+            "tests/test_models.py": {
+              "failed": 0,
+              "passed": 5
+            },
+            "tests/test_planner.py": {
+              "failed": 0,
+              "passed": 3
+            }
+          },
+          "status": "passed"
+        },
+        "verification": {
+          "acceptance_criteria_results": [
+            {
+              "id": "D33R4-MODELS-BEHAVIOR",
+              "status": "passed"
+            },
+            {
+              "id": "D33R4-MODELS-NATIVE",
+              "status": "passed"
+            }
+          ],
+          "full_suite": {
+            "command": "python -m pytest",
+            "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+            "completed_at": "2026-10-05T12:26:56.564043+00:00",
+            "exit_code": 0,
+            "phase": "original_full_suite",
+            "runs": 1,
+            "started_at": "2026-10-05T12:26:56.413831+00:00",
+            "status": "passed",
+            "stderr": "",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.0, pluggy-1.6.0\nrootdir: <local-path-redacted>\nconfigfile: pyproject.toml\ntestpaths: tests\ncollected 8 items\n\ntests/test_models.py .....                                               [ 62%]\ntests/test_planner.py ...                                                [100%]\n\n============================== 8 passed in 0.01s ===============================\n",
+            "stdout_sha256": "860ca295651236347f30a49456ba977b1c66b509fbc27f02284c2e599dfb9877",
+            "test_files_unchanged": true,
+            "tree": "80bcdf0ec7f9b84f201f26d3d76035e902a863fc"
+          },
+          "independent": true,
+          "schema_version": "qa_independent_verification.v1",
+          "scope": "Models original child postmerge candidate",
+          "verdict": "passed"
+        },
+        "authenticated_owner_submitter_session_match": true,
+        "QA_actor_alias": "independent-final-QA",
+        "nonauthor_of_both_candidates": true
+      },
+      {
+        "line_id": "qa_independent_verification",
+        "status": "passed",
+        "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "actor_role": "qa",
+        "evidence_owner_role": "qa",
+        "authorization_source": "qa_session_token_ref",
+        "observer_impersonation": false,
+        "parent_materialization_authorized": false,
+        "contract_execution_id": "cex-mf-parallel-d4f1ae8f9bcedae58c7e",
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "revision": "rev10",
+        "test_results": {
+          "candidate_new_failures": 0,
+          "commands": [
+            {
+              "command": "python -m pytest",
+              "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+              "completed_at": "2026-10-05T12:26:56.564043+00:00",
+              "exit_code": 0,
+              "phase": "original_full_suite",
+              "runs": 1,
+              "started_at": "2026-10-05T12:26:56.413831+00:00",
+              "status": "passed",
+              "stderr": "",
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.0, pluggy-1.6.0\nrootdir: <local-path-redacted>\nconfigfile: pyproject.toml\ntestpaths: tests\ncollected 8 items\n\ntests/test_models.py .....                                               [ 62%]\ntests/test_planner.py ...                                                [100%]\n\n============================== 8 passed in 0.01s ===============================\n",
+              "stdout_sha256": "860ca295651236347f30a49456ba977b1c66b509fbc27f02284c2e599dfb9877",
+              "test_files_unchanged": true,
+              "tree": "80bcdf0ec7f9b84f201f26d3d76035e902a863fc"
+            }
+          ],
+          "full_failed": 0,
+          "full_passed": 8,
+          "full_suite_passed": true,
+          "original_tests_unchanged": true,
+          "passed": true,
+          "schema_version": "qa_candidate_acceptance_results.v1",
+          "scoped_results": {
+            "tests/test_models.py": {
+              "failed": 0,
+              "passed": 5
+            },
+            "tests/test_planner.py": {
+              "failed": 0,
+              "passed": 3
+            }
+          },
+          "status": "passed"
+        },
+        "verification": {
+          "acceptance_criteria_results": [
+            {
+              "id": "D33R4-PLANNER-BEHAVIOR",
+              "status": "passed"
+            },
+            {
+              "id": "D33R4-PLANNER-NATIVE",
+              "status": "passed"
+            }
+          ],
+          "full_suite": {
+            "command": "python -m pytest",
+            "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+            "completed_at": "2026-10-05T12:26:56.564043+00:00",
+            "exit_code": 0,
+            "phase": "original_full_suite",
+            "runs": 1,
+            "started_at": "2026-10-05T12:26:56.413831+00:00",
+            "status": "passed",
+            "stderr": "",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.0, pluggy-1.6.0\nrootdir: <local-path-redacted>\nconfigfile: pyproject.toml\ntestpaths: tests\ncollected 8 items\n\ntests/test_models.py .....                                               [ 62%]\ntests/test_planner.py ...                                                [100%]\n\n============================== 8 passed in 0.01s ===============================\n",
+            "stdout_sha256": "860ca295651236347f30a49456ba977b1c66b509fbc27f02284c2e599dfb9877",
+            "test_files_unchanged": true,
+            "tree": "80bcdf0ec7f9b84f201f26d3d76035e902a863fc"
+          },
+          "independent": true,
+          "schema_version": "qa_independent_verification.v1",
+          "scope": "Planner original child postmerge candidate",
+          "verdict": "passed"
+        },
+        "authenticated_owner_submitter_session_match": true,
+        "QA_actor_alias": "independent-final-QA",
+        "nonauthor_of_both_candidates": true
+      }
+    ],
+    "both_children_QA_nonauthor_authenticated": true,
+    "one_QA_actor_covers_two_scopes": true,
+    "ordered_merge_queue": [
+      {
+        "queue_item_id": "mqitem-a2f8844b16ef204e8b91627b",
+        "queue_index": 1,
+        "status": "merged",
+        "backlog_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "base_commit": "72e6dcae119fa9f05d64503fc78213c969a62a1a",
+        "branch_head": "90fd444ac8532d6e4f5e6075ff0479b085983b6c",
+        "target_head_before_merge": "72e6dcae119fa9f05d64503fc78213c969a62a1a",
+        "target_head_after_merge": "5bac1cf418feeaee6d4f1944c13c1891db2fa188",
+        "merge_commit": "5bac1cf418feeaee6d4f1944c13c1891db2fa188",
+        "completed_at": "2026-10-05T01:40:39Z",
+        "depends_on": [],
+        "hard_depends_on": []
+      },
+      {
+        "queue_item_id": "mqitem-9adc1a8a9c2d9c8415c966b2",
+        "queue_index": 2,
+        "status": "merged",
+        "backlog_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "base_commit": "5bac1cf418feeaee6d4f1944c13c1891db2fa188",
+        "branch_head": "df7accc4ae5ec4ebaf31594de2d3a6822cbb6acc",
+        "target_head_before_merge": "5bac1cf418feeaee6d4f1944c13c1891db2fa188",
+        "target_head_after_merge": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "merge_commit": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "completed_at": "2026-10-05T07:30:02Z",
+        "depends_on": [
+          "mf-batch-parallel-b464077384fd6849e754:row:1"
+        ],
+        "hard_depends_on": [
+          "mf-batch-parallel-b464077384fd6849e754:row:1"
+        ]
+      }
+    ],
+    "epoch": {
+      "status": "closed",
+      "reconcile_state": "reconciled",
+      "merge_cursor": 2,
+      "remaining_queue_item_ids": [],
+      "reconciled_target_head": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+      "closed_at": "2026-10-05T07:49:04Z"
+    },
+    "original_test_receipt": {
+      "command": "python -m pytest",
+      "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+      "tree": "80bcdf0ec7f9b84f201f26d3d76035e902a863fc",
+      "started_at": "2026-10-05T12:26:56.413831+00:00",
+      "completed_at": "2026-10-05T12:26:56.564043+00:00",
+      "exit_code": 0,
+      "stdout": "============================= test session starts ==============================\nplatform darwin -- Python 3.14.6, pytest-9.1.0, pluggy-1.6.0\nrootdir: <local-path-redacted>\nconfigfile: pyproject.toml\ntestpaths: tests\ncollected 8 items\n\ntests/test_models.py .....                                               [ 62%]\ntests/test_planner.py ...                                                [100%]\n\n============================== 8 passed in 0.01s ===============================\n",
+      "stderr": "",
+      "stdout_sha256": "860ca295651236347f30a49456ba977b1c66b509fbc27f02284c2e599dfb9877",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "runs": 1,
+      "test_files_unchanged": true
+    },
+    "consumer_mutation_receipt": {
+      "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+      "consumer": "PASS",
+      "consumer_behaviors": [
+        "stripped title",
+        "integer priority validation",
+        "immutable completed representation",
+        "add stores task",
+        "pending tuple excludes completed",
+        "priority/title minimum"
+      ],
+      "mutation_mode": "bounded in-memory original test-function calls against substituted module; no pytest suite rerun",
+      "source_and_tests_not_written": true,
+      "mutations": [
+        {
+          "mutation": "Models mutable",
+          "original_test": "tests/test_models.py::test_task_validates_and_is_immutable",
+          "arguments": [],
+          "result": "DETECTED",
+          "exception": "Failed",
+          "message": "DID NOT RAISE FrozenInstanceError",
+          "original_test_sha256": "979a268938dbd5ad86b74ab38b08b76b10ec38ce0f6c4f1a206ef9a27eb9b354",
+          "mutated_source_sha256": "e693cd4b612cae2c97ee6508d1e63593bd36e33385538d64fcecacbc11512eaa"
+        },
+        {
+          "mutation": "Models wrong priority range",
+          "original_test": "tests/test_models.py::test_task_rejects_invalid_input",
+          "arguments": [
+            "Work",
+            0
+          ],
+          "result": "DETECTED",
+          "exception": "Failed",
+          "message": "DID NOT RAISE ValueError",
+          "original_test_sha256": "979a268938dbd5ad86b74ab38b08b76b10ec38ce0f6c4f1a206ef9a27eb9b354",
+          "mutated_source_sha256": "d103e2e74253fd58b1d5ab6591015724245de9cacdfae00b304e7f50a399cfb0"
+        },
+        {
+          "mutation": "Models completion missing",
+          "original_test": "tests/test_models.py::test_mark_completed_returns_new_task",
+          "arguments": [],
+          "result": "DETECTED",
+          "exception": "AssertionError",
+          "message": "",
+          "original_test_sha256": "979a268938dbd5ad86b74ab38b08b76b10ec38ce0f6c4f1a206ef9a27eb9b354",
+          "mutated_source_sha256": "ae41586ad51351c1c15a67f053e76dde62d87072d1351e075fcb96c5d7c73bef"
+        },
+        {
+          "mutation": "Planner wrong order",
+          "original_test": "tests/test_planner.py::test_next_task_uses_priority_then_title",
+          "arguments": [],
+          "result": "DETECTED",
+          "exception": "AssertionError",
+          "message": "",
+          "original_test_sha256": "f223f33399ebfcd8b657ff71ece7655b0dad95f65672265fdabb50b29781f611",
+          "mutated_source_sha256": "0e428d85c3f2e37865ec5bc80296fc840dcdf54687b90dee314bd00913336447"
+        },
+        {
+          "mutation": "Planner add missing",
+          "original_test": "tests/test_planner.py::test_pending_excludes_completed_and_adds_tasks",
+          "arguments": [],
+          "result": "DETECTED",
+          "exception": "AssertionError",
+          "message": "",
+          "original_test_sha256": "f223f33399ebfcd8b657ff71ece7655b0dad95f65672265fdabb50b29781f611",
+          "mutated_source_sha256": "728145800f6cdf0047cb30deca3d524c13e59e69553331a67c20374365798f72"
+        },
+        {
+          "mutation": "Planner completed filtering missing",
+          "original_test": "tests/test_planner.py::test_next_task_returns_none_when_all_complete",
+          "arguments": [],
+          "result": "DETECTED",
+          "exception": "AssertionError",
+          "message": "",
+          "original_test_sha256": "f223f33399ebfcd8b657ff71ece7655b0dad95f65672265fdabb50b29781f611",
+          "mutated_source_sha256": "60be9368024c886f4c58309f335edd9d308e3d06fca56b324cc74cb16c198588"
+        }
+      ],
+      "mutation_verdict": "PASS",
+      "captured_at": "2026-10-05T12:30:28.236708+00:00"
+    },
+    "zero_bypass_field_scan": {
+      "coverage": {
+        "timeline_events": 48,
+        "contract_execution_records": 5,
+        "backlog_rows": 3
+      },
+      "actual_bypass_lines": [],
+      "bypass_diagnostic_events": [],
+      "actual_generation_or_diagnostic_refs": [],
+      "legacy_onboard_administrative_waivers": [
+        {
+          "contract_execution_id": "onboard-service-134b6cc6cc6884e501fa",
+          "line_id": "legacy_onboard_contract_waived",
+          "evidence_kind": "onboard_service_waiver",
+          "status": null
+        },
+        {
+          "contract_execution_id": "onboard-service-3922c0cbc4c1bc24462f",
+          "line_id": "legacy_onboard_contract_waived",
+          "evidence_kind": "onboard_service_waiver",
+          "status": null
+        },
+        {
+          "contract_execution_id": "onboard-service-55e8b36ea94a20a6133c",
+          "line_id": "legacy_onboard_contract_waived",
+          "evidence_kind": "onboard_service_waiver",
+          "status": null
+        }
+      ],
+      "backlog_chain_trigger_scanned": true,
+      "backlog_chain_generation_or_diagnostic_refs": []
+    },
+    "seven_criteria_verdicts": [
+      {
+        "id": "D33R4-BATCH-NATIVE",
+        "verdict": "PASS"
+      },
+      {
+        "id": "D33R4-BATCH-FUNCTIONAL",
+        "verdict": "PASS"
+      },
+      {
+        "id": "D33R4-BATCH-HISTORY",
+        "verdict": "PASS"
+      },
+      {
+        "id": "D33R4-MODELS-BEHAVIOR",
+        "verdict": "PASS"
+      },
+      {
+        "id": "D33R4-MODELS-NATIVE",
+        "verdict": "PASS"
+      },
+      {
+        "id": "D33R4-PLANNER-BEHAVIOR",
+        "verdict": "PASS"
+      },
+      {
+        "id": "D33R4-PLANNER-NATIVE",
+        "verdict": "PASS"
+      }
+    ],
+    "final_manifest_hash_verification": {
+      "declared_refs": 165,
+      "matched": 165
+    },
+    "timeline_coverage": {
+      "all_observed_events_disclosed": true,
+      "count": 48,
+      "sequence_start": 1,
+      "sequence_end": 48
+    },
+    "closed_backlog_readbacks": [
+      {
+        "bug_id": "DP-WARRANTY-E32-BATCH-R7-20261004",
+        "status": "FIXED",
+        "runtime_state": "fixed",
+        "commit": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "fixed_at": "2026-10-05T12:50:46Z",
+        "updated_at": "2026-10-05T12:50:46Z"
+      },
+      {
+        "bug_id": "DP-WARRANTY-E32-MODELS-R7-20261004",
+        "status": "FIXED",
+        "runtime_state": "fixed",
+        "commit": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "fixed_at": "2026-10-05T12:43:27Z",
+        "updated_at": "2026-10-05T12:43:27Z"
+      },
+      {
+        "bug_id": "DP-WARRANTY-E32-PLANNER-R7-20261004",
+        "status": "FIXED",
+        "runtime_state": "fixed",
+        "commit": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+        "fixed_at": "2026-10-05T12:48:58Z",
+        "updated_at": "2026-10-05T12:48:58Z"
+      }
+    ],
+    "completed_contract_lines": [
+      {
+        "scope": "Models",
+        "contract_execution_id": "cex-mf-parallel-d4ce5b6f366a25062e5c",
+        "revision": "rev10",
+        "status": "active",
+        "next_action": null,
+        "completed_lines": [
+          {
+            "line_id": "observer_prefill_child_contracts",
+            "evidence_kind": "contract_binding",
+            "status": null,
+            "commit_sha": null,
+            "actor_role": "observer",
+            "evidence_owner_role": null,
+            "authorization_source": null,
+            "observer_impersonation": null,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "observer_dispatch_bounded_workers",
+            "evidence_kind": "dispatch_bounded_worker",
+            "status": null,
+            "commit_sha": null,
+            "actor_role": "observer",
+            "evidence_owner_role": null,
+            "authorization_source": null,
+            "observer_impersonation": false,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "worker_read_runtime_guide",
+            "evidence_kind": "read_receipt",
+            "status": "accepted",
+            "commit_sha": null,
+            "actor_role": "mf_sub",
+            "evidence_owner_role": "mf_sub",
+            "authorization_source": "runtime_context_copy_safe_worker_proof",
+            "observer_impersonation": false,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "worker_startup",
+            "evidence_kind": "mf_subagent_startup",
+            "status": "passed",
+            "commit_sha": null,
+            "actor_role": "mf_sub",
+            "evidence_owner_role": "mf_sub",
+            "authorization_source": "runtime_context_copy_safe_worker_proof",
+            "observer_impersonation": false,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "worker_graph_context",
+            "evidence_kind": "graph_trace",
+            "status": null,
+            "commit_sha": null,
+            "actor_role": "mf_sub",
+            "evidence_owner_role": null,
+            "authorization_source": null,
+            "observer_impersonation": false,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "worker_implementation",
+            "evidence_kind": "implementation",
+            "status": "passed",
+            "commit_sha": "",
+            "actor_role": "mf_sub",
+            "evidence_owner_role": "mf_sub",
+            "authorization_source": null,
+            "observer_impersonation": null,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "worker_commit",
+            "evidence_kind": "worker_commit",
+            "status": null,
+            "commit_sha": "90fd444ac8532d6e4f5e6075ff0479b085983b6c",
+            "actor_role": "mf_sub",
+            "evidence_owner_role": "mf_sub",
+            "authorization_source": null,
+            "observer_impersonation": null,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "worker_finish_time_attestation",
+            "evidence_kind": "record_finish_time_worker_attestation",
+            "status": null,
+            "commit_sha": null,
+            "actor_role": "mf_sub",
+            "evidence_owner_role": "mf_sub",
+            "authorization_source": "runtime_context_copy_safe_worker_proof",
+            "observer_impersonation": false,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "worker_finish_gate",
+            "evidence_kind": "mf_subagent_finish_gate",
+            "status": null,
+            "commit_sha": null,
+            "actor_role": "mf_sub",
+            "evidence_owner_role": null,
+            "authorization_source": null,
+            "observer_impersonation": null,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "observer_merge",
+            "evidence_kind": "merge",
+            "status": "accepted",
+            "commit_sha": "5bac1cf418feeaee6d4f1944c13c1891db2fa188",
+            "actor_role": "observer",
+            "evidence_owner_role": null,
+            "authorization_source": null,
+            "observer_impersonation": null,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "observer_reconcile",
+            "evidence_kind": "reconcile",
+            "status": "passed",
+            "commit_sha": "5bac1cf418feeaee6d4f1944c13c1891db2fa188",
+            "actor_role": "observer",
+            "evidence_owner_role": null,
+            "authorization_source": null,
+            "observer_impersonation": null,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "qa_graph_context",
+            "evidence_kind": "graph_trace",
+            "status": null,
+            "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+            "actor_role": "qa",
+            "evidence_owner_role": "qa",
+            "authorization_source": "qa_session_token_ref",
+            "observer_impersonation": false,
+            "parent_materialization_authorized": false
+          },
+          {
+            "line_id": "qa_independent_verification",
+            "evidence_kind": "independent_verification",
+            "status": "passed",
+            "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+            "actor_role": "qa",
+            "evidence_owner_role": "qa",
+            "authorization_source": "qa_session_token_ref",
+            "observer_impersonation": false,
+            "parent_materialization_authorized": false
+          },
+          {
+            "line_id": "observer_close_ready",
+            "evidence_kind": "close_ready",
+            "status": "passed",
+            "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+            "actor_role": "observer",
+            "evidence_owner_role": null,
+            "authorization_source": null,
+            "observer_impersonation": null,
+            "parent_materialization_authorized": null
+          }
+        ]
+      },
+      {
+        "scope": "Planner",
+        "contract_execution_id": "cex-mf-parallel-d4f1ae8f9bcedae58c7e",
+        "revision": "rev10",
+        "status": "active",
+        "next_action": null,
+        "completed_lines": [
+          {
+            "line_id": "observer_prefill_child_contracts",
+            "evidence_kind": "contract_binding",
+            "status": null,
+            "commit_sha": null,
+            "actor_role": "observer",
+            "evidence_owner_role": null,
+            "authorization_source": null,
+            "observer_impersonation": null,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "observer_dispatch_bounded_workers",
+            "evidence_kind": "dispatch_bounded_worker",
+            "status": null,
+            "commit_sha": null,
+            "actor_role": "observer",
+            "evidence_owner_role": null,
+            "authorization_source": null,
+            "observer_impersonation": false,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "worker_read_runtime_guide",
+            "evidence_kind": "read_receipt",
+            "status": "accepted",
+            "commit_sha": null,
+            "actor_role": "mf_sub",
+            "evidence_owner_role": "mf_sub",
+            "authorization_source": "runtime_context_copy_safe_worker_proof",
+            "observer_impersonation": false,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "worker_startup",
+            "evidence_kind": "mf_subagent_startup",
+            "status": "passed",
+            "commit_sha": null,
+            "actor_role": "mf_sub",
+            "evidence_owner_role": "mf_sub",
+            "authorization_source": "runtime_context_copy_safe_worker_proof",
+            "observer_impersonation": false,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "worker_graph_context",
+            "evidence_kind": "graph_trace",
+            "status": null,
+            "commit_sha": null,
+            "actor_role": "mf_sub",
+            "evidence_owner_role": null,
+            "authorization_source": null,
+            "observer_impersonation": false,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "worker_implementation",
+            "evidence_kind": "implementation",
+            "status": "passed",
+            "commit_sha": "",
+            "actor_role": "mf_sub",
+            "evidence_owner_role": "mf_sub",
+            "authorization_source": null,
+            "observer_impersonation": null,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "worker_commit",
+            "evidence_kind": "worker_commit",
+            "status": null,
+            "commit_sha": "df7accc4ae5ec4ebaf31594de2d3a6822cbb6acc",
+            "actor_role": "mf_sub",
+            "evidence_owner_role": "mf_sub",
+            "authorization_source": null,
+            "observer_impersonation": null,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "worker_finish_time_attestation",
+            "evidence_kind": "record_finish_time_worker_attestation",
+            "status": null,
+            "commit_sha": null,
+            "actor_role": "mf_sub",
+            "evidence_owner_role": "mf_sub",
+            "authorization_source": "runtime_context_copy_safe_worker_proof",
+            "observer_impersonation": false,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "worker_finish_gate",
+            "evidence_kind": "mf_subagent_finish_gate",
+            "status": null,
+            "commit_sha": null,
+            "actor_role": "mf_sub",
+            "evidence_owner_role": null,
+            "authorization_source": null,
+            "observer_impersonation": null,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "observer_merge",
+            "evidence_kind": "merge",
+            "status": "accepted",
+            "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+            "actor_role": "observer",
+            "evidence_owner_role": null,
+            "authorization_source": null,
+            "observer_impersonation": null,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "observer_reconcile",
+            "evidence_kind": "reconcile",
+            "status": "passed",
+            "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+            "actor_role": "observer",
+            "evidence_owner_role": null,
+            "authorization_source": null,
+            "observer_impersonation": null,
+            "parent_materialization_authorized": null
+          },
+          {
+            "line_id": "qa_graph_context",
+            "evidence_kind": "graph_trace",
+            "status": null,
+            "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+            "actor_role": "qa",
+            "evidence_owner_role": "qa",
+            "authorization_source": "qa_session_token_ref",
+            "observer_impersonation": false,
+            "parent_materialization_authorized": false
+          },
+          {
+            "line_id": "qa_independent_verification",
+            "evidence_kind": "independent_verification",
+            "status": "passed",
+            "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+            "actor_role": "qa",
+            "evidence_owner_role": "qa",
+            "authorization_source": "qa_session_token_ref",
+            "observer_impersonation": false,
+            "parent_materialization_authorized": false
+          },
+          {
+            "line_id": "observer_close_ready",
+            "evidence_kind": "close_ready",
+            "status": "passed",
+            "commit_sha": "e08e3e8ef66c18a9d6238f5a2b9e3cc93a54b336",
+            "actor_role": "observer",
+            "evidence_owner_role": null,
+            "authorization_source": null,
+            "observer_impersonation": null,
+            "parent_materialization_authorized": null
+          }
+        ]
+      }
+    ]
+  },
+  "other_lanes": {
+    "Direct": {
+      "project_id": "daily-planner-canary-direct-d8-20260929t1640z",
+      "source_commit": "d8fdb0b271af86ca3a212c09db2c285c9032e657",
+      "backlog": "FIXED",
+      "pre_mutation_event": 3,
+      "pre_mutation_line_normal_required_path": true,
+      "is_bypass": false,
+      "canonical_QA": [
+        {
+          "line_id": "qa_independent_verification",
+          "status": "passed",
+          "commit_sha": "628324d93647af6bac9b99df9cd65d65f8b144bf",
+          "actor_role": "qa",
+          "evidence_owner_role": "qa",
+          "authorization_source": "qa_session_token_ref",
+          "observer_impersonation": false,
+          "parent_materialization_authorized": false,
+          "contract_execution_id": "cex-direct-main-9efe734d6ee4d1d0fece",
+          "backlog_id": "DP-DIRECT-HAPPY-PATH-D8-R1-20260929T1640Z",
+          "revision": "rev3",
+          "test_results": null,
+          "verification": {
+            "diff_check": {
+              "unexpected_files": []
+            },
+            "live_regression": {
+              "status": "passed"
+            },
+            "tests_run": [
+              "/opt/homebrew/opt/python@3.14/bin/python3.14 -m pytest -q -p no:cacheprovider tests/test_models.py tests/test_planner.py",
+              "/opt/homebrew/opt/python@3.14/bin/python3.14 <local-path-redacted>"
+            ]
+          }
+        }
+      ],
+      "pristine_zero_correction": false,
+      "completion_events": {
+        "QA": 6,
+        "reconcile": 7,
+        "close_ready": 9,
+        "backlog_close": 11
+      }
+    },
+    "MF523": {
+      "project_id": "daily-planner-canary-mf-523-20260929t1915z",
+      "source_commit": "52322d2f60c772061ee4df9818a7c69584be22d7",
+      "backlog": "FIXED",
+      "timeline_independent_QA_event_present": false,
+      "canonical_QA": [
+        {
+          "line_id": "qa_independent_verification",
+          "status": "passed",
+          "commit_sha": "938250f484cc6b5110531a6064d9306951d6cd08",
+          "actor_role": "qa",
+          "evidence_owner_role": "qa",
+          "authorization_source": "qa_session_token_ref",
+          "observer_impersonation": false,
+          "parent_materialization_authorized": false,
+          "contract_execution_id": "cex-mf-parallel-a6f9c8455140c13d6cb4",
+          "backlog_id": "DP-MF-RETEST-523-R1-20260929T1915Z",
+          "revision": "rev10",
+          "test_results": {
+            "commands": [
+              {
+                "command": "/opt/homebrew/opt/python@3.14/bin/python3.14 -m pytest -q -p no:cacheprovider tests/test_models.py tests/test_planner.py",
+                "exit_code": 0,
+                "failed": 0,
+                "log": "<local-path-redacted>",
+                "log_sha256": "sha256:71288863ec9567395a647dd0c8fbf0e2048bee72283202612ad6f90a7a526ef3",
+                "passed": 8,
+                "status": "passed"
+              },
+              {
+                "command": "/opt/homebrew/opt/python@3.14/bin/python3.14 <local-path-redacted>",
+                "exit_code": 0,
+                "log": "<local-path-redacted>",
+                "log_sha256": "sha256:9992bf873bb209b57a2e8bd6c4d9b269f1d2cdcf878e77efa1650f73a00c5bb7",
+                "status": "passed"
+              }
+            ],
+            "commit_sha": "938250f484cc6b5110531a6064d9306951d6cd08",
+            "failed_count": 0,
+            "original_tests_unchanged": true,
+            "passed": true,
+            "passed_count": 8,
+            "real_consumer_status": "passed",
+            "status": "passed"
+          },
+          "verification": {
+            "comparison_base_commit_sha": "72e6dcae119fa9f05d64503fc78213c969a62a1a",
+            "diff_check": {
+              "changed_files": [
+                "daily_planner/models.py",
+                "daily_planner/planner.py"
+              ],
+              "tracked_clean": true,
+              "unexpected_files": []
+            },
+            "final_merged_head": true,
+            "graph_snapshot_id": "full-938250f484cc-5dd5899d88af",
+            "test_results": {
+              "failed": 0,
+              "mock_used": false,
+              "passed": 8,
+              "real_consumer": "passed",
+              "status": "passed"
+            },
+            "tests_run": [
+              "/opt/homebrew/opt/python@3.14/bin/python3.14 -m pytest -q -p no:cacheprovider tests/test_models.py tests/test_planner.py",
+              "/opt/homebrew/opt/python@3.14/bin/python3.14 <local-path-redacted>"
+            ]
+          }
+        }
+      ],
+      "baseline_and_candidate_logs_sha256": "39c5d7a7d7e35572a1bb158e3024b65741d1eac69502750dbb1cc393ee637987",
+      "baseline_candidate_raw_logs_byte_equal": true,
+      "saved_baseline_failure_classification": {
+        "baseline_comparison": {
+          "error_names_match": true,
+          "errors": 8,
+          "exact_commit": "72e6dcae119fa9f05d64503fc78213c969a62a1a",
+          "sha256": "39c5d7a7d7e35572a1bb158e3024b65741d1eac69502750dbb1cc393ee637987",
+          "tests": 8
+        },
+        "baseline_failed": 8,
+        "baseline_passed": 0,
+        "candidate_new_failures": 0,
+        "commands": [
+          {
+            "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<local-path-redacted> python3 -m unittest -q planner_focused",
+            "errors": 0,
+            "sha256": "3afcae530163ea01d2693365fa8e3558acd6e5c7062b03f8d0594d49c2163e96",
+            "status": "passed",
+            "tests": 4
+          },
+          {
+            "classification": "preexisting_baseline_errors",
+            "command": "PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider",
+            "errors": 8,
+            "sha256": "39c5d7a7d7e35572a1bb158e3024b65741d1eac69502750dbb1cc393ee637987",
+            "status": "failed",
+            "tests": 8
+          }
+        ],
+        "focused_passed": 4,
+        "full_failed": 8,
+        "full_passed": 0,
+        "inherited_failed": 8,
+        "no_pass": true,
+        "overall_release_pass": false,
+        "overall_release_pass_claimed": false,
+        "passed": false,
+        "status": "accepted_with_known_baseline_failure"
+      },
+      "pristine_zero_correction": false,
+      "completion_events": {
+        "reconcile": 35,
+        "backlog_close": 37
+      }
+    },
+    "MFd8": {
+      "project_id": "daily-planner-canary-mf-d8-20260929t141354z",
+      "backlog": "OPEN",
+      "runtime_state": "",
+      "stop": "queue materialized, not merged; CEX active next observer_merge",
+      "fix_commit": "52322d2f60c772061ee4df9818a7c69584be22d7",
+      "repair_bug_id": "AC-MF-FINISH-NO-PASS-PRODUCER-CONSUMER-PARITY-R1-20260929",
+      "repair_native_independent_QA_event": 1246,
+      "old_world_terminal_verified": false
+    }
+  },
+  "repair_mapping": [
+    {
+      "commit": "47d495056497bab7624ab1d4b6ebdfbb75b6481c",
+      "prefix": "47d",
+      "linked_stop": "R1 only partial: dual parent/child MCP route refs; original missing precommit ledger NOT repaired by this change",
+      "link_status": "PARTIAL; primary final stop 未关联",
+      "backlog_ids": [
+        "AC-MERGE-QUEUE-APPLY-MCP-OBSERVER-ROUTE-REF-FACADE-GAP-R1-20260922"
+      ],
+      "qa_scope": "exact independent offline source QA; native repair row OPEN"
+    },
+    {
+      "commit": "e8e5007a2d5f6d553ca0a8381f36cf2d8b747d65",
+      "prefix": "e8",
+      "linked_stop": "R2 atomic Guide current-action input incomplete/oversized; qualifies lossless atomic continuation plus census source",
+      "link_status": "source-level linked; subsequent R3 does not prove complete Batch convergence",
+      "backlog_ids": [
+        "AC-RUNTIMECONTEXT-WORKER-GUIDE-ATOMIC-ACTION-CONTINUATION-P0-20260821",
+        "AC-SNAPSHOT-TYPED-PAGED-CURRENT-DEPENDENCY-CENSUS-P0-20261003"
+      ],
+      "qa_scope": "independent combined-source and bounded stable-landed QA; original Guide row OPEN"
+    },
+    {
+      "commit": "d33c5beed1049d81d6fa48c6cb1527a415ffd3ee",
+      "prefix": "d33",
+      "linked_stop": "bounded source-owned coordinator observation and graph census; does not establish fix for R3 retry identity/queue/prefill mismatch",
+      "link_status": "R3 stop causal fix 未关联",
+      "backlog_ids": [
+        "AC-RUNTIMECONTEXT-WORKER-GUIDE-ATOMIC-ACTION-CONTINUATION-P0-20260821",
+        "AC-SNAPSHOT-TYPED-PAGED-CURRENT-DEPENDENCY-CENSUS-P0-20261003"
+      ],
+      "qa_scope": "exact independent source-union QA; not native original acceptance"
+    },
+    {
+      "commit": "0bab001b1a0c14a6b4bd4978c23d6c1c63c47e3a",
+      "prefix": "0bab",
+      "linked_stop": "plain Markdown retention-owner duplicate token scan cost; actual runtime at failed R4 Planner QA, not remedy for unmet functional dependency",
+      "link_status": "R4 final stop 未关联; exact persisted repair backlog 未关联",
+      "backlog_ids": [],
+      "qa_scope": "source QA on 43f; 2/2 changed files byte-identical at 0bab; independent 21 cases, synthetic local performance only"
+    },
+    {
+      "commit": "1e30a1fa2f9305013d8090eb1e781204f8bd3051",
+      "prefix": "1e30",
+      "linked_stop": "four-component union, including bounded persisted ContractRuntime line provenance; no causal proof that it removes R4 functional failure",
+      "link_status": "R4 final stop 未关联; exact persisted repair backlog 未关联",
+      "backlog_ids": [],
+      "qa_scope": "independent exact 1e30 union QA plus bounded stable-landed QA; producer f179 alone is insufficient because whole server bytes differ"
+    },
+    {
+      "commit": "a029dc214a56dff2ca34b4e9a540387f6769c05f",
+      "prefix": "a029",
+      "linked_stop": "R5 owned-lane ledger nested-baseline producer/consumer mismatch repaired by imported aad615/f53 components; integration tip only deduplicates imports",
+      "link_status": "linked through qualified source components; exact persisted repair backlog 未关联",
+      "backlog_ids": [],
+      "qa_scope": "independent exact combined-source QA; no retroactive R5 PASS"
+    },
+    {
+      "commit": "e32caf83b28bbf0a35fba0fe113a6d063d216184",
+      "prefix": "e32",
+      "linked_stop": "R6 Models raw failed command wrongly overrides already validated owned-lane outcome; preserve raw status while classify inherited failure",
+      "link_status": "Models source defect linked; correct Planner dependency gate is not a validator defect; exact persisted repair backlog 未关联",
+      "backlog_ids": [],
+      "qa_scope": "independent source QA 26 cases; no native R6 completion"
+    }
+  ],
+  "protocol_step_support": [
+    {
+      "step": 1,
+      "finding": "NOT_EXERCISED: R7 has no formal authorized bypass; Direct normal exception is not a bypass."
+    },
+    {
+      "step": 2,
+      "finding": "PARTIAL: candidates and failures retained; no diagnostic root/no-PASS generation propagation exists on this path."
+    },
+    {
+      "step": 3,
+      "finding": "UNVERIFIED/COUNTEREVIDENCE: MFd8 and R2–R6 OPEN with empty runtime; CEX active, next action exists. R1 archived but active CEX and residual epoch. No absorbing scheduler proof."
+    },
+    {
+      "step": 4,
+      "finding": "PARTIAL: independently QAed source remedies observed; complete post-source-terminal bounded backlog chain not established; some exact repair backlog links missing; R7 continued same world after a further source repair."
+    },
+    {
+      "step": 5,
+      "finding": "PARTIAL: R6→R7 fresh project/executions and retained earlier failures; independent repair QA. Not a fresh fixture/execution after every repair; latest R7 green-ledger repair precedes same-R7 continuation."
+    },
+    {
+      "step": 6,
+      "finding": "BOUNDED SUPPORT: R7 completes zero-business-bypass independent QA/ordered merge/full reconcile/parent acceptance/three closures. Does not establish strict fresh-generation certification following the full frozen bypass protocol; historical August A/B raw-event gap unchanged."
+    }
+  ],
+  "retained_evidence_gaps": [
+    {
+      "id": "EG2",
+      "status": "UNRESOLVED",
+      "reason": "Absorbing source terminality/scheduler permanent ineligibility not verified; failed OPEN/active rows retained."
+    },
+    {
+      "id": "EG3-original-Aug22-A-B",
+      "status": "UNRESOLVED",
+      "reason": "New Daily Planner R7 records do not recover or verify the historical b827/f463 A/B bypass/QA/reconcile/close events."
+    },
+    {
+      "id": "EG3-post-freeze-R7",
+      "status": "BOUNDED_NEW_SUPPORT",
+      "reason": "New-world R7 relative to R6 completes final native path; same-world continuation after a later repair prevents treating it as the full frozen bypass-protocol certificate."
+    },
+    {
+      "id": "all-lanes-common-version",
+      "status": "NOT_ESTABLISHED",
+      "reason": "Direct d8, MF523, Batch e32→153 are different runtime histories; no current-version three-lane joint traversal/release certification."
+    },
+    {
+      "id": "repair-backlog-exact-links",
+      "status": "PARTIAL",
+      "reason": "0bab/1e30/a029/e32/73 source QA found; exact persisted repair backlog links not found in inspected stable/dev AC records."
+    }
+  ],
+  "source_manifest": [
+    {
+      "id": "runtime-R1_start",
+      "original_source_sha256": "eccb328f50da17d4762ad0c658883d68f5e7936e1ada219ca282b2607ce369e4",
+      "scope": "Historical runtime witness; not current live service attribution"
+    },
+    {
+      "id": "runtime-R1_later",
+      "original_source_sha256": "d576e7930b565ec7b23e69b20624756ab3d23024f65987480624f996f83fd309",
+      "scope": "Historical runtime witness; not current live service attribution"
+    },
+    {
+      "id": "runtime-R2",
+      "original_source_sha256": "3bab8471227fa96bd57087234e970c97439943da4c3f71247fd3e6c6e6e8e8f5",
+      "scope": "Historical runtime witness; not current live service attribution"
+    },
+    {
+      "id": "runtime-R3",
+      "original_source_sha256": "225e573d3c653a763e9b2fe2ec272d2d12cb3060a2bdcd719dd6cb925354168f",
+      "scope": "Historical runtime witness; not current live service attribution"
+    },
+    {
+      "id": "runtime-R4",
+      "original_source_sha256": "abe98d67f072e79e26c8b1711f8eda55e0605a0dbb113c2813a6c42affa318d5",
+      "scope": "Historical runtime witness; not current live service attribution"
+    },
+    {
+      "id": "runtime-R4_QA",
+      "original_source_sha256": "f2aa15ecb9f8d27c4145a0c13a0d41a3de48aa78967ba1b1b00502beb3b8072c",
+      "scope": "Historical runtime witness; not current live service attribution"
+    },
+    {
+      "id": "runtime-R5",
+      "original_source_sha256": "26430e406ca9950a5c9e41b309be55bbf3adf57c0a13d42073faa1a3d52ced95",
+      "scope": "Historical runtime witness; not current live service attribution"
+    },
+    {
+      "id": "runtime-R6",
+      "original_source_sha256": "8acab864204e111306ed31490658ef0a25ed1c3b0c8805ed272023039cea6acc",
+      "scope": "Historical runtime witness; not current live service attribution"
+    },
+    {
+      "id": "runtime-R7_start",
+      "original_source_sha256": "9623440b42def213c6360bc75bb838ad292c4f74522f6e369bd3c65b997c6073",
+      "scope": "Historical runtime witness; not current live service attribution"
+    },
+    {
+      "id": "runtime-R7_continuation",
+      "original_source_sha256": "8bff6ed514a6232a4e5301289bd9755ac835f0f97affa02b8f64f95680f1bf28",
+      "scope": "Historical runtime witness; not current live service attribution"
+    },
+    {
+      "id": "runtime-Direct",
+      "original_source_sha256": "f5fae3e0c7b5048c0fa56fcb6646842688c77e96199c8805e057b338e419e1ec",
+      "scope": "Historical runtime witness; not current live service attribution"
+    },
+    {
+      "id": "runtime-MF523",
+      "original_source_sha256": "17d7e531a914d63dfed85ae826ed0e548a5613ebf46ec3a984af5ed2cc4a746f",
+      "scope": "Historical runtime witness; not current live service attribution"
+    },
+    {
+      "id": "repair-qa-523",
+      "original_source_sha256": "0365d4de5f92641411dfbdf62493385394774891791d21bf75da19b25e336e66",
+      "scope": "native exact-candidate QA + canonical event 1246; FIXED source repair row"
+    },
+    {
+      "id": "repair-qa-47d",
+      "original_source_sha256": "8d09b3af44d54526e02389b11630aad4251ccd1b1efe5125748fbd8f2fb68c3f",
+      "scope": "independent exact candidate offline source QA; not original native workflow closure"
+    },
+    {
+      "id": "repair-qa-e8",
+      "original_source_sha256": "75a9b739ce645268abcd137d60bbe6b2b92cb3ebf45cf9f4f003b3cfb16b99f2",
+      "scope": "combined source independent QA; landed stable e8 bounded QA recorded separately"
+    },
+    {
+      "id": "repair-qa-d33",
+      "original_source_sha256": "dff5c4ae8fbfd799675c72cd3867ed5a6930fda94bacb1fe1ede97a93221e8c0",
+      "scope": "exact source union and bounded read-only DEV plan; not full original native obligations"
+    },
+    {
+      "id": "repair-qa-0bab",
+      "original_source_sha256": "c3f63ef079a4fee3f6d349841328d3a8720aece1ef2cb9aed123e6ed9d266253",
+      "scope": "original 43f candidate independently reviewed; two changed files byte-identical at 0bab; source-only 21 cases and synthetic differential"
+    },
+    {
+      "id": "repair-qa-1e30",
+      "original_source_sha256": "07f57ca24b35328ac528afcd317d212acfe991014d525486b906c031097cb2bf",
+      "scope": "exact four-component source union; own final QA binds exact 1e30; not merely f179 producer QA"
+    },
+    {
+      "id": "repair-qa-a029",
+      "original_source_sha256": "8a5a24453d79f83d2b5209c6d9a69651d73effbe1497bbb0530bc51ee1803680",
+      "scope": "exact combined source independent QA; R5 producer/consumer fix is imported component, a029 tip is import deduplication"
+    },
+    {
+      "id": "repair-qa-e32",
+      "original_source_sha256": "a823ed53b53ed7409952446d87dcac893c4f442da95cba4a7a586d9e54d0d4f0",
+      "scope": "independent exact source QA 26 cases; source-only, historical R6 retained"
+    },
+    {
+      "id": "repair-qa-73",
+      "original_source_sha256": "de2d8f2d1bfc6c402e46b9b550bf52932061263477401d466e3ebbfd40a482ee",
+      "scope": "additional necessary R7 green-ledger repair; qualified source with independent QA; earlier 86 failed QA retained"
+    },
+    {
+      "id": "e8-landed",
+      "original_source_sha256": "ff4b2f6b6e79a571d66390404cddf15a674c85d5b0a3d58fa780d020372c8569",
+      "scope": "bounded actual stable e8 publication, independent QA"
+    },
+    {
+      "id": "1e30-landed",
+      "original_source_sha256": "ce1d9b1fcf4ffcf6575e27dcfc5e9fee135ceff07fbb79be7b9db74cd98a7a6c",
+      "scope": "bounded actual stable 1e30 publication, independent QA"
+    },
+    {
+      "id": "73-own-independent-QA",
+      "original_source_sha256": "f5e2e47e262ce0c5084ddfaf13f6475747307c949b0b285390cdb2794a1e313c",
+      "scope": "exact 73 source-only QA; historical 86 failure retained; no original native R7 PASS inferred from this source qualification"
+    },
+    {
+      "id": "R5-stop",
+      "original_source_sha256": "8acdd58d4233e216a00dc5f8dfd441b9b07c5599760ccfe5cb3b8bbf55d9cf94",
+      "scope": "merge consumer refusal, no live merge"
+    },
+    {
+      "id": "R6-disposition",
+      "original_source_sha256": "a5430754977d174ccc07125ce338078e03f6e9bb87659b3b9164110cc3610592",
+      "scope": "independent differentiation of source defect and correct Planner protective rejection"
+    },
+    {
+      "id": "R7-first-stop",
+      "original_source_sha256": "0b0126ae60a4b6157f99d3234729a6bb4929ca542610f57156f6ba538f16e22c",
+      "scope": "first R7 ordinary refusal and process EOF; not permanent ContractRuntime terminal"
+    },
+    {
+      "id": "R7-final-QA",
+      "original_source_sha256": "a4e1ef75f95449b1c903c1422e852a5aa4e850cde276b2758fc89d64cefd0631",
+      "scope": "independent QA of original seven criteria and actual child/parent closures"
+    },
+    {
+      "id": "R7-final-manifest",
+      "original_source_sha256": "8ff27f04cf494c822a78b8ccca34792163ea591d8966eebf1c04a8660b3e1042",
+      "scope": "165 declared references rehashed read-only; all match"
+    },
+    {
+      "id": "R7-consumer-mutations",
+      "original_source_sha256": "a8855ef8a9447e0075f68becf295eab180f595596b9eabae814537f8090898be",
+      "scope": "saved realistic consumer and six in-memory mutation checks; no tests rerun in this audit"
+    },
+    {
+      "id": "R7-original-pytest",
+      "original_source_sha256": "46bdf71aaec630a09e9fd630bb44d99cee9d448da29e8c58b4e78de620e1c5bf",
+      "scope": "saved one actual original full-suite test run; exact final HEAD"
+    }
+  ],
+  "redaction": {
+    "removed": [
+      "host/local/private-control-plane paths",
+      "actor and session identifiers",
+      "credential and token values"
+    ],
+    "retained": [
+      "original event sequence numbers",
+      "immutable commit identities",
+      "whitelisted relative product filenames",
+      "labelled original-source hashes"
+    ],
+    "boundary": "Original-source hashes bind author-retained source versions; manifest/SHA256SUMS bind the disclosed redacted bytes."
+  },
+  "evidence_date": "2026-10-05",
+  "publication_scope": "Author-confirmed v1 evidence update; frozen datum unchanged; R7 is a bounded completion with same-world corrections.",
+  "probe_OPEN_status_boundary": "Failed probes may remain OPEN without invalidating another probe happy path. Only permanent source termination remains unverified.",
+  "original_criteria_from_R4": {
+    "Parent": [
+      {
+        "id": "D33R4-BATCH-NATIVE",
+        "text": "Exactly two newly governed disjoint child implementations through native mf_batch_parallel and current pinned child contracts, truthful read/startup/graph/implementation/worker_commit/attestation/finish, distinct QA, ordered queue merge with separate parent observer and child route refs, reconcile and native closure. Native full Batch verdict distinct from functional PASS and corrections.",
+        "required_scope": {
+          "kind": "files",
+          "files": [
+            "daily_planner/models.py",
+            "daily_planner/planner.py"
+          ]
+        }
+      },
+      {
+        "id": "D33R4-BATCH-FUNCTIONAL",
+        "text": "Original unchanged eight tests and realistic Task/DailyPlanner consumer pass on exact final composition in new fixture target main; independent QA must demonstrate tests discriminate missing/wrong Models and Planner behavior (bounded in-memory/temporary mutation checks). No source/test/history transplantation as native proof.",
+        "required_scope": {
+          "kind": "files",
+          "files": [
+            "daily_planner/models.py",
+            "daily_planner/planner.py"
+          ]
+        }
+      },
+      {
+        "id": "D33R4-BATCH-HISTORY",
+        "text": "Prior main5cae and old three WAIVED/nativeNO-PASS/CEX revisions10/8/openepoch/cursor1/residualqueue retained; R2 offline8+51PASS remains nativeNO-PASS; old5233WAIVED and R3 latejoin/retryNO-PASS remain immutable. All new reports distinguish current fresh sample identity from prior audit and fresh transport/schema evidence from current chat oldschema.",
+        "required_scope": {
+          "kind": "files",
+          "files": [
+            "daily_planner/models.py",
+            "daily_planner/planner.py"
+          ]
+        }
+      }
+    ],
+    "Models": [
+      {
+        "id": "D33R4-MODELS-BEHAVIOR",
+        "text": "Implement original Task title/nonempty strippedtitle/integer priority1 through5 validation, immutable completion representation and mark_completed behavior in own original72e6 baseline-derived lane; unchanged original five Models tests pass; report full-suite inherited Planner stub failures honestly.",
+        "required_scope": {
+          "kind": "files",
+          "files": [
+            "daily_planner/models.py"
+          ]
+        }
+      },
+      {
+        "id": "D33R4-MODELS-NATIVE",
+        "text": "Use exact fresh native row RuntimeContext, separate worker identity/graph traces and immutable commit with complete raw commands/test_results/baseline_comparison BEFORE canonical worker_commit, then attestation+finish. QA and native ordered merge are independently governed.",
+        "required_scope": {
+          "kind": "files",
+          "files": [
+            "daily_planner/models.py"
+          ]
+        }
+      }
+    ],
+    "Planner": [
+      {
+        "id": "D33R4-PLANNER-BEHAVIOR",
+        "text": "Implement original DailyPlanner add stores Task, pending returns tuple excluding completed tasks, next_task selects minimum priority then title or None; unchanged original three Planner tests pass in legitimate final Models composition. Own isolated Models dependency failures must include truthful full raw commands and baseline_comparison.",
+        "required_scope": {
+          "kind": "files",
+          "files": [
+            "daily_planner/planner.py"
+          ]
+        }
+      },
+      {
+        "id": "D33R4-PLANNER-NATIVE",
+        "text": "Use exact fresh native row RuntimeContext with independent worker identity/graph traces and immutable commit. Complete test_results commands/baseline_comparison before worker_commit; do not repeat original aftercommit missingevidence. Attestation+finish+QA+native ordered integration through current Guide.",
+        "required_scope": {
+          "kind": "files",
+          "files": [
+            "daily_planner/planner.py"
+          ]
+        }
+      }
+    ]
+  }
+}
