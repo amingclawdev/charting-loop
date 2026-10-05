@@ -1,6 +1,8 @@
 {
   "schema": "workflow-convergence-supplement-manifest.v1",
   "prepared_date": "2026-10-05",
+  "evidence_addendum_date": "2026-10-05",
+  "frozen_datum_sha256": "c1fd0d51a8026ec99e586e61118683e8516f1ed23a2075b13085b9b3155560c5",
   "public_source_ids": [
     "SRC-C17",
     "SRC-C35",
@@ -12,16 +14,22 @@
     "SRC-BASELINE",
     "SRC-OPERATING"
   ],
+  "addendum": "daily-planner-r7-20261005.json",
   "files": [
     {
-      "path": "records.json",
-      "size_bytes": 33944,
-      "sha256": "6c811efeb01a4e42d71121732463b76cbb0e5306b3b1b00078b00517f74df52b"
+      "path": "README.txt",
+      "size_bytes": 3474,
+      "sha256": "b3eba52965c93a504adeeafbc7baed9f4aa0422bd3464ebe2b9fa8eda9b2dfa9"
     },
     {
-      "path": "README.txt",
-      "size_bytes": 2699,
-      "sha256": "cbcc7f7a35fa9b6365989435496a00775ff7751668bd48046a8a834875aea141"
+      "path": "daily-planner-r7-20261005.json",
+      "size_bytes": 89874,
+      "sha256": "5df890136f61a34043562277ea400ca8d1819b7b3b3612b09099d4274dc0aeee"
+    },
+    {
+      "path": "records.json",
+      "size_bytes": 36239,
+      "sha256": "f771033055977056128f9deb29bdf4d2142db8c347a7e647183511980a926e75"
     },
     {
       "path": "verify.py",
@@ -29,5 +37,5 @@
       "sha256": "0f2ca96457fec3c87a9b2d0f36b088f59d1f42a8ffcd40b249feb76b40282314"
     }
   ],
-  "meaning": "Digests identify redacted output bytes, not original private source bytes or factual truth."
+  "meaning": "Digests identify redacted output bytes. Addendum original-source digests identify author-retained versions, not independently replicated truth."
 }

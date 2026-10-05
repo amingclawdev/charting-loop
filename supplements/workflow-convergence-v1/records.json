@@ -10,8 +10,8 @@
     "normative": "Required protocol behavior, not an observed result",
     "unknown": "Missing or not verified; never filled by inference"
   },
-  "scope": "Four existing cases, two existing audits, the already-cited manuscript baseline and operating clarification, and selected August 22 event/state fields. No new case, experiment or claim.",
-  "redaction_policy": "Whitelisted excerpts and fields only. Private execution, candidate, graph, diagnostic, route and fixture identities replaced with stable aliases; source file paths, raw source hashes, credentials, session refs, private decision logs and full payloads omitted. Equality and inequality relations preserved. Private original-to-alias map retained by author.",
+  "scope": "Existing four cases, two audits, baseline and operating clarification; selected August fields and separately versioned October 5 Daily Planner addendum. Frozen paper datum and method scope unchanged.",
+  "redaction_policy": "Selected original event sequence numbers and immutable commit bindings retained. Host/private control-plane paths, actor/session identifiers and token values removed. Other historical object aliases preserve equality relations; full private payloads and private mapping excluded.",
   "community_boundary": "Author reports earlier public/Discord discussion. Specific message permalinks were not supplied or independently checked; no third-party messages/screenshots/identities are redistributed here. Public discussion is not primary runtime evidence.",
   "source_excerpts": [
     {
@@ -97,22 +97,25 @@
     "diagnostic_root": "failure-F1",
     "events": [
       {
-        "id": "event-E01",
+        "id": 26135,
         "type": "observer.implementation",
         "status": "passed",
-        "candidate": "candidate-C1",
+        "candidate": "afb11910979683b7509bae5a314d442c19e0ed77",
         "date_utc": "2026-08-22",
         "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
         "selected_facts": {
           "line_id": "observer_implementation",
-          "canonical_head_commit": "candidate-C1"
-        }
+          "canonical_head_commit": "afb11910979683b7509bae5a314d442c19e0ed77"
+        },
+        "event_alias": "event-E01",
+        "candidate_alias": "candidate-C1",
+        "created_at_utc": "2026-08-22T13:31:20Z"
       },
       {
-        "id": "event-E02",
+        "id": 26136,
         "type": "contract_line_bypass",
         "status": "proceeded_with_exception",
-        "candidate": "candidate-C1",
+        "candidate": "afb11910979683b7509bae5a314d442c19e0ed77",
         "date_utc": "2026-08-22",
         "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
         "selected_facts": {
@@ -122,13 +125,16 @@
           "line_id": "qa_graph_context",
           "no_pass_claim": true,
           "no_pass_generation_id": "generation-S"
-        }
+        },
+        "event_alias": "event-E02",
+        "candidate_alias": "candidate-C1",
+        "created_at_utc": "2026-08-22T13:40:29Z"
       },
       {
-        "id": "event-E04",
+        "id": 26138,
         "type": "contract_line_bypass",
         "status": "proceeded_with_exception",
-        "candidate": "candidate-C1",
+        "candidate": "afb11910979683b7509bae5a314d442c19e0ed77",
         "date_utc": "2026-08-22",
         "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
         "selected_facts": {
@@ -138,13 +144,16 @@
           "line_id": "qa_independent_verification",
           "no_pass_claim": true,
           "no_pass_generation_id": "generation-S"
-        }
+        },
+        "event_alias": "event-E04",
+        "candidate_alias": "candidate-C1",
+        "created_at_utc": "2026-08-22T13:40:46Z"
       },
       {
-        "id": "event-E06",
+        "id": 26140,
         "type": "contract_line_bypass",
         "status": "proceeded_with_exception",
-        "candidate": "candidate-C1",
+        "candidate": "afb11910979683b7509bae5a314d442c19e0ed77",
         "date_utc": "2026-08-22",
         "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
         "selected_facts": {
@@ -154,13 +163,16 @@
           "line_id": "observer_reconcile",
           "no_pass_claim": true,
           "no_pass_generation_id": "generation-S"
-        }
+        },
+        "event_alias": "event-E06",
+        "candidate_alias": "candidate-C1",
+        "created_at_utc": "2026-08-22T13:41:01Z"
       },
       {
-        "id": "event-E08",
+        "id": 26142,
         "type": "contract_line_bypass",
         "status": "proceeded_with_exception",
-        "candidate": "candidate-C1",
+        "candidate": "afb11910979683b7509bae5a314d442c19e0ed77",
         "date_utc": "2026-08-22",
         "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
         "selected_facts": {
@@ -170,63 +182,78 @@
           "line_id": "observer_close_ready",
           "no_pass_claim": true,
           "no_pass_generation_id": "generation-S"
-        }
+        },
+        "event_alias": "event-E08",
+        "candidate_alias": "candidate-C1",
+        "created_at_utc": "2026-08-22T13:41:17Z"
       },
       {
-        "id": "event-E10",
+        "id": 26144,
         "type": "graph.reconcile",
         "status": "passed",
-        "candidate": "candidate-C1",
+        "candidate": "afb11910979683b7509bae5a314d442c19e0ed77",
         "date_utc": "2026-08-22",
         "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
         "selected_facts": {
-          "canonical_head_commit": "candidate-C1",
+          "canonical_head_commit": "afb11910979683b7509bae5a314d442c19e0ed77",
           "snapshot_id": "graph-G1"
-        }
+        },
+        "event_alias": "event-E10",
+        "candidate_alias": "candidate-C1",
+        "created_at_utc": "2026-08-22T13:45:13Z"
       },
       {
-        "id": "event-E14",
+        "id": 26148,
         "type": "observer.implementation",
         "status": "passed",
-        "candidate": "candidate-C2",
+        "candidate": "92b6260a127e55914b24edae623d4051a57b144c",
         "date_utc": "2026-08-22",
         "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
         "selected_facts": {
           "line_id": "observer_implementation",
-          "canonical_head_commit": "candidate-C2"
-        }
+          "canonical_head_commit": "92b6260a127e55914b24edae623d4051a57b144c"
+        },
+        "event_alias": "event-E14",
+        "candidate_alias": "candidate-C2",
+        "created_at_utc": "2026-08-22T13:51:26Z"
       },
       {
-        "id": "event-E15",
+        "id": 26149,
         "type": "qa.independent_verification",
         "status": "passed",
-        "candidate": "candidate-C2",
+        "candidate": "92b6260a127e55914b24edae623d4051a57b144c",
         "date_utc": "2026-08-22",
         "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
         "selected_facts": {
           "line_id": "qa_graph_context",
-          "base_commit_sha": "candidate-C2",
-          "candidate_commit_sha": "candidate-C2",
+          "base_commit_sha": "92b6260a127e55914b24edae623d4051a57b144c",
+          "candidate_commit_sha": "92b6260a127e55914b24edae623d4051a57b144c",
           "snapshot_id": "graph-G2"
-        }
+        },
+        "event_alias": "event-E15",
+        "candidate_alias": "candidate-C2",
+        "created_at_utc": "2026-08-22T14:00:01Z"
       },
       {
-        "id": "event-E16",
+        "id": 26150,
         "type": "graph.reconcile",
         "status": "passed",
-        "candidate": "candidate-C2",
+        "candidate": "92b6260a127e55914b24edae623d4051a57b144c",
         "date_utc": "2026-08-22",
         "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
         "selected_facts": {
-          "canonical_head_commit": "candidate-C2",
+          "canonical_head_commit": "92b6260a127e55914b24edae623d4051a57b144c",
           "snapshot_id": "graph-G2"
-        }
+        },
+        "event_alias": "event-E16",
+        "candidate_alias": "candidate-C2",
+        "created_at_utc": "2026-08-22T14:00:25Z"
       },
       {
-        "id": "event-E18",
+        "id": 26152,
         "type": "observer.close_ready",
         "status": "passed",
-        "candidate": "candidate-C2",
+        "candidate": "92b6260a127e55914b24edae623d4051a57b144c",
         "date_utc": "2026-08-22",
         "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
         "selected_facts": {
@@ -234,16 +261,22 @@
           "full_reconcile_snapshot_id": "graph-G2",
           "snapshot_id": "graph-G2",
           "snapshot_kind": "full"
-        }
+        },
+        "event_alias": "event-E18",
+        "candidate_alias": "candidate-C2",
+        "created_at_utc": "2026-08-22T14:02:22Z"
       },
       {
-        "id": "event-E20",
+        "id": 26154,
         "type": "route_token_gate.backlog_close",
         "status": "accepted",
-        "candidate": "candidate-C2",
+        "candidate": "92b6260a127e55914b24edae623d4051a57b144c",
         "date_utc": "2026-08-22",
         "evidence_status": "author-checked selected private primary fields; publication does not add independent validation",
-        "selected_facts": {}
+        "selected_facts": {},
+        "event_alias": "event-E20",
+        "candidate_alias": "candidate-C2",
+        "created_at_utc": "2026-08-22T14:02:48Z"
       }
     ],
     "execution_readbacks": [
@@ -285,7 +318,9 @@
         "candidate": "candidate-C2",
         "runtime_state": "fixed"
       }
-    ]
+    ],
+    "source_candidate_commit": "afb11910979683b7509bae5a314d442c19e0ed77",
+    "repair_candidate_commit": "92b6260a127e55914b24edae623d4051a57b144c"
   },
   "reported_product_probe": {
     "source": "SRC-C39",
@@ -337,8 +372,14 @@
   },
   "unresolved": [
     "Original direct-fix retirement contract/timeline not reconstructed",
-    "Source permanent terminality and scheduler ineligibility not verified; source stored active, next_action null, backlog OPEN",
-    "Daily Planner raw A/B events and complete fresh-generation certificate not recovered",
-    "Selected fields and report excerpts do not supply portable workflow replay or independent primary-source authentication"
-  ]
+    "EG2: source permanent terminality and scheduler ineligibility unverified; failed probe OPEN status does not invalidate a separate completed probe",
+    "EG3-original: historical August Daily Planner A/B raw events and complete fresh-generation certificate not recovered",
+    "Portable workflow replay and independent replication not supplied"
+  ],
+  "post_freeze_addendum": {
+    "file": "daily-planner-r7-20261005.json",
+    "evidence_date": "2026-10-05",
+    "scope": "Existing Daily Planner main case; bounded zero-business-bypass native completion with documented same-world corrections; no full six-step protocol verification",
+    "datum_sha256": "c1fd0d51a8026ec99e586e61118683e8516f1ed23a2075b13085b9b3155560c5"
+  }
 }
