@@ -1,0 +1,33 @@
+{
+  "schema": "workflow-convergence-supplement-manifest.v1",
+  "prepared_date": "2026-10-05",
+  "public_source_ids": [
+    "SRC-C17",
+    "SRC-C35",
+    "SRC-C37",
+    "SRC-C39",
+    "SRC-AUDIT1",
+    "SRC-AUDIT1-PG1",
+    "SRC-AUDIT2",
+    "SRC-BASELINE",
+    "SRC-OPERATING"
+  ],
+  "files": [
+    {
+      "path": "records.json",
+      "size_bytes": 33944,
+      "sha256": "6c811efeb01a4e42d71121732463b76cbb0e5306b3b1b00078b00517f74df52b"
+    },
+    {
+      "path": "README.txt",
+      "size_bytes": 2699,
+      "sha256": "cbcc7f7a35fa9b6365989435496a00775ff7751668bd48046a8a834875aea141"
+    },
+    {
+      "path": "verify.py",
+      "size_bytes": 906,
+      "sha256": "0f2ca96457fec3c87a9b2d0f36b088f59d1f42a8ffcd40b249feb76b40282314"
+    }
+  ],
+  "meaning": "Digests identify redacted output bytes, not original private source bytes or factual truth."
+}
