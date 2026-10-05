@@ -2113,11 +2113,18 @@
     }
   ],
   "redaction": {
-    "local_and_private_control_plane_paths": "removed or substituted",
-    "credentials_and_secret_token_values": "excluded by whitelist",
-    "actor_and_session_identifiers": "omitted or aliased",
-    "event_and_commit_ids": "retained for source correlation",
-    "original_hashes": "refer to original retained source bytes; redacted candidate has its own digest"
+    "removed": [
+      "host/local/private-control-plane paths",
+      "actor and session identifiers",
+      "credential and token values"
+    ],
+    "retained": [
+      "original event sequence numbers",
+      "immutable commit identities",
+      "whitelisted relative product filenames",
+      "labelled original-source hashes"
+    ],
+    "boundary": "Original-source hashes bind author-retained source versions; manifest/SHA256SUMS bind the disclosed redacted bytes."
   },
   "evidence_date": "2026-10-05",
   "publication_scope": "Author-confirmed v1 evidence update; frozen datum unchanged; R7 is a bounded completion with same-world corrections.",
